@@ -10,6 +10,7 @@ const canvas = requireElement<HTMLCanvasElement>('game-canvas');
 const continueButton = requireElement<HTMLButtonElement>('continue-button');
 const startButton = requireElement<HTMLButtonElement>('start-button');
 const retryButton = requireElement<HTMLButtonElement>('retry-button');
+const fallbackButton = requireElement<HTMLButtonElement>('fallback-button');
 const progressFill = requireElement<HTMLElement>('progress-fill');
 const loadingStage = requireElement<HTMLElement>('loading-stage');
 const loadingProgress = requireElement<HTMLElement>('loading-progress');
@@ -42,6 +43,11 @@ const game = new BirdsInHkGame(canvas, updateTelemetry);
 continueButton.addEventListener('click', () => showScreen(transitionFlow(currentScreen, 'continue')));
 startButton.addEventListener('click', () => void beginFlight());
 retryButton.addEventListener('click', () => void beginFlight());
+fallbackButton.addEventListener('click', () => {
+  const fallbackSource = document.querySelector<HTMLInputElement>('input[name="world-source"][value="stylized"]');
+  if (fallbackSource) fallbackSource.checked = true;
+  void beginFlight();
+});
 
 canvas.addEventListener('click', () => {
   if (currentScreen === 'game') void canvas.requestPointerLock();

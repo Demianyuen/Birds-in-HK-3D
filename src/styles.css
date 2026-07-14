@@ -135,6 +135,20 @@ h1 {
 .loading-row { display: flex; justify-content: space-between; margin-top: 14px; color: #edf4f2; font-size: 13px; }
 #loading-detail, #error-message { color: #acbcba; font-size: 12px; line-height: 1.55; }
 .error-content .primary-button { margin-top: 18px; }
+.error-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.error-actions .primary-button { margin-top: 0; }
+.secondary-button {
+  min-height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  background: rgba(5, 16, 22, 0.68);
+  color: #f5f8f6;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0 20px;
+}
+.secondary-button:hover { background: rgba(35, 61, 66, 0.9); }
+.secondary-button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 
 .game-hud {
   position: absolute;
