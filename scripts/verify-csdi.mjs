@@ -1,16 +1,22 @@
 const baseUrl = process.env.BIRDS_IN_HK_URL ?? 'http://127.0.0.1:5173';
-const layers = ['building', 'infrastructure'];
 
-for (const layer of layers) {
-  const rootUrl = `${baseUrl}/csdi-3d/${layer}/tileset.json`;
+for (const layer of ['building', 'infrastructure']) {
+  await verifyTileset(`${layer} root`, `${baseUrl}/csdi-3d/${layer}/tileset.json`);
+  await verifyTileset(
+    `Tai Po regional ${layer}`,
+    `${baseUrl}/csdi-region/${layer}/tai-po/tileset.json`,
+  );
+}
+
+async function verifyTileset(name, rootUrl) {
   const rootResponse = await fetch(rootUrl);
-  if (!rootResponse.ok) throw new Error(`${layer} root tileset returned HTTP ${rootResponse.status}.`);
+  if (!rootResponse.ok) throw new Error(`${name} tileset returned HTTP ${rootResponse.status}.`);
 
   let currentUrl = rootUrl;
   let tileset = await rootResponse.json();
   let contentUrl = null;
 
-  for (let depth = 0; depth < 12 && !contentUrl; depth += 1) {
+  for (let depth = 0; depth < 16 && !contentUrl; depth += 1) {
     const queue = [tileset.root];
     let nestedTilesetUrl = null;
     while (queue.length > 0 && !contentUrl && !nestedTilesetUrl) {
@@ -27,20 +33,20 @@ for (const layer of layers) {
     if (!contentUrl && nestedTilesetUrl) {
       currentUrl = nestedTilesetUrl;
       const response = await fetch(currentUrl);
-      if (!response.ok) throw new Error(`${layer} nested tileset returned HTTP ${response.status}.`);
+      if (!response.ok) throw new Error(`${name} nested tileset returned HTTP ${response.status}.`);
       tileset = await response.json();
     } else if (!contentUrl) {
       break;
     }
   }
 
-  if (!contentUrl) throw new Error(`No B3DM content was found for ${layer}.`);
+  if (!contentUrl) throw new Error(`No B3DM content was found for ${name}.`);
   const contentResponse = await fetch(contentUrl);
   const data = Buffer.from(await contentResponse.arrayBuffer());
   const magic = data.subarray(0, 4).toString('ascii');
   if (!contentResponse.ok || magic !== 'b3dm') {
-    throw new Error(`${layer} content verification failed: HTTP ${contentResponse.status}, magic ${magic}.`);
+    throw new Error(`${name} content failed: HTTP ${contentResponse.status}, magic ${magic}.`);
   }
 
-  console.log(`${layer}: root 200, B3DM 200, ${data.length} bytes`);
+  console.log(`${name}: root 200, B3DM 200, ${data.length} bytes`);
 }

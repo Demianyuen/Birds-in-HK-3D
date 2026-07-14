@@ -37,6 +37,7 @@ if (errors.length > 0) blockers.push(`${errors.length} runtime error event(s) we
 
 const worldReady = session.find(event => event.type === 'world.ready');
 if (worldReady?.details?.source !== 'csdi') blockers.push('The official CSDI world was not recorded as ready.');
+if (worldReady?.details?.region !== 'tai-po') blockers.push('The official Tai Po region was not recorded as ready.');
 
 const stages = new Set(
   session
@@ -45,7 +46,7 @@ const stages = new Set(
     .filter(stage => typeof stage === 'string'),
 );
 for (const stage of [
-  'Streaming Lands Department imagery',
+  'Building Hong Kong terrain',
   'Blender pigeon ready',
   'building layer ready',
 ]) {
@@ -79,6 +80,11 @@ if (fpsValues.length === 0) blockers.push('No positive FPS sample was recorded a
 const flying = session.some(event => event.type === 'flight.state' && event.details?.state === 'FLYING');
 if (!flying) blockers.push('The bird never entered the FLYING state.');
 
+const materials = session.find(event => event.type === 'building.materials');
+if (!isPositive(materials?.details?.texturedMaterials)) {
+  blockers.push('No official textured building material was recorded.');
+}
+
 if (blockers.length > 0) {
   console.error(`Runtime acceptance failed for session ${sessionId}:`);
   for (const blocker of blockers) console.error(`- ${blocker}`);
@@ -88,6 +94,7 @@ if (blockers.length > 0) {
 console.log(`Runtime acceptance passed for session ${sessionId}.`);
 console.log('Flow: screen.boot -> screen.menu -> screen.loading -> screen.game');
 console.log('World: official CSDI');
+console.log(`Textured building materials: ${materials.details.texturedMaterials}`);
 console.log(`Framebuffer: ${frame.details.width}x${frame.details.height}`);
 console.log(`Capture: ${capturedFramePath}`);
 console.log(`FPS samples: ${fpsValues.join(', ')}`);

@@ -1,11 +1,28 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { defineConfig, loadEnv, type Plugin, type ProxyOptions } from 'vite';
+import { FLIGHT_REGIONS, type CsdiRegionLayer } from './src/game/regions';
+
+interface MiddlewareRequest extends NodeJS.ReadableStream {
+  method?: string;
+  url?: string;
+  headers?: Record<string, string | string[] | undefined>;
+}
+
+interface MiddlewareResponse {
+  statusCode: number;
+  setHeader: (name: string, value: string) => void;
+  end: (body?: string) => void;
+}
+
+interface Middlewares {
+  use: (path: string, handler: (request: MiddlewareRequest, response: MiddlewareResponse, next: () => void) => void) => void;
+}
 
 function runtimeEvidencePlugin(): Plugin {
   const evidencePath = resolve(process.cwd(), 'runtime-evidence', 'events.jsonl');
   const framesPath = resolve(process.cwd(), 'runtime-evidence', 'frames');
-  const installMiddleware = (middlewares: { use: (path: string, handler: (request: NodeJS.ReadableStream & { method?: string }, response: { statusCode: number; end: (body?: string) => void }, next: () => void) => void) => void }): void => {
+  const installMiddleware = (middlewares: Middlewares): void => {
     middlewares.use('/__runtime-event', (request, response, next) => {
       if (request.method !== 'POST') {
         next();
@@ -34,9 +51,7 @@ function runtimeEvidencePlugin(): Plugin {
         next();
         return;
       }
-      const sessionHeader = 'headers' in request
-        ? (request.headers as Record<string, string | string[] | undefined>)['x-runtime-session']
-        : undefined;
+      const sessionHeader = request.headers?.['x-runtime-session'];
       const sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader;
       if (!sessionId || !/^[a-zA-Z0-9-]{1,80}$/.test(sessionId)) {
         response.statusCode = 400;
@@ -79,6 +94,89 @@ function runtimeEvidencePlugin(): Plugin {
   };
 }
 
+function csdiRegionPlugin(apiKey: string | undefined): Plugin {
+  const cache = new Map<string, string>();
+
+  const installMiddleware = (middlewares: Middlewares): void => {
+    middlewares.use('/csdi-region', (request, response, next) => {
+      if (request.method !== 'GET') {
+        next();
+        return;
+      }
+      const match = request.url?.match(/^\/(building|infrastructure)\/([a-z-]+)\/tileset\.json(?:\?.*)?$/);
+      if (!match) {
+        next();
+        return;
+      }
+      void createRegionalTileset(match[1] as CsdiRegionLayer, match[2])
+        .then(body => {
+          response.statusCode = 200;
+          response.setHeader('Content-Type', 'application/json; charset=utf-8');
+          response.setHeader('Cache-Control', 'no-store');
+          response.end(body);
+        })
+        .catch(error => {
+          response.statusCode = 502;
+          response.end(error instanceof Error ? error.message : 'Regional CSDI tileset failed.');
+        });
+    });
+  };
+
+  const createRegionalTileset = async (layer: CsdiRegionLayer, regionId: string): Promise<string> => {
+    const cacheKey = `${layer}/${regionId}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+    if (!apiKey) throw new Error('The server is missing its CSDI API credential.');
+    const region = FLIGHT_REGIONS.find(candidate => candidate.id === regionId);
+    if (!region) throw new Error('Unknown Hong Kong flight region.');
+
+    const upstreamUrl = new URL(`https://data.map.gov.hk/api/3d-data/3dsd/WGS84/${layer}/tileset.json`);
+    upstreamUrl.searchParams.set('key', apiKey);
+    const upstreamResponse = await fetch(upstreamUrl);
+    if (!upstreamResponse.ok) {
+      throw new Error(`CSDI ${layer} index returned HTTP ${upstreamResponse.status}.`);
+    }
+    const upstream = await upstreamResponse.json() as {
+      asset: Record<string, unknown>;
+      root: {
+        transform?: number[];
+        children?: Array<{
+          boundingVolume: Record<string, unknown>;
+          content?: { uri?: string; url?: string };
+          geometricError: number;
+          refine?: string;
+        }>;
+      };
+    };
+    const expectedUri = region.csdiTiles[layer];
+    const selected = upstream.root.children?.find(child => {
+      return (child.content?.uri ?? child.content?.url) === expectedUri;
+    });
+    if (!selected || !upstream.root.transform) {
+      throw new Error(`CSDI ${layer} does not contain the configured ${region.englishLabel} tile.`);
+    }
+
+    const regional = {
+      asset: upstream.asset,
+      geometricError: selected.geometricError,
+      root: {
+        ...selected,
+        transform: upstream.root.transform,
+        content: { uri: `/csdi-3d/${layer}/${expectedUri}` },
+      },
+    };
+    const body = JSON.stringify(regional);
+    cache.set(cacheKey, body);
+    return body;
+  };
+
+  return {
+    name: 'csdi-regional-tilesets',
+    configureServer: server => installMiddleware(server.middlewares),
+    configurePreviewServer: server => installMiddleware(server.middlewares),
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiKey = env.CSDI_3D_API_KEY?.trim();
@@ -90,15 +188,6 @@ export default defineConfig(({ mode }) => {
       rewrite: path => path.replace(
         /^\/terrain-elevation/,
         '/elevation-tiles-prod/terrarium',
-      ),
-    },
-    '/hk-imagery': {
-      target: 'https://mapapi.geodata.gov.hk',
-      changeOrigin: true,
-      secure: true,
-      rewrite: path => path.replace(
-        /^\/hk-imagery/,
-        '/gs/api/v1.0.0/xyz/imagery/WGS84',
       ),
     },
     '/csdi-3d': {
@@ -117,7 +206,7 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    plugins: [runtimeEvidencePlugin()],
+    plugins: [runtimeEvidencePlugin(), csdiRegionPlugin(apiKey)],
     build: {
       chunkSizeWarningLimit: 750,
     },

@@ -5,9 +5,9 @@
 ```text
 Browser UI state machine
   → BirdsInHkGame
-    → AerialImageryGround → LandsD imagery + Terrarium elevation → realistic terrain
-    → StylizedHongKong → Tai Po collision and near-field landmark detail
-    → CsdiTiles → same-origin Vite proxy → LandsD CSDI (primary world)
+    → AerialImageryGround → Terrarium elevation → game-rendered PBR terrain
+    → CsdiTiles → regional same-origin proxy → LandsD CSDI Building + Infrastructure
+      → BuildingMaterial → official KTX2 texture + facade PBR shading
     → BirdController → pre-movement raycasts → active world meshes
     → Three.js renderer → WebGL canvas
 ```
@@ -17,15 +17,16 @@ Browser UI state machine
 - `src/main.ts`: DOM events and screen transitions only.
 - `BirdsInHkGame`: scene lifecycle, camera, render loop, and readiness gate.
 - `CsdiTiles`: official map streaming, KTX2 setup, tile metrics, and disposal.
-- `AerialImageryGround`: bounded, concurrency-limited Lands Department aerial imagery grid displaced by public Terrarium elevation around Wang Fuk Court.
-- `StylizedHongKong`: deterministic fallback flight range with a Wang Fuk Court landmark, trees, and collision meshes.
+- `AerialImageryGround`: bounded Terrarium elevation grid with slope- and height-driven game terrain materials.
+- `BuildingMaterial`: preserves official CSDI textures and adds window, tone, roughness, and reflection rendering.
+- `regions.ts`: verified coordinates and official root tiles for independent Hong Kong flight regions.
 - `BirdController`: deterministic flight state and collision response.
 - `geo.ts`: WGS84 ECEF to metre-based local frame.
 - `vite.config.ts`: server-only key injection and CSDI proxy.
 
 ## Failure Policy
 
-The default CSDI world may enter flight only when aerial imagery has loaded, WebGL is healthy, and at least one official building mesh is parsed and camera-visible. Individual tile failures are recoverable; a root or readiness failure presents the explicit local Wang Fuk Court fallback. Keys and upstream URLs are not exposed in user-facing error text.
+The CSDI world may enter flight only when terrain has loaded, WebGL is healthy, and at least one official building mesh is parsed and camera-visible. Individual tile failures are recoverable; a root or readiness failure returns to retry or region selection. No procedural building fallback exists. Keys and upstream credential URLs are not exposed in user-facing error text.
 
 ## Performance Budgets
 

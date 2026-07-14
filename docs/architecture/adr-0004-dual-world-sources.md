@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded by ADR 0006
+Superseded by ADR 0006; removed from production on 2026-07-15
 
 ## Context
 
@@ -17,3 +17,7 @@ Ship a deterministic stylized Tai Po flight range as the default world source. K
 - The game can always demonstrate flight, collision, and perching without external services.
 - CSDI remains the authoritative real-map source and keeps its stricter parsed-mesh and visible-tile readiness gate.
 - Core gameplay QA and official-data integration QA have separate verdicts.
+
+## Removal Note
+
+The stylized Tai Po source and procedural Wang Fuk Court geometry were deleted after the official regional CSDI tileset passed rendering, visibility, collision, perching, and takeoff verification. This ADR remains as historical context only.

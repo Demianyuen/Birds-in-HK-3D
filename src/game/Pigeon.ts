@@ -94,8 +94,7 @@ export class Pigeon {
   private async loadGlbModel(): Promise<boolean> {
     try {
       const gltf = await new GLTFLoader().loadAsync('/models/pigeon.glb');
-      const leftWing = gltf.scene.getObjectByName('Wing.L');
-      const rightWing = gltf.scene.getObjectByName('Wing.R');
+      const { leftWing, rightWing } = findPigeonWingPivots(gltf.scene);
       if (!leftWing || !rightWing) throw new Error('Pigeon GLB is missing animated wing pivots.');
 
       this.disposeCurrentVisual();
@@ -127,4 +126,14 @@ export class Pigeon {
       for (const material of materials) material.dispose();
     });
   }
+}
+
+export function findPigeonWingPivots(root: Object3D): {
+  leftWing: Object3D | undefined;
+  rightWing: Object3D | undefined;
+} {
+  return {
+    leftWing: root.getObjectByName('Wing.L') ?? root.getObjectByName('WingL'),
+    rightWing: root.getObjectByName('Wing.R') ?? root.getObjectByName('WingR'),
+  };
 }

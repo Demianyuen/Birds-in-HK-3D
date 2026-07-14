@@ -1,6 +1,6 @@
 # Birds in HK
 
-A Three.js pigeon flight simulator using Lands Department aerial imagery and official Hong Kong Buildings from the CSDI 3D Spatial Data API. A detailed Wang Fuk Court flight range is the explicit offline fallback.
+A Three.js pigeon flight simulator using official Hong Kong Buildings and Infrastructure from the Lands Department CSDI 3D Spatial Data API. The terrain keeps real elevation but uses game-rendered grass, soil, and rock instead of satellite imagery.
 
 ## Run
 
@@ -15,9 +15,9 @@ The current machine is already configured locally. The API key remains server-si
 
 `Boot -> Main menu -> World selection -> Loading -> Flight`
 
-The default world streams official CSDI Building and Infrastructure over a bounded grid of aerial imagery and displaced terrain around Tai Po. It enters flight only after a real model is parsed and camera-visible. A detailed local Wang Fuk Court world is available as the service-failure fallback. Mouse or WASD steer, the wheel or Shift/Control changes speed, and Space flaps or launches from a surface.
+The first playable region streams official Tai Po CSDI Building and Infrastructure over a bounded Terrarium elevation grid. It enters flight only after a real model is parsed and camera-visible. There is no procedural-building fallback: an upstream failure returns to retry or region selection. Mouse or WASD steer, the wheel or Shift/Control changes speed, and Space flaps or launches from a surface.
 
-BlenderGIS is not part of the runtime map path: it does not consume the CSDI Cesium 3D Tiles service. It remains an optional offline tool for preparing DEM, GeoTIFF, Shapefile, or OSM-derived art and collision assets.
+The official KTX2 building texture, UVs, geometry, and collision remain intact. A Three.js PBR facade layer adds stable building tones, window shading, reflections, and shadows. BlenderGIS is not part of the runtime map path: it does not consume the CSDI Cesium 3D Tiles service.
 
 ## Verification
 

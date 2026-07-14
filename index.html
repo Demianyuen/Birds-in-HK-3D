@@ -22,27 +22,23 @@
 
       <section id="menu-screen" class="screen menu-screen" aria-labelledby="menu-title" hidden>
         <div class="menu-content">
-          <p class="place-name">TAI PO · HONG KONG</p>
-          <h2 id="menu-title">選擇飛行世界</h2>
+          <p class="place-name">OFFICIAL 3D HONG KONG</p>
+          <h2 id="menu-title">選擇真實飛行區域</h2>
           <div class="bird-option" aria-label="Selected bird">
             <span class="bird-index">01</span>
             <div><strong>香港白鴿</strong><small>靈活 · 平衡 · 城市飛行</small></div>
             <span class="selected-mark">已選</span>
           </div>
-          <fieldset class="world-source-picker">
-            <legend>WORLD SOURCE</legend>
+          <fieldset class="region-picker">
+            <legend>FLIGHT REGION</legend>
             <label>
-              <input type="radio" name="world-source" value="csdi" checked />
-              <span><strong>官方 3D 香港</strong><small>航拍影像 + CSDI Buildings</small></span>
-            </label>
-            <label>
-              <input type="radio" name="world-source" value="stylized" />
-              <span><strong>大埔實景飛行</strong><small>宏福苑 · 離線後備</small></span>
+              <input type="radio" name="flight-region" value="tai-po" checked />
+              <span><strong>大埔 · 宏福苑</strong><small>官方 CSDI 立體建築 + 航拍地形</small></span>
             </label>
           </fieldset>
           <button id="start-button" class="primary-button" type="button">開始飛行</button>
         </div>
-        <div class="menu-meta"><span>大埔 · 宏福苑</span><span>THREE.JS FLIGHT</span></div>
+        <div class="menu-meta"><span>真實地區 01 · 大埔</span><span>LANDSD CSDI 3D</span></div>
       </section>
 
       <section id="loading-screen" class="screen loading-screen" aria-live="polite" hidden>
@@ -62,7 +58,7 @@
           <p id="error-message">The CSDI service did not return a playable tile.</p>
           <div class="error-actions">
             <button id="retry-button" class="primary-button" type="button">再試一次</button>
-            <button id="fallback-button" class="secondary-button" type="button">使用實景飛行</button>
+            <button id="region-button" class="secondary-button" type="button">返回地區選擇</button>
           </div>
         </div>
       </section>
@@ -75,7 +71,7 @@
           <div><dt>HDG</dt><dd id="heading-value">N</dd></div>
           <div><dt>FPS</dt><dd id="fps-value">0</dd></div>
         </dl>
-        <div class="map-state"><span class="live-dot"></span><span id="map-state-value">CSDI LIVE</span></div>
+        <div class="map-state"><span class="live-dot"></span><span id="map-state-value">TAI PO · CSDI LIVE</span></div>
       </section>
 
       <div id="controls-hint" class="controls-hint" hidden>

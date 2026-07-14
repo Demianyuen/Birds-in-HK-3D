@@ -21,14 +21,18 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { AerialImageryGround } from './AerialImageryGround';
 import { BirdController, type FlightControl, type FlightTelemetry } from './BirdController';
 import { CsdiTiles, type MapLoadProgress } from './CsdiTiles';
-import { StylizedHongKong } from './StylizedHongKong';
+import { getFlightRegion, type FlightRegionId } from './regions';
 import { evaluateWorldReadiness } from './worldReadiness';
 
 type GameMode = 'attract' | 'loading' | 'playing';
-export type WorldSource = 'stylized' | 'csdi';
 export interface GameTelemetry extends FlightTelemetry {
   fps: number;
   renderVerified: boolean;
+  buildingMaterials: {
+    meshes: number;
+    materials: number;
+    texturedMaterials: number;
+  };
 }
 
 export class BirdsInHkGame {
@@ -40,7 +44,6 @@ export class BirdsInHkGame {
   private readonly city = new CsdiTiles('building');
   private readonly infrastructure = new CsdiTiles('infrastructure');
   private readonly officialWorldRoot = new Group();
-  private readonly stylizedCity = new StylizedHongKong();
   private readonly aerialGround = new AerialImageryGround();
   private readonly sun = new DirectionalLight('#fff1d4', 2.45);
   private readonly sky = new Sky();
@@ -48,7 +51,6 @@ export class BirdsInHkGame {
   private mode: GameMode = 'attract';
   private animationFrame = 0;
   private elapsed = 0;
-  private activeWorld: WorldSource = 'stylized';
   private smoothedFrameMilliseconds = 16.7;
   private renderVerified = false;
 
@@ -85,10 +87,6 @@ export class BirdsInHkGame {
     this.scene.add(this.bird.object);
     void this.bird.loadVisual();
     this.scene.add(this.aerialGround.group);
-    this.scene.add(this.stylizedCity.root);
-    void this.aerialGround.load(this.renderer).then(() => {
-      this.stylizedCity.root.position.y = this.aerialGround.originElevation;
-    }).catch(() => undefined);
     this.officialWorldRoot.name = 'Official CSDI 3D world';
     this.scene.add(this.officialWorldRoot);
 
@@ -105,17 +103,17 @@ export class BirdsInHkGame {
     this.animate();
   }
 
-  public async loadWorld(source: WorldSource, onProgress: (progress: MapLoadProgress) => void): Promise<void> {
+  public async loadWorld(regionId: FlightRegionId, onProgress: (progress: MapLoadProgress) => void): Promise<void> {
+    const region = getFlightRegion(regionId);
     this.mode = 'loading';
-    this.activeWorld = source;
     this.bird.setEnabled(false);
     this.camera.position.set(0, 185, 500);
     this.camera.lookAt(0, 72, 0);
-    const imageryPromise = this.aerialGround.load(this.renderer, progress => {
+    const terrainPromise = this.aerialGround.load(region, progress => {
       const completionRatio = progress.total > 0 ? progress.completed / progress.total : 0;
       onProgress({
-        stage: 'Streaming Lands Department imagery',
-        detail: `${progress.successful} of ${progress.total} official aerial tiles ready.`,
+        stage: 'Building Hong Kong terrain',
+        detail: `${progress.successful} of ${progress.total} elevation meshes ready.`,
         percent: 12 + completionRatio * 48,
         modelsLoaded: progress.successful,
       });
@@ -131,48 +129,22 @@ export class BirdsInHkGame {
       });
     });
 
-    if (source === 'stylized') {
-      this.city.dispose();
-      this.infrastructure.dispose();
-      this.officialWorldRoot.clear();
-      this.stylizedCity.setVisible(true);
-      await Promise.all([imageryPromise, birdVisualPromise]);
-      this.stylizedCity.root.position.y = this.aerialGround.originElevation;
-      onProgress({
-        stage: 'Preparing Tai Po simulation',
-        detail: 'Combining aerial imagery, skyline, trees, and Wang Fuk Court collision meshes.',
-        percent: 72,
-        modelsLoaded: this.stylizedCity.collisionMeshCount,
-      });
-      await new Promise(resolve => window.setTimeout(resolve, 350));
-      if (this.renderer.getContext().isContextLost() || this.stylizedCity.collisionMeshCount === 0) {
-        throw new Error('The local Hong Kong flight range failed its runtime readiness gate.');
-      }
-      onProgress({
-        stage: 'Tai Po ready',
-        detail: 'Wang Fuk Court and the surrounding flight corridor are active for collision.',
-        percent: 100,
-        modelsLoaded: this.stylizedCity.collisionMeshCount,
-      });
-      return;
-    }
-
-    this.stylizedCity.setVisible(false);
     const infrastructurePromise = this.infrastructure.load(
       this.officialWorldRoot,
       this.camera,
       this.renderer,
+      region,
       () => undefined,
     ).catch(() => undefined);
     void infrastructurePromise;
     await Promise.all([
-      imageryPromise,
+      terrainPromise,
       birdVisualPromise,
-      this.city.load(this.officialWorldRoot, this.camera, this.renderer, onProgress),
+      this.city.load(this.officialWorldRoot, this.camera, this.renderer, region, onProgress),
     ]);
     onProgress({
       stage: 'Verifying the visible city',
-      detail: 'Checking WebGL, parsed building meshes, and camera-visible CSDI tiles.',
+      detail: `Checking camera-visible official buildings in ${region.englishLabel}.`,
       percent: 96,
       modelsLoaded: this.city.modelCount,
     });
@@ -207,7 +179,6 @@ export class BirdsInHkGame {
     window.removeEventListener('resize', this.handleResize);
     this.city.dispose();
     this.infrastructure.dispose();
-    this.stylizedCity.dispose();
     this.aerialGround.dispose();
     this.renderer.dispose();
   }
@@ -255,16 +226,11 @@ export class BirdsInHkGame {
     const deltaSeconds = Math.min(this.clock.getDelta(), 0.05);
     this.smoothedFrameMilliseconds += (deltaSeconds * 1_000 - this.smoothedFrameMilliseconds) * 0.08;
     this.elapsed += deltaSeconds;
-    if (this.activeWorld === 'csdi') {
-      this.city.update(this.camera, this.renderer);
-      this.infrastructure.update(this.camera, this.renderer);
-    }
+    this.city.update(this.camera, this.renderer);
+    this.infrastructure.update(this.camera, this.renderer);
 
     if (this.mode === 'playing') {
-      const collisionRoot = this.activeWorld === 'csdi'
-        ? [this.aerialGround.group, this.officialWorldRoot]
-        : [this.aerialGround.group, this.stylizedCity.collisionRoot];
-      this.bird.update(deltaSeconds, collisionRoot);
+      this.bird.update(deltaSeconds, [this.aerialGround.group, this.officialWorldRoot]);
       this.bird.updateCamera(this.camera, deltaSeconds);
     } else {
       this.bird.pigeon.animate(deltaSeconds, 18, false);
@@ -287,6 +253,7 @@ export class BirdsInHkGame {
         ...this.bird.getTelemetry(),
         fps: 1_000 / Math.max(1, this.smoothedFrameMilliseconds),
         renderVerified: this.renderVerified,
+        buildingMaterials: this.city.materials,
       });
     }
   };

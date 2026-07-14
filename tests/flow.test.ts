@@ -14,6 +14,11 @@ describe('game flow', () => {
     expect(transitionFlow(error, 'retry')).toBe('loading');
   });
 
+  it('returns from a map error to the real-region selector', () => {
+    const error = transitionFlow('loading', 'world-error');
+    expect(transitionFlow(error, 'change-region')).toBe('menu');
+  });
+
   it('rejects invalid screen jumps', () => {
     expect(() => transitionFlow('boot', 'world-ready')).toThrow(/Invalid game flow transition/);
   });

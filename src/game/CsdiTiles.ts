@@ -1,9 +1,10 @@
 import type { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin, ReorientationPlugin } from '3d-tiles-renderer/plugins';
-import { Box3, Frustum, MathUtils, Matrix4 } from 'three';
+import { Box3, Frustum, MathUtils, Matrix4, Material, Mesh } from 'three';
 import type { Object3D, PerspectiveCamera, WebGLRenderer } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
-import { HONG_KONG_ORIGIN } from './geo';
+import { createRenderedBuildingMaterial } from './BuildingMaterial';
+import type { FlightRegion } from './regions';
 
 export type CsdiLayerName = 'building' | 'infrastructure';
 
@@ -12,6 +13,12 @@ export interface MapLoadProgress {
   detail: string;
   percent: number;
   modelsLoaded: number;
+}
+
+export interface CsdiMaterialMetrics {
+  meshes: number;
+  materials: number;
+  texturedMaterials: number;
 }
 
 export class CsdiTiles {
@@ -27,6 +34,8 @@ export class CsdiTiles {
   private readonly modelBounds = new Box3();
   private cameraVisibleModels = 0;
   private lastVisibilityCheck = 0;
+  private materialMetrics: CsdiMaterialMetrics = { meshes: 0, materials: 0, texturedMaterials: 0 };
+  private readonly renderedMaterials = new WeakSet<Material>();
 
   public constructor(private readonly layerName: CsdiLayerName = 'building') {}
 
@@ -34,6 +43,7 @@ export class CsdiTiles {
     parent: Object3D,
     camera: PerspectiveCamera,
     renderer: WebGLRenderer,
+    region: FlightRegion,
     onProgress: (progress: MapLoadProgress) => void,
   ): Promise<void> {
     this.dispose();
@@ -43,15 +53,19 @@ export class CsdiTiles {
     this.loadSettled = false;
     this.loadedModels.clear();
     this.cameraVisibleModels = 0;
+    this.materialMetrics = { meshes: 0, materials: 0, texturedMaterials: 0 };
     onProgress({
       stage: `Connecting to CSDI ${this.layerName}`,
-      detail: `Requesting the official Hong Kong ${this.layerName} tileset.`,
+      detail: `Requesting official ${region.englishLabel} ${this.layerName} geometry.`,
       percent: 18,
       modelsLoaded: 0,
     });
 
     const { TilesRenderer } = await import('3d-tiles-renderer/three');
-    const tilesetUrl = new URL(`/csdi-3d/${this.layerName}/tileset.json`, window.location.href).toString();
+    const tilesetUrl = new URL(
+      `/csdi-region/${this.layerName}/${region.id}/tileset.json`,
+      window.location.href,
+    ).toString();
     const tiles = new TilesRenderer(tilesetUrl);
     const ktx2Loader = new KTX2Loader(tiles.manager)
       .setTranscoderPath('/basis/')
@@ -70,8 +84,8 @@ export class CsdiTiles {
       autoDispose: false,
     }));
     tiles.registerPlugin(new ReorientationPlugin({
-      lat: MathUtils.degToRad(HONG_KONG_ORIGIN.latitude),
-      lon: MathUtils.degToRad(HONG_KONG_ORIGIN.longitude),
+      lat: MathUtils.degToRad(region.latitude),
+      lon: MathUtils.degToRad(region.longitude),
       recenter: true,
       azimuth: Math.PI,
     }));
@@ -89,18 +103,39 @@ export class CsdiTiles {
       tiles.addEventListener('load-root-tileset', () => {
         onProgress({
           stage: `${this.layerName} tileset located`,
-          detail: `The official WGS84 ${this.layerName} tileset is ready.`,
+          detail: `The official WGS84 ${region.englishLabel} ${this.layerName} tileset is ready.`,
           percent: 42,
           modelsLoaded: this.modelsLoaded,
         });
       });
 
       tiles.addEventListener('load-model', event => {
+        if (this.loadedModels.has(event.scene)) return;
         let containsMesh = false;
         event.scene.traverse(object => {
-          if ('isMesh' in object && object.isMesh === true) containsMesh = true;
+          if (!(object instanceof Mesh)) return;
+          containsMesh = true;
+          object.castShadow = true;
+          object.receiveShadow = true;
+          this.materialMetrics.meshes += 1;
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          const renderedMaterials = materials.map((material, materialIndex) => {
+            this.materialMetrics.materials += 1;
+            if ('map' in material && material.map) {
+              this.materialMetrics.texturedMaterials += 1;
+              material.map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+              material.map.needsUpdate = true;
+            }
+            if (this.layerName !== 'building' || this.renderedMaterials.has(material)) return material;
+            this.renderedMaterials.add(material);
+            return createRenderedBuildingMaterial(
+              material,
+              `${event.url}/${object.name}/${materialIndex}`,
+            );
+          });
+          object.material = Array.isArray(object.material) ? renderedMaterials : renderedMaterials[0];
         });
-        if (!containsMesh || this.loadedModels.has(event.scene)) return;
+        if (!containsMesh) return;
         this.loadedModels.add(event.scene);
         this.modelsLoaded += 1;
         const percent = Math.min(92, 52 + this.modelsLoaded * 8);
@@ -177,6 +212,10 @@ export class CsdiTiles {
     return Math.max(this.tiles?.visibleTiles.size ?? 0, this.cameraVisibleModels);
   }
 
+  public get materials(): Readonly<CsdiMaterialMetrics> {
+    return this.materialMetrics;
+  }
+
   public dispose(): void {
     this.tiles?.dispose();
     this.ktx2Loader?.dispose();
@@ -188,6 +227,7 @@ export class CsdiTiles {
     this.loadSettled = false;
     this.loadedModels.clear();
     this.cameraVisibleModels = 0;
+    this.materialMetrics = { meshes: 0, materials: 0, texturedMaterials: 0 };
   }
 
   private updateVisibleModelCount(camera: PerspectiveCamera): void {

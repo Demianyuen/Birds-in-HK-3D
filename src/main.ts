@@ -1,16 +1,17 @@
 import './styles.css';
 import { transitionFlow, type ScreenName } from './app/flow';
 import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
-import { BirdsInHkGame, type GameTelemetry, type WorldSource } from './game/BirdsInHkGame';
+import { BirdsInHkGame, type GameTelemetry } from './game/BirdsInHkGame';
 import type { FlightControl } from './game/BirdController';
 import type { MapLoadProgress } from './game/CsdiTiles';
+import { getFlightRegion, type FlightRegionId } from './game/regions';
 
 const app = requireElement<HTMLElement>('app');
 const canvas = requireElement<HTMLCanvasElement>('game-canvas');
 const continueButton = requireElement<HTMLButtonElement>('continue-button');
 const startButton = requireElement<HTMLButtonElement>('start-button');
 const retryButton = requireElement<HTMLButtonElement>('retry-button');
-const fallbackButton = requireElement<HTMLButtonElement>('fallback-button');
+const regionButton = requireElement<HTMLButtonElement>('region-button');
 const progressFill = requireElement<HTMLElement>('progress-fill');
 const loadingStage = requireElement<HTMLElement>('loading-stage');
 const loadingProgress = requireElement<HTMLElement>('loading-progress');
@@ -37,17 +38,14 @@ let highestProgress = 0;
 let lastReportedLoadingStage = '';
 let lastReportedFlightState = '';
 let renderEvidenceReported = false;
+let materialEvidenceReported = false;
 let lastPerformanceReport = 0;
 const game = new BirdsInHkGame(canvas, updateTelemetry);
 
 continueButton.addEventListener('click', () => showScreen(transitionFlow(currentScreen, 'continue')));
 startButton.addEventListener('click', () => void beginFlight());
 retryButton.addEventListener('click', () => void beginFlight());
-fallbackButton.addEventListener('click', () => {
-  const fallbackSource = document.querySelector<HTMLInputElement>('input[name="world-source"][value="stylized"]');
-  if (fallbackSource) fallbackSource.checked = true;
-  void beginFlight();
-});
+regionButton.addEventListener('click', () => showScreen(transitionFlow(currentScreen, 'change-region')));
 
 canvas.addEventListener('click', () => {
   if (currentScreen === 'game') void canvas.requestPointerLock();
@@ -89,6 +87,7 @@ async function beginFlight(): Promise<void> {
   if (loading) return;
   loading = true;
   highestProgress = 0;
+  lastReportedLoadingStage = '';
   const startEvent = currentScreen === 'error' ? 'retry' : 'start';
   showScreen(transitionFlow(currentScreen, startEvent));
   updateLoading({
@@ -99,10 +98,10 @@ async function beginFlight(): Promise<void> {
   });
 
   try {
-    const source = selectedWorldSource();
-    mapStateValue.textContent = source === 'csdi' ? 'CSDI LIVE' : 'TAI PO RANGE';
+    const region = getFlightRegion(selectedRegionId());
+    mapStateValue.textContent = `${region.englishLabel} · CSDI LIVE`;
     await Promise.all([
-      game.loadWorld(source, updateLoading),
+      game.loadWorld(region.id, updateLoading),
       delay(1_000),
     ]);
     updateLoading({
@@ -113,7 +112,7 @@ async function beginFlight(): Promise<void> {
     });
     await delay(700);
     game.startFlight();
-    reportRuntimeEvent('world.ready', { source });
+    reportRuntimeEvent('world.ready', { source: 'csdi', region: region.id });
     showScreen(transitionFlow(currentScreen, 'world-ready'));
   } catch (error) {
     reportRuntimeEvent('world.error', {
@@ -169,6 +168,13 @@ function updateTelemetry(telemetry: GameTelemetry): void {
       reportRuntimeEvent('render.capture', { captured });
     });
   }
+  if (
+    telemetry.buildingMaterials.materials > 0
+    && !materialEvidenceReported
+  ) {
+    materialEvidenceReported = true;
+    reportRuntimeEvent('building.materials', telemetry.buildingMaterials);
+  }
   const now = performance.now();
   if (telemetry.renderVerified && now - lastPerformanceReport >= 10_000) {
     lastPerformanceReport = now;
@@ -200,9 +206,9 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, milliseconds));
 }
 
-function selectedWorldSource(): WorldSource {
-  const selected = document.querySelector<HTMLInputElement>('input[name="world-source"]:checked');
-  return selected?.value === 'stylized' ? 'stylized' : 'csdi';
+function selectedRegionId(): FlightRegionId {
+  const selected = document.querySelector<HTMLInputElement>('input[name="flight-region"]:checked');
+  return getFlightRegion(selected?.value).id;
 }
 
 function keyboardControlForCode(code: string): FlightControl | null {

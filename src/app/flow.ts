@@ -1,11 +1,11 @@
 export type ScreenName = 'boot' | 'menu' | 'loading' | 'error' | 'game';
-export type FlowEvent = 'continue' | 'start' | 'retry' | 'world-ready' | 'world-error';
+export type FlowEvent = 'continue' | 'start' | 'retry' | 'change-region' | 'world-ready' | 'world-error';
 
 const transitions: Record<ScreenName, Partial<Record<FlowEvent, ScreenName>>> = {
   boot: { continue: 'menu' },
   menu: { start: 'loading' },
   loading: { 'world-ready': 'game', 'world-error': 'error' },
-  error: { retry: 'loading' },
+  error: { retry: 'loading', 'change-region': 'menu' },
   game: {},
 };
 

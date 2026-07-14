@@ -1,11 +1,6 @@
 const baseUrl = process.env.BIRDS_IN_HK_URL ?? 'http://127.0.0.1:5173';
 const assets = [
   {
-    name: 'LandsD aerial imagery',
-    path: '/hk-imagery/16/53553/28572.png',
-    validate: data => data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
-  },
-  {
     name: 'Terrarium elevation',
     path: '/terrain-elevation/13/6694/3571.png',
     validate: data => data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),

@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { Group } from 'three';
+import { findPigeonWingPivots } from '../src/game/Pigeon';
 
 const assetPath = resolve(process.cwd(), 'public', 'models', 'pigeon.glb');
 
@@ -21,5 +23,16 @@ describe('Blender pigeon asset', () => {
     const nodeNames = new Set(gltf.nodes?.map(node => node.name));
     expect(nodeNames.has('Wing.L')).toBe(true);
     expect(nodeNames.has('Wing.R')).toBe(true);
+  });
+
+  it('finds wing names after GLTFLoader sanitizes Blender dots', () => {
+    const root = new Group();
+    const leftWing = new Group();
+    const rightWing = new Group();
+    leftWing.name = 'WingL';
+    rightWing.name = 'WingR';
+    root.add(leftWing, rightWing);
+
+    expect(findPigeonWingPivots(root)).toEqual({ leftWing, rightWing });
   });
 });

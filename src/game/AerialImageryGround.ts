@@ -1,23 +1,20 @@
 import {
-  ClampToEdgeWrapping,
+  Color,
+  Float32BufferAttribute,
   Group,
   Mesh,
   MeshStandardMaterial,
   PlaneGeometry,
-  SRGBColorSpace,
-  Texture,
-  TextureLoader,
 } from 'three';
-import type { WebGLRenderer } from 'three';
+import type { FlightRegion } from './regions';
 
 const EARTH_CIRCUMFERENCE_METRES = 40_075_016.686;
-const IMAGERY_ZOOM = 16;
+const SURFACE_ZOOM = 14;
 const ELEVATION_ZOOM = 13;
-const GRID_RADIUS = 3;
+const GRID_RADIUS = 4;
 const TERRAIN_TILE_SIZE = 256;
-const TERRAIN_SEGMENTS = 16;
-const IMAGERY_TO_ELEVATION_SCALE = 2 ** (IMAGERY_ZOOM - ELEVATION_ZOOM);
-const TAI_PO = Object.freeze({ latitude: 22.44705, longitude: 114.17544 });
+const TERRAIN_SEGMENTS = 32;
+const SURFACE_TO_ELEVATION_SCALE = 2 ** (SURFACE_ZOOM - ELEVATION_ZOOM);
 
 export interface ImageryLoadProgress {
   completed: number;
@@ -39,18 +36,23 @@ export class AerialImageryGround {
   private readonly progressListeners = new Set<(progress: ImageryLoadProgress) => void>();
   private loadPromise: Promise<void> | null = null;
   private progress: ImageryLoadProgress = { completed: 0, total: 0, successful: 0 };
+  private activeRegionId: string | null = null;
 
   public constructor() {
-    this.group.name = 'Lands Department aerial imagery';
+    this.group.name = 'Hong Kong elevation terrain';
   }
 
   public load(
-    renderer: WebGLRenderer,
+    region: FlightRegion,
     onProgress: (progress: ImageryLoadProgress) => void = () => undefined,
   ): Promise<void> {
+    if (this.activeRegionId !== region.id) {
+      this.clearTiles();
+      this.activeRegionId = region.id;
+    }
     this.progressListeners.add(onProgress);
     onProgress(this.progress);
-    this.loadPromise ??= this.loadTiles(renderer).catch(error => {
+    this.loadPromise ??= this.loadTiles(region).catch(error => {
       this.loadPromise = null;
       throw error;
     });
@@ -59,6 +61,11 @@ export class AerialImageryGround {
 
   public dispose(): void {
     this.group.removeFromParent();
+    this.clearTiles();
+    this.activeRegionId = null;
+  }
+
+  private clearTiles(): void {
     this.group.clear();
     for (const resource of this.resources) resource.dispose();
     this.resources.clear();
@@ -67,75 +74,65 @@ export class AerialImageryGround {
     this.progress = { completed: 0, total: 0, successful: 0 };
   }
 
-  private async loadTiles(renderer: WebGLRenderer): Promise<void> {
-    const requests = createTileRequests();
+  private async loadTiles(region: FlightRegion): Promise<void> {
+    const requests = createTileRequests(region);
     this.progress = { completed: 0, total: requests.length, successful: 0 };
-    const textureLoader = new TextureLoader();
     const elevationTiles = await this.loadElevationCoverage(requests);
-    const center = geographicToTileFraction(TAI_PO.latitude, TAI_PO.longitude, IMAGERY_ZOOM);
+    if (elevationTiles.size === 0) throw new Error('Hong Kong elevation terrain could not be loaded.');
+    const center = geographicToTileFraction(region.latitude, region.longitude, SURFACE_ZOOM);
     this.originElevation = this.sampleElevation(elevationTiles, center.x, center.y);
-    let nextRequest = 0;
-    let completed = 0;
-    let successful = 0;
-    const maxAnisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-
-    const worker = async (): Promise<void> => {
-      while (nextRequest < requests.length) {
-        const request = requests[nextRequest];
-        nextRequest += 1;
-        try {
-          const texture = await textureLoader.loadAsync(`/hk-imagery/${IMAGERY_ZOOM}/${request.x}/${request.y}.png`);
-          this.prepareTexture(texture, maxAnisotropy);
-          const material = this.track(new MeshStandardMaterial({
-            map: texture,
-            color: '#ffffff',
-            roughness: 0.98,
-            metalness: 0,
-          }));
-          const geometry = this.createGroundGeometry(request, elevationTiles);
-          const tile = new Mesh(geometry, material);
-          tile.position.set(request.worldX, 0.16, request.worldZ);
-          tile.receiveShadow = true;
-          this.group.add(tile);
-          successful += 1;
-        } catch {
-          // A missing edge tile leaves the local fallback terrain visible.
-        } finally {
-          completed += 1;
-          this.progress = { completed, total: requests.length, successful };
-          for (const listener of this.progressListeners) listener(this.progress);
-        }
-      }
-    };
-
-    await Promise.all(Array.from({ length: 6 }, () => worker()));
-    if (successful === 0) throw new Error('Official Hong Kong aerial imagery could not be loaded.');
-  }
-
-  private prepareTexture(texture: Texture, anisotropy: number): void {
-    texture.colorSpace = SRGBColorSpace;
-    texture.wrapS = ClampToEdgeWrapping;
-    texture.wrapT = ClampToEdgeWrapping;
-    texture.anisotropy = anisotropy;
-    this.track(texture);
+    const material = this.track(new MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.92,
+      metalness: 0,
+    }));
+    for (let index = 0; index < requests.length; index += 1) {
+      const request = requests[index];
+      const geometry = this.createGroundGeometry(request, elevationTiles, region.latitude);
+      const tile = new Mesh(geometry, material);
+      tile.position.set(request.worldX, 0.16, request.worldZ);
+      tile.receiveShadow = true;
+      this.group.add(tile);
+      this.progress = {
+        completed: index + 1,
+        total: requests.length,
+        successful: index + 1,
+      };
+      for (const listener of this.progressListeners) listener(this.progress);
+    }
   }
 
   private createGroundGeometry(
     request: TileRequest,
     elevationTiles: Map<string, Uint8ClampedArray>,
+    latitude: number,
   ): PlaneGeometry {
-    const width = tileWidthMetres() + 0.5;
+    const width = tileWidthMetres(latitude) + 0.5;
     const geometry = this.track(new PlaneGeometry(width, width, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS));
     geometry.rotateX(-Math.PI / 2);
     const positions = geometry.attributes.position;
     const uv = geometry.attributes.uv;
     for (let index = 0; index < positions.count; index += 1) {
-      const imageryX = request.x + uv.getX(index);
-      const imageryY = request.y + (1 - uv.getY(index));
-      positions.setY(index, this.sampleElevation(elevationTiles, imageryX, imageryY));
+      const surfaceX = request.x + uv.getX(index);
+      const surfaceY = request.y + (1 - uv.getY(index));
+      positions.setY(index, this.sampleElevation(elevationTiles, surfaceX, surfaceY));
     }
     positions.needsUpdate = true;
     geometry.computeVertexNormals();
+    const normals = geometry.attributes.normal;
+    const colors = new Float32Array(positions.count * 3);
+    const terrainColor = new Color();
+    for (let index = 0; index < positions.count; index += 1) {
+      const elevation = positions.getY(index);
+      const slope = 1 - Math.max(0, normals.getY(index));
+      const worldX = request.worldX + positions.getX(index);
+      const worldZ = request.worldZ + positions.getZ(index);
+      sampleTerrainColor(elevation, slope, worldX, worldZ, terrainColor);
+      colors[index * 3] = terrainColor.r;
+      colors[index * 3 + 1] = terrainColor.g;
+      colors[index * 3 + 2] = terrainColor.b;
+    }
+    geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
     return geometry;
   }
 
@@ -144,8 +141,8 @@ export class AerialImageryGround {
     for (const request of requests) {
       for (const cornerX of [request.x, request.x + 1]) {
         for (const cornerY of [request.y, request.y + 1]) {
-          const x = Math.floor(cornerX / IMAGERY_TO_ELEVATION_SCALE);
-          const y = Math.floor(cornerY / IMAGERY_TO_ELEVATION_SCALE);
+          const x = Math.floor(cornerX / SURFACE_TO_ELEVATION_SCALE);
+          const y = Math.floor(cornerY / SURFACE_TO_ELEVATION_SCALE);
           coordinates.set(`${x}/${y}`, { x, y });
         }
       }
@@ -179,11 +176,11 @@ export class AerialImageryGround {
 
   private sampleElevation(
     tiles: Map<string, Uint8ClampedArray>,
-    imageryX: number,
-    imageryY: number,
+    surfaceX: number,
+    surfaceY: number,
   ): number {
-    const terrainX = imageryX / IMAGERY_TO_ELEVATION_SCALE;
-    const terrainY = imageryY / IMAGERY_TO_ELEVATION_SCALE;
+    const terrainX = surfaceX / SURFACE_TO_ELEVATION_SCALE;
+    const terrainY = surfaceY / SURFACE_TO_ELEVATION_SCALE;
     const tileX = Math.floor(terrainX);
     const tileY = Math.floor(terrainY);
     const pixels = tiles.get(`${tileX}/${tileY}`);
@@ -201,13 +198,13 @@ export class AerialImageryGround {
   }
 }
 
-function createTileRequests(): TileRequest[] {
-  const center = geographicToTileFraction(TAI_PO.latitude, TAI_PO.longitude, IMAGERY_ZOOM);
+function createTileRequests(region: FlightRegion): TileRequest[] {
+  const center = geographicToTileFraction(region.latitude, region.longitude, SURFACE_ZOOM);
   const centerX = center.x;
   const centerY = center.y;
   const centerTileX = Math.floor(centerX);
   const centerTileY = Math.floor(centerY);
-  const tileWidth = tileWidthMetres();
+  const tileWidth = tileWidthMetres(region.latitude);
   const requests: TileRequest[] = [];
 
   for (let offsetY = -GRID_RADIUS; offsetY < GRID_RADIUS; offsetY += 1) {
@@ -242,7 +239,31 @@ export function decodeTerrariumElevation(red: number, green: number, blue: numbe
   return red * 256 + green + blue / 256 - 32_768;
 }
 
-function tileWidthMetres(): number {
-  const latitudeRadians = TAI_PO.latitude * Math.PI / 180;
-  return EARTH_CIRCUMFERENCE_METRES * Math.cos(latitudeRadians) / 2 ** IMAGERY_ZOOM;
+function tileWidthMetres(latitude: number): number {
+  const latitudeRadians = latitude * Math.PI / 180;
+  return EARTH_CIRCUMFERENCE_METRES * Math.cos(latitudeRadians) / 2 ** SURFACE_ZOOM;
+}
+
+export function terrainCoverageMetres(latitude: number): number {
+  return tileWidthMetres(latitude) * GRID_RADIUS * 2;
+}
+
+const LOWLAND = new Color('#60735b');
+const GRASS = new Color('#526946');
+const HIGHLAND = new Color('#626550');
+const ROCK = new Color('#77776f');
+
+export function sampleTerrainColor(
+  elevation: number,
+  slope: number,
+  worldX: number,
+  worldZ: number,
+  target: Color,
+): Color {
+  const highlandMix = Math.min(1, Math.max(0, (elevation - 90) / 260));
+  const rockMix = Math.min(1, Math.max(0, (slope - 0.08) / 0.42));
+  const noise = Math.sin(worldX * 0.037 + Math.sin(worldZ * 0.021) * 1.7) * 0.5 + 0.5;
+  target.copy(LOWLAND).lerp(GRASS, 0.34 + noise * 0.28).lerp(HIGHLAND, highlandMix);
+  target.lerp(ROCK, rockMix * (0.55 + highlandMix * 0.35));
+  return target.multiplyScalar(0.88 + noise * 0.16);
 }
