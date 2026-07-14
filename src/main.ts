@@ -1,6 +1,6 @@
 import './styles.css';
 import { transitionFlow, type ScreenName } from './app/flow';
-import { reportRuntimeEvent } from './app/runtimeEvidence';
+import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
 import { BirdsInHkGame, type GameTelemetry, type WorldSource } from './game/BirdsInHkGame';
 import type { FlightControl } from './game/BirdController';
 import type { MapLoadProgress } from './game/CsdiTiles';
@@ -164,6 +164,9 @@ function updateTelemetry(telemetry: GameTelemetry): void {
       width: canvas.width,
       height: canvas.height,
       fps: Math.round(telemetry.fps),
+    });
+    void captureRuntimeFrame(canvas).then(captured => {
+      reportRuntimeEvent('render.capture', { captured });
     });
   }
   const now = performance.now();

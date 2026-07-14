@@ -1,9 +1,10 @@
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { defineConfig, loadEnv, type Plugin, type ProxyOptions } from 'vite';
 
 function runtimeEvidencePlugin(): Plugin {
   const evidencePath = resolve(process.cwd(), 'runtime-evidence', 'events.jsonl');
+  const framesPath = resolve(process.cwd(), 'runtime-evidence', 'frames');
   const installMiddleware = (middlewares: { use: (path: string, handler: (request: NodeJS.ReadableStream & { method?: string }, response: { statusCode: number; end: (body?: string) => void }, next: () => void) => void) => void }): void => {
     middlewares.use('/__runtime-event', (request, response, next) => {
       if (request.method !== 'POST') {
@@ -25,6 +26,48 @@ function runtimeEvidencePlugin(): Plugin {
           response.statusCode = 400;
           response.end('Invalid runtime event.');
         }
+      });
+    });
+
+    middlewares.use('/__runtime-frame', (request, response, next) => {
+      if (request.method !== 'POST') {
+        next();
+        return;
+      }
+      const sessionHeader = 'headers' in request
+        ? (request.headers as Record<string, string | string[] | undefined>)['x-runtime-session']
+        : undefined;
+      const sessionId = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader;
+      if (!sessionId || !/^[a-zA-Z0-9-]{1,80}$/.test(sessionId)) {
+        response.statusCode = 400;
+        response.end('Invalid runtime session.');
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      let byteLength = 0;
+      let oversized = false;
+      request.on('data', chunk => {
+        const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        byteLength += data.length;
+        if (byteLength > 16 * 1024 * 1024) {
+          oversized = true;
+          return;
+        }
+        chunks.push(data);
+      });
+      request.on('end', () => {
+        const data = Buffer.concat(chunks);
+        const pngMagic = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+        if (oversized || data.length < 8 || !data.subarray(0, 8).equals(pngMagic)) {
+          response.statusCode = 400;
+          response.end('Invalid runtime frame.');
+          return;
+        }
+        mkdirSync(framesPath, { recursive: true });
+        writeFileSync(resolve(framesPath, `${sessionId}.png`), data);
+        response.statusCode = 204;
+        response.end();
       });
     });
   };

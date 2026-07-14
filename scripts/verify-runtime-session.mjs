@@ -57,6 +57,19 @@ if (!isPositive(frame?.details?.width) || !isPositive(frame?.details?.height)) {
   blockers.push('No nonblank WebGL framebuffer evidence was recorded.');
 }
 
+const capture = session.find(event => event.type === 'render.capture');
+const capturedFramePath = resolve(process.cwd(), 'runtime-evidence', 'frames', `${sessionId}.png`);
+const pngMagic = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const capturedFrame = existsSync(capturedFramePath) ? readFileSync(capturedFramePath) : null;
+if (
+  capture?.details?.captured !== true
+  || !capturedFrame
+  || capturedFrame.length < 8
+  || !capturedFrame.subarray(0, 8).equals(pngMagic)
+) {
+  blockers.push('No valid PNG capture is attached to the runtime session.');
+}
+
 const fpsValues = session
   .filter(event => event.type === 'performance.sample')
   .map(event => event.details?.fps)
@@ -76,6 +89,7 @@ console.log(`Runtime acceptance passed for session ${sessionId}.`);
 console.log('Flow: screen.boot -> screen.menu -> screen.loading -> screen.game');
 console.log('World: official CSDI');
 console.log(`Framebuffer: ${frame.details.width}x${frame.details.height}`);
+console.log(`Capture: ${capturedFramePath}`);
 console.log(`FPS samples: ${fpsValues.join(', ')}`);
 
 function requireOrdered(actual, expected, failures) {

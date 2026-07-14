@@ -33,6 +33,6 @@ The current build still requires a fresh browser run showing:
 - Zero `world.error` and zero `screen.error`
 - Visual confirmation that aerial imagery, displaced terrain, the Blender pigeon, and the selected world source are visible
 
-Run `npm run qa:runtime` after the playtest. It rejects all older evidence records and fails unless the latest versioned session proves the official CSDI world, complete screen flow, nonblank framebuffer, flying state, FPS sample, and zero errors.
+Run `npm run qa:runtime` after the playtest. It rejects all older evidence records and fails unless the latest versioned session proves the official CSDI world, complete screen flow, nonblank framebuffer, valid PNG capture, flying state, FPS sample, and zero errors.
 
 Older runtime sessions reached `screen.game`, but they predate code commit `e023775` and do not satisfy this final gate.
