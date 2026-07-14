@@ -186,7 +186,7 @@ export class AerialImageryGround {
     const pixelX = Math.min(TERRAIN_TILE_SIZE - 1, Math.floor((terrainX - tileX) * TERRAIN_TILE_SIZE));
     const pixelY = Math.min(TERRAIN_TILE_SIZE - 1, Math.floor((terrainY - tileY) * TERRAIN_TILE_SIZE));
     const index = (pixelY * TERRAIN_TILE_SIZE + pixelX) * 4;
-    const elevation = pixels[index] * 256 + pixels[index + 1] + pixels[index + 2] / 256 - 32_768;
+    const elevation = decodeTerrariumElevation(pixels[index], pixels[index + 1], pixels[index + 2]);
     return Number.isFinite(elevation) && Math.abs(elevation) < 9_000 ? elevation : 0;
   }
 
@@ -220,13 +220,21 @@ function createTileRequests(): TileRequest[] {
   return requests;
 }
 
-function geographicToTileFraction(latitude: number, longitude: number, zoom: number): { x: number; y: number } {
+export function geographicToTileFraction(
+  latitude: number,
+  longitude: number,
+  zoom: number,
+): { x: number; y: number } {
   const scale = 2 ** zoom;
   const latitudeRadians = latitude * Math.PI / 180;
   return {
     x: ((longitude + 180) / 360) * scale,
     y: (1 - Math.asinh(Math.tan(latitudeRadians)) / Math.PI) / 2 * scale,
   };
+}
+
+export function decodeTerrariumElevation(red: number, green: number, blue: number): number {
+  return red * 256 + green + blue / 256 - 32_768;
 }
 
 function tileWidthMetres(): number {
