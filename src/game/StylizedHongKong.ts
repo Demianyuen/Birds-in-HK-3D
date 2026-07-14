@@ -48,9 +48,7 @@ export class StylizedHongKong {
     this.root.add(this.collisionGroup, this.visualGroup);
     this.buildTerrain();
     this.buildWangFukCourt();
-    this.buildTaiPoSkyline();
     this.buildTrees();
-    this.buildMountains();
   }
 
   public get collisionRoot(): Object3D {
@@ -302,42 +300,6 @@ export class StylizedHongKong {
     mesh.setMatrixAt(index, dummy.matrix);
   }
 
-  private buildTaiPoSkyline(): void {
-    const geometry = this.track(new BoxGeometry(1, 1, 1));
-    const material = this.track(new MeshStandardMaterial({ color: '#d9d2bd', roughness: 0.92 }));
-    const buildings: Array<{ position: Vector3; scale: Vector3 }> = [];
-    let seed = 0x1983;
-    const random = (): number => {
-      seed = (seed * 1_664_525 + 1_013_904_223) >>> 0;
-      return seed / 0xffff_ffff;
-    };
-
-    for (let index = 0; index < 86; index += 1) {
-      const side = index % 2 === 0 ? -1 : 1;
-      const x = side * (390 + random() * 560);
-      const z = 120 - random() * 1_550;
-      const width = 24 + random() * 44;
-      const depth = 22 + random() * 38;
-      const height = 26 + random() * 96;
-      buildings.push({
-        position: new Vector3(x, height / 2, z),
-        scale: new Vector3(width, height, depth),
-      });
-    }
-
-    const skyline = new InstancedMesh(geometry, material, buildings.length);
-    skyline.name = 'Tai Po skyline';
-    skyline.castShadow = true;
-    skyline.receiveShadow = true;
-    const matrix = new Matrix4();
-    buildings.forEach((building, index) => {
-      matrix.compose(building.position, IDENTITY_ROTATION, building.scale);
-      skyline.setMatrixAt(index, matrix);
-    });
-    skyline.instanceMatrix.needsUpdate = true;
-    this.collisionGroup.add(skyline);
-  }
-
   private buildTrees(): void {
     const trunkGeometry = this.track(new CylinderGeometry(0.8, 1.1, 7, 7));
     const crownGeometry = this.track(new IcosahedronGeometry(5.7, 1));
@@ -369,34 +331,6 @@ export class StylizedHongKong {
     trunks.castShadow = true;
     crowns.castShadow = true;
     this.collisionGroup.add(trunks, crowns);
-  }
-
-  private buildMountains(): void {
-    const geometry = this.track(new PlaneGeometry(3_600, 1_400, 72, 28));
-    geometry.rotateX(-Math.PI / 2);
-    const positions = geometry.attributes.position;
-    for (let index = 0; index < positions.count; index += 1) {
-      const x = positions.getX(index);
-      const z = positions.getZ(index);
-      const edgeFade = Math.max(0, Math.sin(((z + 700) / 1_400) * Math.PI));
-      const ridge = 155
-        + Math.sin(x * 0.0041) * 54
-        + Math.sin(x * 0.0117 + 1.4) * 31
-        + Math.cos(x * 0.0023) * 38;
-      positions.setY(index, -8 + edgeFade * ridge);
-    }
-    positions.needsUpdate = true;
-    geometry.computeVertexNormals();
-    const material = this.track(new MeshStandardMaterial({
-      color: '#426958',
-      roughness: 1,
-      flatShading: false,
-    }));
-    const mountains = new Mesh(geometry, material);
-    mountains.name = 'Pat Sin Leng mountain backdrop';
-    mountains.position.z = -1_590;
-    mountains.receiveShadow = true;
-    this.collisionGroup.add(mountains);
   }
 
   private createConcreteTexture(): Texture {
