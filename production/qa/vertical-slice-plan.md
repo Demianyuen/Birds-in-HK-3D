@@ -12,10 +12,13 @@ Pending playtest evidence
 4. Confirm loading reports elevation-terrain progress, CSDI models, and the visible-world readiness check.
 5. Confirm the game HUD appears only after the readiness gate passes.
 6. Confirm game-rendered Tai Po terrain and official textured 3D buildings are visible and the canvas is not blank.
-7. Confirm mouse/WASD steering, wheel/Shift speed control, and Space flap work.
-8. Fly into a loaded building at maximum speed; confirm the bird stops without tunnelling.
-9. Press Space while perched; confirm takeoff.
-10. Reload and repeat once to verify cleanup and deterministic restart.
+7. Confirm no distant official building geometry appears outside the bounded Tai Po terrain.
+8. Confirm sea-level DEM areas render as water and no aerial-imagery requests occur.
+9. Confirm mouse/WASD steering, wheel/Shift speed control, and Space flap work.
+10. Fly into a loaded building at maximum speed; confirm the bird stops without tunnelling.
+11. Press Space while perched; confirm takeoff.
+12. Fly toward the regional edge; confirm the bird turns back before leaving terrain coverage.
+13. Reload and repeat once to verify cleanup and deterministic restart.
 
 ## Failure Check
 
@@ -36,4 +39,4 @@ Failure of the official CSDI slice blocks release. There is no procedural-buildi
 
 ## Pass Rule
 
-All ten core steps pass, the CSDI integration check has its own verdict, and evidence is saved in `production/playtests/`. Until then the project remains a technical prototype.
+All thirteen core steps pass, the CSDI integration check has its own verdict, and evidence is saved in `production/playtests/`. Until then the project remains a technical prototype.

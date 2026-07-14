@@ -70,6 +70,7 @@ export class BirdsInHkGame {
     this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
+    this.renderer.localClippingEnabled = true;
 
     this.scene.add(new HemisphereLight('#d6edf4', '#50654e', 1.35));
     this.sun.position.set(-450, 850, 420);
@@ -91,7 +92,7 @@ export class BirdsInHkGame {
     this.scene.add(this.officialWorldRoot);
 
     const harbour = new Mesh(
-      new PlaneGeometry(14_000, 14_000),
+      new PlaneGeometry(9_000, 9_000),
       new MeshStandardMaterial({ color: '#2d6877', roughness: 0.3, metalness: 0.12 }),
     );
     harbour.rotation.x = -Math.PI / 2;
@@ -107,6 +108,7 @@ export class BirdsInHkGame {
     const region = getFlightRegion(regionId);
     this.mode = 'loading';
     this.bird.setEnabled(false);
+    this.bird.setFlightRadius(region.flightRadiusMetres - 120);
     this.camera.position.set(0, 185, 500);
     this.camera.lookAt(0, 72, 0);
     const terrainPromise = this.aerialGround.load(region, progress => {

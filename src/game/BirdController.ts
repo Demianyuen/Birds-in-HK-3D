@@ -45,6 +45,7 @@ export class BirdController {
   private flapQueued = false;
   private perched = false;
   private enabled = false;
+  private flightRadiusMetres = Number.POSITIVE_INFINITY;
   private readonly controls: Record<FlightControl, boolean> = {
     yawLeft: false,
     yawRight: false,
@@ -76,6 +77,10 @@ export class BirdController {
 
   public setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+  }
+
+  public setFlightRadius(radiusMetres: number): void {
+    this.flightRadiusMetres = radiusMetres > 0 ? radiusMetres : Number.POSITIVE_INFINITY;
   }
 
   public steer(deltaX: number, deltaY: number): void {
@@ -148,6 +153,7 @@ export class BirdController {
       this.perched = true;
     } else {
       this.object.position.add(displacement);
+      this.keepInsideFlightRegion();
       if (this.object.position.y <= BIRD_CLEARANCE) {
         this.object.position.y = BIRD_CLEARANCE;
         this.perchNormal.copy(UP);
@@ -186,6 +192,19 @@ export class BirdController {
     this.object.quaternion.copy(this.orientation);
   }
 
+  private keepInsideFlightRegion(): void {
+    const horizontalDistance = Math.hypot(this.object.position.x, this.object.position.z);
+    if (horizontalDistance <= this.flightRadiusMetres) return;
+
+    const scale = this.flightRadiusMetres / horizontalDistance;
+    this.object.position.x *= scale;
+    this.object.position.z *= scale;
+    const inwardYaw = Math.atan2(this.object.position.x, this.object.position.z);
+    this.yaw += shortestAngleDelta(this.yaw, inwardYaw) * 0.35;
+    this.targetRoll = MathUtils.clamp(shortestAngleDelta(this.yaw, inwardYaw), -0.45, 0.45);
+    this.applyOrientation();
+  }
+
   private findCollision(
     displacement: Vector3,
     collisionRoot: Object3D | readonly Object3D[] | null,
@@ -221,6 +240,10 @@ export class BirdController {
     }
     return nearest;
   }
+}
+
+function shortestAngleDelta(from: number, to: number): number {
+  return MathUtils.euclideanModulo(to - from + Math.PI, Math.PI * 2) - Math.PI;
 }
 
 function headingFromDegrees(degrees: number): string {

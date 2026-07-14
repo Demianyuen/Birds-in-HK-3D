@@ -4,8 +4,10 @@ import {
   geographicToTileFraction,
   sampleTerrainColor,
   terrainCoverageMetres,
+  terrainTileCount,
 } from '../src/game/AerialImageryGround';
 import { Color } from 'three';
+import { getFlightRegion } from '../src/game/regions';
 
 describe('Tai Po terrain data', () => {
   it('decodes Terrarium RGB elevation in metres', () => {
@@ -28,7 +30,19 @@ describe('Tai Po terrain data', () => {
     expect(Math.abs(steepHighland.r - steepHighland.g)).toBeLessThan(0.12);
   });
 
-  it('covers the complete official Tai Po regional building tile', () => {
-    expect(terrainCoverageMetres(22.44705)).toBeGreaterThan(17_000);
+  it('renders sea-level DEM samples as water instead of grass', () => {
+    const water = sampleTerrainColor(0, 0, 100, 100, new Color());
+    const land = sampleTerrainColor(25, 0.02, 100, 100, new Color());
+    expect(water.b).toBeGreaterThan(water.r);
+    expect(water.getHex()).not.toBe(land.getHex());
+  });
+
+  it('bounds Tai Po terrain to the local flight region', () => {
+    const taiPo = getFlightRegion('tai-po');
+    expect(taiPo.flightRadiusMetres).toBe(3_200);
+    expect(terrainCoverageMetres(taiPo)).toBeGreaterThan(taiPo.flightRadiusMetres * 2);
+    expect(terrainCoverageMetres(taiPo)).toBeLessThan(10_000);
+    expect(terrainTileCount(taiPo)).toBeGreaterThanOrEqual(9);
+    expect(terrainTileCount(taiPo)).toBeLessThanOrEqual(20);
   });
 });

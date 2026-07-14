@@ -1,10 +1,18 @@
 import type { TilesRenderer } from '3d-tiles-renderer/three';
-import { GLTFExtensionsPlugin, ReorientationPlugin } from '3d-tiles-renderer/plugins';
-import { Box3, Frustum, MathUtils, Matrix4, Material, Mesh } from 'three';
+import {
+  GLTFExtensionsPlugin,
+  LoadRegionPlugin,
+  ReorientationPlugin,
+  SphereRegion,
+} from '3d-tiles-renderer/plugins';
+import { Box3, Frustum, MathUtils, Matrix4, Material, Mesh, Plane, Sphere, Vector3 } from 'three';
 import type { Object3D, PerspectiveCamera, WebGLRenderer } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { createRenderedBuildingMaterial } from './BuildingMaterial';
+import { geodeticToEcef } from './geo';
 import type { FlightRegion } from './regions';
+
+const STREAMING_EDGE_BUFFER_METRES = 650;
 
 export type CsdiLayerName = 'building' | 'infrastructure';
 
@@ -67,6 +75,7 @@ export class CsdiTiles {
       window.location.href,
     ).toString();
     const tiles = new TilesRenderer(tilesetUrl);
+    const regionClippingPlanes = createRegionClippingPlanes(region.flightRadiusMetres);
     const ktx2Loader = new KTX2Loader(tiles.manager)
       .setTranscoderPath('/basis/')
       .setWorkerLimit(2)
@@ -83,6 +92,16 @@ export class CsdiTiles {
       ktxLoader: ktx2Loader,
       autoDispose: false,
     }));
+    const loadRegion = new LoadRegionPlugin();
+    loadRegion.addRegion(new SphereRegion({
+      sphere: new Sphere(
+        geodeticToEcef(region.latitude, region.longitude, 120),
+        region.flightRadiusMetres + STREAMING_EDGE_BUFFER_METRES,
+      ),
+      errorTarget: tiles.errorTarget,
+      mask: true,
+    }));
+    tiles.registerPlugin(loadRegion);
     tiles.registerPlugin(new ReorientationPlugin({
       lat: MathUtils.degToRad(region.latitude),
       lon: MathUtils.degToRad(region.longitude),
@@ -126,12 +145,15 @@ export class CsdiTiles {
               material.map.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
               material.map.needsUpdate = true;
             }
-            if (this.layerName !== 'building' || this.renderedMaterials.has(material)) return material;
-            this.renderedMaterials.add(material);
-            return createRenderedBuildingMaterial(
-              material,
-              `${event.url}/${object.name}/${materialIndex}`,
-            );
+            if (this.layerName === 'building' && !this.renderedMaterials.has(material)) {
+              this.renderedMaterials.add(material);
+              createRenderedBuildingMaterial(
+                material,
+                `${event.url}/${object.name}/${materialIndex}`,
+              );
+            }
+            applyRegionClipping(material, regionClippingPlanes);
+            return material;
           });
           object.material = Array.isArray(object.material) ? renderedMaterials : renderedMaterials[0];
         });
@@ -246,4 +268,19 @@ export class CsdiTiles {
     this.cameraVisibleModels = visible;
   }
 
+}
+
+export function createRegionClippingPlanes(radiusMetres: number): Plane[] {
+  return [
+    new Plane(new Vector3(-1, 0, 0), radiusMetres),
+    new Plane(new Vector3(1, 0, 0), radiusMetres),
+    new Plane(new Vector3(0, 0, -1), radiusMetres),
+    new Plane(new Vector3(0, 0, 1), radiusMetres),
+  ];
+}
+
+function applyRegionClipping(material: Material, clippingPlanes: Plane[]): void {
+  material.clippingPlanes = clippingPlanes;
+  material.clipShadows = true;
+  material.needsUpdate = true;
 }

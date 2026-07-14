@@ -16,11 +16,11 @@ Browser UI state machine
 
 - `src/main.ts`: DOM events and screen transitions only.
 - `BirdsInHkGame`: scene lifecycle, camera, render loop, and readiness gate.
-- `CsdiTiles`: official map streaming, KTX2 setup, tile metrics, and disposal.
-- `AerialImageryGround`: bounded Terrarium elevation grid with slope- and height-driven game terrain materials.
+- `CsdiTiles`: official map streaming, ECEF regional traversal mask, local render clipping, KTX2 setup, tile metrics, and disposal.
+- `AerialImageryGround`: flight-region Terrarium elevation coverage with slope-, height-, and sea-level-driven game materials.
 - `BuildingMaterial`: preserves official CSDI textures and adds window, tone, roughness, and reflection rendering.
-- `regions.ts`: verified coordinates and official root tiles for independent Hong Kong flight regions.
-- `BirdController`: deterministic flight state and collision response.
+- `regions.ts`: verified coordinates, radii, and official root tiles for independent Hong Kong flight regions.
+- `BirdController`: deterministic flight state, collision response, and bounded-region return steering.
 - `geo.ts`: WGS84 ECEF to metre-based local frame.
 - `vite.config.ts`: server-only key injection and CSDI proxy.
 

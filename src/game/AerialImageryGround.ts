@@ -11,10 +11,10 @@ import type { FlightRegion } from './regions';
 const EARTH_CIRCUMFERENCE_METRES = 40_075_016.686;
 const SURFACE_ZOOM = 14;
 const ELEVATION_ZOOM = 13;
-const GRID_RADIUS = 4;
 const TERRAIN_TILE_SIZE = 256;
 const TERRAIN_SEGMENTS = 32;
 const SURFACE_TO_ELEVATION_SCALE = 2 ** (SURFACE_ZOOM - ELEVATION_ZOOM);
+const TERRAIN_EDGE_BUFFER_METRES = 450;
 
 export interface ImageryLoadProgress {
   completed: number;
@@ -202,15 +202,16 @@ function createTileRequests(region: FlightRegion): TileRequest[] {
   const center = geographicToTileFraction(region.latitude, region.longitude, SURFACE_ZOOM);
   const centerX = center.x;
   const centerY = center.y;
-  const centerTileX = Math.floor(centerX);
-  const centerTileY = Math.floor(centerY);
   const tileWidth = tileWidthMetres(region.latitude);
+  const tileRadius = (region.flightRadiusMetres + TERRAIN_EDGE_BUFFER_METRES) / tileWidth;
+  const minimumTileX = Math.floor(centerX - tileRadius);
+  const maximumTileX = Math.floor(centerX + tileRadius);
+  const minimumTileY = Math.floor(centerY - tileRadius);
+  const maximumTileY = Math.floor(centerY + tileRadius);
   const requests: TileRequest[] = [];
 
-  for (let offsetY = -GRID_RADIUS; offsetY < GRID_RADIUS; offsetY += 1) {
-    for (let offsetX = -GRID_RADIUS; offsetX < GRID_RADIUS; offsetX += 1) {
-      const x = centerTileX + offsetX;
-      const y = centerTileY + offsetY;
+  for (let y = minimumTileY; y <= maximumTileY; y += 1) {
+    for (let x = minimumTileX; x <= maximumTileX; x += 1) {
       requests.push({
         x,
         y,
@@ -244,10 +245,19 @@ function tileWidthMetres(latitude: number): number {
   return EARTH_CIRCUMFERENCE_METRES * Math.cos(latitudeRadians) / 2 ** SURFACE_ZOOM;
 }
 
-export function terrainCoverageMetres(latitude: number): number {
-  return tileWidthMetres(latitude) * GRID_RADIUS * 2;
+export function terrainCoverageMetres(region: FlightRegion): number {
+  const requests = createTileRequests(region);
+  if (requests.length === 0) return 0;
+  const worldX = requests.map(request => request.worldX);
+  return Math.max(...worldX) - Math.min(...worldX) + tileWidthMetres(region.latitude);
 }
 
+export function terrainTileCount(region: FlightRegion): number {
+  return createTileRequests(region).length;
+}
+
+const WATER_DEEP = new Color('#1f6570');
+const WATER_SHALLOW = new Color('#3f7d7d');
 const LOWLAND = new Color('#60735b');
 const GRASS = new Color('#526946');
 const HIGHLAND = new Color('#626550');
@@ -260,6 +270,11 @@ export function sampleTerrainColor(
   worldZ: number,
   target: Color,
 ): Color {
+  if (elevation <= 1.25) {
+    const shallowMix = Math.min(1, Math.max(0, (elevation + 1.5) / 2.75));
+    return target.copy(WATER_DEEP).lerp(WATER_SHALLOW, shallowMix);
+  }
+
   const highlandMix = Math.min(1, Math.max(0, (elevation - 90) / 260));
   const rockMix = Math.min(1, Math.max(0, (slope - 0.08) / 0.42));
   const noise = Math.sin(worldX * 0.037 + Math.sin(worldZ * 0.021) * 1.7) * 0.5 + 0.5;

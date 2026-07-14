@@ -45,6 +45,17 @@ describe('bird collision and perching', () => {
 
     expect(bird.getTelemetry().heading).toBe('N');
   });
+
+  it('turns the bird back before it leaves a bounded flight region', () => {
+    const bird = new BirdController();
+    bird.setFlightRadius(300);
+    bird.setEnabled(true);
+
+    for (let index = 0; index < 20; index += 1) bird.update(0.05, null);
+
+    expect(Math.hypot(bird.object.position.x, bird.object.position.z)).toBeLessThanOrEqual(300);
+    expect(bird.getTelemetry().state).toBe('FLYING');
+  });
 });
 
 function createWall(z: number): Mesh {

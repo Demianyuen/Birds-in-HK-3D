@@ -14,6 +14,7 @@ describe('official Hong Kong flight regions', () => {
     );
     expect(region.latitude).toBeCloseTo(22.44705, 5);
     expect(region.longitude).toBeCloseTo(114.17544, 5);
+    expect(region.flightRadiusMetres).toBe(3_200);
   });
 
   it('defines independent official tiles for Hong Kong and Kowloon regions', () => {
@@ -24,5 +25,12 @@ describe('official Hong Kong flight regions', () => {
 
   it('contains no procedural building source', () => {
     expect(JSON.stringify(FLIGHT_REGIONS)).not.toMatch(/stylized|procedural|fallback/i);
+  });
+
+  it('keeps each official flight area within a bounded regional stream', () => {
+    for (const region of FLIGHT_REGIONS) {
+      expect(region.flightRadiusMetres).toBeGreaterThanOrEqual(2_500);
+      expect(region.flightRadiusMetres).toBeLessThanOrEqual(3_500);
+    }
   });
 });

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by ADR 0007
 
 ## Context
 
@@ -18,3 +18,7 @@ Use the Lands Department Map API `imagery/WGS84` XYZ service as the ground image
 - The imagery grid remains bounded to control memory and network usage.
 - Terrain height is sampled at roughly 17 metre spacing and participates in bird collision.
 - Blender is reserved for bird and near-field prop assets, not whole-territory map conversion.
+
+## Supersession
+
+The aerial-imagery surface was removed. The game now uses Terrarium elevation with game-rendered land, rock, and water materials, bounded to the same regional flight envelope as the official CSDI geometry.
