@@ -141,7 +141,7 @@ h1 {
   top: 18px;
   left: 18px;
   z-index: 8;
-  width: 226px;
+  width: 286px;
   border: 1px solid rgba(218, 239, 232, 0.24);
   border-radius: 5px;
   background: rgba(5, 16, 22, 0.78);
@@ -150,7 +150,7 @@ h1 {
 
 .hud-brand { display: flex; justify-content: space-between; padding: 13px 14px; border-bottom: 1px solid rgba(218, 239, 232, 0.16); font-size: 10px; }
 .hud-brand span { color: #81d5a7; }
-.game-hud dl { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; }
+.game-hud dl { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; }
 .game-hud dl div { padding: 12px 9px; border-right: 1px solid rgba(218, 239, 232, 0.12); }
 .game-hud dl div:last-child { border: 0; }
 .game-hud dt { color: #829592; font-size: 9px; }
@@ -178,7 +178,7 @@ h1 {
   .menu-content h2 { font-size: 42px; }
   .world-source-picker { grid-template-columns: 1fr; }
   .menu-meta { right: 20px; bottom: 22px; left: 20px; justify-content: space-between; gap: 12px; }
-  .game-hud { top: 10px; left: 10px; width: 206px; }
+  .game-hud { top: 10px; left: 10px; width: min(286px, calc(100vw - 20px)); }
   .controls-hint { display: none; }
 }
 

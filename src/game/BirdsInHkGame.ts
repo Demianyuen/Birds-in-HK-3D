@@ -26,6 +26,10 @@ import { evaluateWorldReadiness } from './worldReadiness';
 
 type GameMode = 'attract' | 'loading' | 'playing';
 export type WorldSource = 'stylized' | 'csdi';
+export interface GameTelemetry extends FlightTelemetry {
+  fps: number;
+  renderVerified: boolean;
+}
 
 export class BirdsInHkGame {
   private readonly scene = new Scene();
@@ -40,13 +44,15 @@ export class BirdsInHkGame {
   private readonly aerialGround = new AerialImageryGround();
   private readonly sun = new DirectionalLight('#fff1d4', 2.45);
   private readonly sky = new Sky();
-  private readonly telemetryCallback: (telemetry: FlightTelemetry) => void;
+  private readonly telemetryCallback: (telemetry: GameTelemetry) => void;
   private mode: GameMode = 'attract';
   private animationFrame = 0;
   private elapsed = 0;
   private activeWorld: WorldSource = 'stylized';
+  private smoothedFrameMilliseconds = 16.7;
+  private renderVerified = false;
 
-  public constructor(canvas: HTMLCanvasElement, onTelemetry: (telemetry: FlightTelemetry) => void) {
+  public constructor(canvas: HTMLCanvasElement, onTelemetry: (telemetry: GameTelemetry) => void) {
     this.telemetryCallback = onTelemetry;
     this.scene.background = new Color('#a7c9d7');
     this.scene.fog = new Fog('#afc4c8', 1_150, 8_500);
@@ -171,6 +177,7 @@ export class BirdsInHkGame {
 
   public startFlight(): void {
     this.mode = 'playing';
+    this.renderVerified = false;
     this.bird.reset();
     this.bird.setEnabled(true);
   }
@@ -242,6 +249,7 @@ export class BirdsInHkGame {
   private readonly animate = (): void => {
     this.animationFrame = requestAnimationFrame(this.animate);
     const deltaSeconds = Math.min(this.clock.getDelta(), 0.05);
+    this.smoothedFrameMilliseconds += (deltaSeconds * 1_000 - this.smoothedFrameMilliseconds) * 0.08;
     this.elapsed += deltaSeconds;
     if (this.activeWorld === 'csdi') {
       this.city.update(this.camera, this.renderer);
@@ -254,7 +262,6 @@ export class BirdsInHkGame {
         : [this.aerialGround.group, this.stylizedCity.collisionRoot];
       this.bird.update(deltaSeconds, collisionRoot);
       this.bird.updateCamera(this.camera, deltaSeconds);
-      this.telemetryCallback(this.bird.getTelemetry());
     } else {
       this.bird.pigeon.animate(deltaSeconds, 18, false);
       this.bird.object.position.set(
@@ -270,5 +277,44 @@ export class BirdsInHkGame {
 
     this.sun.position.set(this.camera.position.x - 450, 850, this.camera.position.z + 420);
     this.renderer.render(this.scene, this.camera);
+    if (this.mode === 'playing') {
+      if (!this.renderVerified) this.renderVerified = this.hasNonBlankFramebuffer();
+      this.telemetryCallback({
+        ...this.bird.getTelemetry(),
+        fps: 1_000 / Math.max(1, this.smoothedFrameMilliseconds),
+        renderVerified: this.renderVerified,
+      });
+    }
   };
+
+  private hasNonBlankFramebuffer(): boolean {
+    const gl = this.renderer.getContext();
+    const width = gl.drawingBufferWidth;
+    const height = gl.drawingBufferHeight;
+    if (width < 2 || height < 2 || gl.isContextLost()) return false;
+    const pixel = new Uint8Array(4);
+    const colors = new Set<string>();
+    const points = [
+      [0.5, 0.5],
+      [0.25, 0.25],
+      [0.75, 0.25],
+      [0.25, 0.75],
+      [0.75, 0.75],
+    ];
+    for (const [xRatio, yRatio] of points) {
+      gl.readPixels(
+        Math.min(width - 1, Math.floor(width * xRatio)),
+        Math.min(height - 1, Math.floor(height * yRatio)),
+        1,
+        1,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        pixel,
+      );
+      if (pixel[3] > 0 && pixel[0] + pixel[1] + pixel[2] > 0) {
+        colors.add(`${pixel[0]},${pixel[1]},${pixel[2]}`);
+      }
+    }
+    return colors.size >= 2;
+  }
 }

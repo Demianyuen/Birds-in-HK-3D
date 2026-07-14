@@ -33,7 +33,7 @@ Failure of this integration check blocks the official world source, but does not
 - Desktop screenshot of loading and gameplay
 - FPS, frame-time, and memory snapshot after 60 seconds of flight
 - Tester, date, browser version, observed defects, and verdict
-- `npm run qa:report` output showing `screen.game` and zero runtime errors
+- `npm run qa:report` output showing `Reached game: YES`, `Rendered frame: YES`, FPS samples, and zero runtime errors
 
 ## Pass Rule
 

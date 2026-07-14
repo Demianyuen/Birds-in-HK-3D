@@ -1,8 +1,8 @@
 import './styles.css';
 import { transitionFlow, type ScreenName } from './app/flow';
 import { reportRuntimeEvent } from './app/runtimeEvidence';
-import { BirdsInHkGame, type WorldSource } from './game/BirdsInHkGame';
-import type { FlightControl, FlightTelemetry } from './game/BirdController';
+import { BirdsInHkGame, type GameTelemetry, type WorldSource } from './game/BirdsInHkGame';
+import type { FlightControl } from './game/BirdController';
 import type { MapLoadProgress } from './game/CsdiTiles';
 
 const app = requireElement<HTMLElement>('app');
@@ -19,6 +19,7 @@ const altitudeValue = requireElement<HTMLElement>('altitude-value');
 const speedValue = requireElement<HTMLElement>('speed-value');
 const headingValue = requireElement<HTMLElement>('heading-value');
 const flightState = requireElement<HTMLElement>('flight-state');
+const fpsValue = requireElement<HTMLElement>('fps-value');
 const gameHud = requireElement<HTMLElement>('game-hud');
 const controlsHint = requireElement<HTMLElement>('controls-hint');
 const mapStateValue = requireElement<HTMLElement>('map-state-value');
@@ -34,6 +35,8 @@ let loading = false;
 let highestProgress = 0;
 let lastReportedLoadingStage = '';
 let lastReportedFlightState = '';
+let renderEvidenceReported = false;
+let lastPerformanceReport = 0;
 const game = new BirdsInHkGame(canvas, updateTelemetry);
 
 continueButton.addEventListener('click', () => showScreen(transitionFlow(currentScreen, 'continue')));
@@ -134,15 +137,33 @@ function updateLoading(progress: MapLoadProgress): void {
   }
 }
 
-function updateTelemetry(telemetry: FlightTelemetry): void {
+function updateTelemetry(telemetry: GameTelemetry): void {
   altitudeValue.textContent = `${Math.max(0, Math.round(telemetry.altitude))} m`;
   speedValue.textContent = `${Math.round(telemetry.speedKmh)} km/h`;
   headingValue.textContent = telemetry.heading;
   flightState.textContent = telemetry.state;
+  fpsValue.textContent = `${Math.round(telemetry.fps)}`;
   if (telemetry.state !== lastReportedFlightState) {
     lastReportedFlightState = telemetry.state;
     reportRuntimeEvent('flight.state', {
       state: telemetry.state,
+      altitude: Math.round(telemetry.altitude),
+      speedKmh: Math.round(telemetry.speedKmh),
+    });
+  }
+  if (telemetry.renderVerified && !renderEvidenceReported) {
+    renderEvidenceReported = true;
+    reportRuntimeEvent('render.frame', {
+      width: canvas.width,
+      height: canvas.height,
+      fps: Math.round(telemetry.fps),
+    });
+  }
+  const now = performance.now();
+  if (telemetry.renderVerified && now - lastPerformanceReport >= 10_000) {
+    lastPerformanceReport = now;
+    reportRuntimeEvent('performance.sample', {
+      fps: Math.round(telemetry.fps),
       altitude: Math.round(telemetry.altitude),
       speedKmh: Math.round(telemetry.speedKmh),
     });
