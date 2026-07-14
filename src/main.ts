@@ -198,7 +198,7 @@ function delay(milliseconds: number): Promise<void> {
 
 function selectedWorldSource(): WorldSource {
   const selected = document.querySelector<HTMLInputElement>('input[name="world-source"]:checked');
-  return selected?.value === 'csdi' ? 'csdi' : 'stylized';
+  return selected?.value === 'stylized' ? 'stylized' : 'csdi';
 }
 
 function keyboardControlForCode(code: string): FlightControl | null {

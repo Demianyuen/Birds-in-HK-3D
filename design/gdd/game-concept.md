@@ -6,7 +6,7 @@ Fly as a Hong Kong pigeon above recognisable aerial imagery at simulator scale, 
 
 ## Vertical Slice
 
-The player completes `Boot → Main Menu → Loading → Flight`, sees the Tai Po skyline and all eight Wang Fuk Court towers, steers a bird, changes speed, flaps, and stops on contact with world geometry. CSDI remains a separately testable experimental world source.
+The player completes `Boot → Main Menu → CSDI Loading → Flight`, sees official Tai Po buildings over aerial terrain, steers a bird, changes speed, flaps, and stops on contact with world geometry. A local Wang Fuk Court world remains available as the explicit service-failure fallback.
 
 ## Pillars
 
@@ -19,7 +19,7 @@ The player completes `Boot → Main Menu → Loading → Flight`, sees the Tai P
 - White pigeon placeholder with animated wings
 - Lands Department aerial imagery centred on Tai Po and Wang Fuk Court
 - Detailed eight-tower Wang Fuk Court collision landmark
-- Optional CSDI Buildings 3D Tiles with KTX2 textures
+- Default CSDI Building and Infrastructure 3D Tiles with KTX2 textures
 - Third-person mouse and keyboard flight with HUD
 - Swept building collision and perch/takeoff state
 - Loading, failure, and retry flow

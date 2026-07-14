@@ -15,7 +15,7 @@ The current machine is already configured locally. The API key remains server-si
 
 `Boot -> Main menu -> World selection -> Loading -> Flight`
 
-The default world streams a bounded grid of official aerial imagery around Tai Po and includes eight detailed Wang Fuk Court collision towers. The official CSDI mode additionally enters flight only after a real model is parsed and camera-visible. Mouse or WASD steer, the wheel or Shift/Control changes speed, and Space flaps or launches from a surface.
+The default world streams official CSDI Building and Infrastructure over a bounded grid of aerial imagery and displaced terrain around Tai Po. It enters flight only after a real model is parsed and camera-visible. A detailed local Wang Fuk Court world is available as the service-failure fallback. Mouse or WASD steer, the wheel or Shift/Control changes speed, and Space flaps or launches from a surface.
 
 ## Verification
 
