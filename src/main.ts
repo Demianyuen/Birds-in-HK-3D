@@ -113,6 +113,7 @@ async function beginFlight(): Promise<void> {
     });
     await delay(700);
     game.startFlight();
+    reportRuntimeEvent('world.ready', { source });
     showScreen(transitionFlow(currentScreen, 'world-ready'));
   } catch (error) {
     reportRuntimeEvent('world.error', {

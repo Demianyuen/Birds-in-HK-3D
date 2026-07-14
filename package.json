@@ -10,6 +10,7 @@
     "qa:csdi": "node scripts/verify-csdi.mjs",
     "qa:assets": "node scripts/verify-runtime-assets.mjs",
     "qa:report": "node scripts/runtime-report.mjs",
+    "qa:runtime": "node scripts/verify-runtime-session.mjs",
     "check": "tsc --noEmit && vitest run",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"

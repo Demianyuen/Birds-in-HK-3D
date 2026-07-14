@@ -27,9 +27,10 @@ npm run build
 npm run preview
 npm run qa:assets
 npm run qa:csdi
+npm run qa:runtime
 ```
 
-`qa:assets` and `qa:csdi` expect a dev or preview server to be running. Set `BIRDS_IN_HK_URL` to verify a non-default URL.
+`qa:assets` and `qa:csdi` expect a dev or preview server to be running. Set `BIRDS_IN_HK_URL` to verify a non-default URL. `qa:runtime` accepts only a fresh evidence-schema session that completes the official CSDI flow, renders a nonblank framebuffer, enters flight, records FPS, and emits no errors.
 
 ## Bird Asset
 
