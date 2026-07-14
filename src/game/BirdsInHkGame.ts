@@ -22,6 +22,7 @@ import { AerialImageryGround } from './AerialImageryGround';
 import { BirdController, type FlightControl, type FlightTelemetry } from './BirdController';
 import { CsdiTiles, type MapLoadProgress } from './CsdiTiles';
 import { getFlightRegion, type FlightRegionId } from './regions';
+import { RoadNetwork, type RoadNetworkMetrics } from './RoadNetwork';
 import { evaluateWorldReadiness } from './worldReadiness';
 
 type GameMode = 'attract' | 'loading' | 'playing';
@@ -33,6 +34,7 @@ export interface GameTelemetry extends FlightTelemetry {
     materials: number;
     texturedMaterials: number;
   };
+  roads: Readonly<RoadNetworkMetrics>;
 }
 
 export class BirdsInHkGame {
@@ -45,6 +47,7 @@ export class BirdsInHkGame {
   private readonly infrastructure = new CsdiTiles('infrastructure');
   private readonly officialWorldRoot = new Group();
   private readonly aerialGround = new AerialImageryGround();
+  private readonly roads = new RoadNetwork();
   private readonly sun = new DirectionalLight('#fff1d4', 2.45);
   private readonly sky = new Sky();
   private readonly telemetryCallback: (telemetry: GameTelemetry) => void;
@@ -88,6 +91,7 @@ export class BirdsInHkGame {
     this.scene.add(this.bird.object);
     void this.bird.loadVisual();
     this.scene.add(this.aerialGround.group);
+    this.scene.add(this.roads.group);
     this.officialWorldRoot.name = 'Official CSDI 3D world';
     this.scene.add(this.officialWorldRoot);
 
@@ -116,7 +120,7 @@ export class BirdsInHkGame {
       onProgress({
         stage: 'Building Hong Kong terrain',
         detail: `${progress.successful} of ${progress.total} elevation meshes ready.`,
-        percent: 12 + completionRatio * 48,
+        percent: 10 + completionRatio * 28,
         modelsLoaded: progress.successful,
       });
     });
@@ -126,7 +130,7 @@ export class BirdsInHkGame {
         detail: loaded
           ? 'Animated GLB plumage, wings, and flight silhouette are active.'
           : 'The GLB could not be loaded; the built-in bird remains available.',
-        percent: 64,
+        percent: 40,
         modelsLoaded: loaded ? 1 : 0,
       });
     });
@@ -136,14 +140,43 @@ export class BirdsInHkGame {
       this.camera,
       this.renderer,
       region,
-      () => undefined,
-    ).catch(() => undefined);
-    void infrastructurePromise;
+      progress => {
+        onProgress({
+          ...progress,
+          percent: 42 + progress.percent * 0.22,
+        });
+      },
+    );
     await Promise.all([
       terrainPromise,
       birdVisualPromise,
-      this.city.load(this.officialWorldRoot, this.camera, this.renderer, region, onProgress),
+      this.city.load(this.officialWorldRoot, this.camera, this.renderer, region, progress => {
+        onProgress({
+          ...progress,
+          percent: 42 + progress.percent * 0.26,
+        });
+      }),
+      infrastructurePromise,
     ]);
+    await this.roads.load(
+      region,
+      (worldX, worldZ) => this.aerialGround.getElevationAtWorld(worldX, worldZ),
+      progress => {
+        const completionRatio = progress.total > 0 ? progress.completed / progress.total : 0;
+        onProgress({
+          stage: 'Building real streets',
+          detail: `${progress.successful} of ${progress.total} OpenStreetMap road tiles ready.`,
+          percent: 70 + completionRatio * 22,
+          modelsLoaded: progress.successful,
+        });
+      },
+    );
+    onProgress({
+      stage: 'road network ready',
+      detail: `${this.roads.metrics.features} real road features follow the Hong Kong terrain.`,
+      percent: 94,
+      modelsLoaded: this.roads.metrics.features,
+    });
     onProgress({
       stage: 'Verifying the visible city',
       detail: `Checking camera-visible official buildings in ${region.englishLabel}.`,
@@ -182,6 +215,7 @@ export class BirdsInHkGame {
     this.city.dispose();
     this.infrastructure.dispose();
     this.aerialGround.dispose();
+    this.roads.dispose();
     this.renderer.dispose();
   }
 
@@ -216,6 +250,11 @@ export class BirdsInHkGame {
         visibleTiles: this.city.visibleTileCount,
         webglContextAvailable: !this.renderer.getContext().isContextLost(),
       });
+      if (this.roads.metrics.features === 0) {
+        lastBlockers = [...readiness.blockers, 'No real road features are ready.'];
+        await new Promise(resolve => window.setTimeout(resolve, 100));
+        continue;
+      }
       if (readiness.ready) return;
       lastBlockers = readiness.blockers;
       await new Promise(resolve => window.setTimeout(resolve, 100));
@@ -256,6 +295,7 @@ export class BirdsInHkGame {
         fps: 1_000 / Math.max(1, this.smoothedFrameMilliseconds),
         renderVerified: this.renderVerified,
         buildingMaterials: this.city.materials,
+        roads: this.roads.metrics,
       });
     }
   };

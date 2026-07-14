@@ -12,7 +12,76 @@ interface MiddlewareRequest extends NodeJS.ReadableStream {
 interface MiddlewareResponse {
   statusCode: number;
   setHeader: (name: string, value: string) => void;
-  end: (body?: string) => void;
+  end: (body?: string | Uint8Array) => void;
+}
+
+function roadDataPlugin(): Plugin {
+  const tileJsonUrl = 'https://tiles.openfreemap.org/planet';
+  const tileCache = new Map<string, Uint8Array>();
+  let tileTemplatePromise: Promise<string> | null = null;
+
+  const resolveTileTemplate = (): Promise<string> => {
+    tileTemplatePromise ??= fetch(tileJsonUrl)
+      .then(async upstream => {
+        if (!upstream.ok) throw new Error(`Road TileJSON returned HTTP ${upstream.status}.`);
+        const tileJson = await upstream.json() as { tiles?: string[] };
+        const template = tileJson.tiles?.find(candidate => candidate.startsWith('https://'));
+        if (!template) throw new Error('Road TileJSON did not provide a secure vector-tile URL.');
+        return template;
+      })
+      .catch(error => {
+        tileTemplatePromise = null;
+        throw error;
+      });
+    return tileTemplatePromise;
+  };
+
+  const installMiddleware = (middlewares: Middlewares): void => {
+    middlewares.use('/road-data', (request, response, next) => {
+      if (request.method !== 'GET') {
+        next();
+        return;
+      }
+      const match = request.url?.match(/^\/(\d{1,2})\/(\d+)\/(\d+)\.pbf(?:\?.*)?$/);
+      if (!match) {
+        next();
+        return;
+      }
+      const [, zoom, x, y] = match;
+      const cacheKey = `${zoom}/${x}/${y}`;
+      void Promise.resolve(tileCache.get(cacheKey) ?? null)
+        .then(async cached => {
+          if (cached) return cached;
+          const template = await resolveTileTemplate();
+          const upstreamUrl = template
+            .replace('{z}', zoom)
+            .replace('{x}', x)
+            .replace('{y}', y);
+          const upstream = await fetch(upstreamUrl);
+          if (!upstream.ok) throw new Error(`Road tile returned HTTP ${upstream.status}.`);
+          const data = new Uint8Array(await upstream.arrayBuffer());
+          if (data.byteLength === 0) throw new Error('Road tile was empty.');
+          tileCache.set(cacheKey, data);
+          return data;
+        })
+        .then(data => {
+          response.statusCode = 200;
+          response.setHeader('Content-Type', 'application/x-protobuf');
+          response.setHeader('Cache-Control', 'public, max-age=86400');
+          response.end(data);
+        })
+        .catch(error => {
+          response.statusCode = 502;
+          response.end(error instanceof Error ? error.message : 'Road tile failed.');
+        });
+    });
+  };
+
+  return {
+    name: 'regional-road-data',
+    configureServer: server => installMiddleware(server.middlewares),
+    configurePreviewServer: server => installMiddleware(server.middlewares),
+  };
 }
 
 interface Middlewares {
@@ -208,7 +277,7 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    plugins: [runtimeEvidencePlugin(), csdiRegionPlugin(apiKey)],
+    plugins: [runtimeEvidencePlugin(), roadDataPlugin(), csdiRegionPlugin(apiKey)],
     build: {
       chunkSizeWarningLimit: 750,
     },

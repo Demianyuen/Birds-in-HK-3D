@@ -13,12 +13,24 @@ The credential is never placed in HTML, browser JavaScript, runtime evidence, do
 
 - Service: public Mapzen/AWS elevation tiles
 - Format: Terrarium RGB PNG
-- Usage: zoom 13 height sampling for displacement and collision beneath the Lands Department imagery
+- Usage: zoom 13 height sampling for displacement, road placement, and terrain collision
 - Access: same-origin `/terrain-elevation` proxy
 
 No satellite or aerial imagery is used as the terrain material. The elevation mesh is rendered with game-generated PBR grass, soil, and rock colours derived from height, slope, and deterministic detail noise.
 
-Confirm final public-release attribution and redistribution requirements against the current upstream terms before deployment.
+## OpenStreetMap Vector Data
+
+- Delivery: OpenFreeMap vector-tile service and OpenMapTiles schema
+- Runtime layers: `transportation`, `water`
+- Usage: driveable road ribbons and mapped water polygons only
+- Access: same-origin `/road-data` middleware with server-side TileJSON discovery and memory caching
+- Attribution: OpenFreeMap, OpenMapTiles, and OpenStreetMap contributors
+
+The road renderer accepts motorway, primary, secondary, tertiary, minor, and service line features. Paths, tracks, railways, and tunnels are excluded. Roads are subdivided and sampled against the Terrarium DEM so their mesh follows local terrain. Water uses mapped polygon boundaries; ocean polygons remain at sea level and inland polygons use a robust local DEM height.
+
+OpenStreetMap data is not a building fallback. Lands Department CSDI remains the sole source for buildings and infrastructure. Confirm the current OpenFreeMap, OpenMapTiles, and OpenStreetMap attribution and redistribution terms before public deployment.
+
+Confirm final Terrarium public-release attribution and redistribution requirements against the current upstream terms before deployment.
 
 ## Pigeon
 

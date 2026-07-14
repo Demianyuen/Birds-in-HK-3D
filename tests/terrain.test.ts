@@ -3,6 +3,7 @@ import {
   decodeTerrariumElevation,
   geographicToTileFraction,
   sampleTerrainColor,
+  TERRAIN_SEGMENTS,
   terrainCoverageMetres,
   terrainTileCount,
 } from '../src/game/AerialImageryGround';
@@ -10,6 +11,10 @@ import { Color } from 'three';
 import { getFlightRegion } from '../src/game/regions';
 
 describe('Tai Po terrain data', () => {
+  it('uses a dense terrain mesh for smooth mountain silhouettes', () => {
+    expect(TERRAIN_SEGMENTS).toBeGreaterThanOrEqual(64);
+  });
+
   it('decodes Terrarium RGB elevation in metres', () => {
     expect(decodeTerrariumElevation(128, 0, 0)).toBe(0);
     expect(decodeTerrariumElevation(128, 100, 128)).toBe(100.5);
@@ -30,11 +35,25 @@ describe('Tai Po terrain data', () => {
     expect(Math.abs(steepHighland.r - steepHighland.g)).toBeLessThan(0.12);
   });
 
-  it('renders sea-level DEM samples as water instead of grass', () => {
-    const water = sampleTerrainColor(0, 0, 100, 100, new Color());
+  it('keeps natural detail deterministic while varying across the landscape', () => {
+    const first = sampleTerrainColor(85, 0.08, 120, 340, new Color());
+    const repeated = sampleTerrainColor(85, 0.08, 120, 340, new Color());
+    const distant = sampleTerrainColor(85, 0.08, 1_420, -840, new Color());
+    expect(first.getHex()).toBe(repeated.getHex());
+    expect(first.getHex()).not.toBe(distant.getHex());
+  });
+
+  it('does not guess that every sea-level DEM sample is water', () => {
+    const seaLevelTerrain = sampleTerrainColor(0, 0, 100, 100, new Color());
     const land = sampleTerrainColor(25, 0.02, 100, 100, new Color());
-    expect(water.b).toBeGreaterThan(water.r);
-    expect(water.getHex()).not.toBe(land.getHex());
+    expect(seaLevelTerrain.g).toBeGreaterThan(seaLevelTerrain.b);
+    expect(seaLevelTerrain.getHex()).not.toBe(0x1f6570);
+    const colorDistance = Math.hypot(
+      seaLevelTerrain.r - land.r,
+      seaLevelTerrain.g - land.g,
+      seaLevelTerrain.b - land.b,
+    );
+    expect(colorDistance).toBeLessThan(0.2);
   });
 
   it('bounds Tai Po terrain to the local flight region', () => {

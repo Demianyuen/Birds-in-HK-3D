@@ -12,7 +12,7 @@ const EARTH_CIRCUMFERENCE_METRES = 40_075_016.686;
 const SURFACE_ZOOM = 14;
 const ELEVATION_ZOOM = 13;
 const TERRAIN_TILE_SIZE = 256;
-const TERRAIN_SEGMENTS = 32;
+export const TERRAIN_SEGMENTS = 64;
 const SURFACE_TO_ELEVATION_SCALE = 2 ** (SURFACE_ZOOM - ELEVATION_ZOOM);
 const TERRAIN_EDGE_BUFFER_METRES = 450;
 
@@ -37,6 +37,9 @@ export class AerialImageryGround {
   private loadPromise: Promise<void> | null = null;
   private progress: ImageryLoadProgress = { completed: 0, total: 0, successful: 0 };
   private activeRegionId: string | null = null;
+  private activeElevationTiles = new Map<string, Uint8ClampedArray>();
+  private activeSurfaceCenter: { x: number; y: number } | null = null;
+  private activeTileWidthMetres = 0;
 
   public constructor() {
     this.group.name = 'Hong Kong elevation terrain';
@@ -65,6 +68,13 @@ export class AerialImageryGround {
     this.activeRegionId = null;
   }
 
+  public getElevationAtWorld(worldX: number, worldZ: number): number {
+    if (!this.activeSurfaceCenter || this.activeElevationTiles.size === 0) return 0;
+    const surfaceX = this.activeSurfaceCenter.x + worldX / this.activeTileWidthMetres;
+    const surfaceY = this.activeSurfaceCenter.y + worldZ / this.activeTileWidthMetres;
+    return this.sampleElevation(this.activeElevationTiles, surfaceX, surfaceY);
+  }
+
   private clearTiles(): void {
     this.group.clear();
     for (const resource of this.resources) resource.dispose();
@@ -72,6 +82,9 @@ export class AerialImageryGround {
     this.progressListeners.clear();
     this.loadPromise = null;
     this.progress = { completed: 0, total: 0, successful: 0 };
+    this.activeElevationTiles.clear();
+    this.activeSurfaceCenter = null;
+    this.activeTileWidthMetres = 0;
   }
 
   private async loadTiles(region: FlightRegion): Promise<void> {
@@ -80,12 +93,16 @@ export class AerialImageryGround {
     const elevationTiles = await this.loadElevationCoverage(requests);
     if (elevationTiles.size === 0) throw new Error('Hong Kong elevation terrain could not be loaded.');
     const center = geographicToTileFraction(region.latitude, region.longitude, SURFACE_ZOOM);
+    this.activeElevationTiles = elevationTiles;
+    this.activeSurfaceCenter = center;
+    this.activeTileWidthMetres = tileWidthMetres(region.latitude);
     this.originElevation = this.sampleElevation(elevationTiles, center.x, center.y);
     const material = this.track(new MeshStandardMaterial({
       vertexColors: true,
-      roughness: 0.92,
+      roughness: 0.96,
       metalness: 0,
     }));
+    addTerrainSurfaceDetail(material);
     for (let index = 0; index < requests.length; index += 1) {
       const request = requests[index];
       const geometry = this.createGroundGeometry(request, elevationTiles, region.latitude);
@@ -256,12 +273,12 @@ export function terrainTileCount(region: FlightRegion): number {
   return createTileRequests(region).length;
 }
 
-const WATER_DEEP = new Color('#1f6570');
-const WATER_SHALLOW = new Color('#3f7d7d');
-const LOWLAND = new Color('#60735b');
-const GRASS = new Color('#526946');
-const HIGHLAND = new Color('#626550');
-const ROCK = new Color('#77776f');
+const LOWLAND = new Color('#61705a');
+const GRASS = new Color('#4f6748');
+const DRY_GRASS = new Color('#77765b');
+const SOIL = new Color('#716455');
+const HIGHLAND = new Color('#646958');
+const ROCK = new Color('#7b7b73');
 
 export function sampleTerrainColor(
   elevation: number,
@@ -270,15 +287,90 @@ export function sampleTerrainColor(
   worldZ: number,
   target: Color,
 ): Color {
-  if (elevation <= 1.25) {
-    const shallowMix = Math.min(1, Math.max(0, (elevation + 1.5) / 2.75));
-    return target.copy(WATER_DEEP).lerp(WATER_SHALLOW, shallowMix);
-  }
+  const broadVariation = fractalTerrainNoise(worldX * 0.0024, worldZ * 0.0024);
+  const fineVariation = fractalTerrainNoise(worldX * 0.018, worldZ * 0.018);
+  const highlandMix = smoothStep(80, 360, elevation);
+  const rockMix = smoothStep(0.09, 0.48, slope) * (0.5 + highlandMix * 0.5);
+  const soilMix = smoothStep(0.04, 0.28, slope) * (0.16 + fineVariation * 0.24);
+  const dryMix = smoothStep(0.52, 0.88, broadVariation) * (1 - rockMix) * 0.42;
 
-  const highlandMix = Math.min(1, Math.max(0, (elevation - 90) / 260));
-  const rockMix = Math.min(1, Math.max(0, (slope - 0.08) / 0.42));
-  const noise = Math.sin(worldX * 0.037 + Math.sin(worldZ * 0.021) * 1.7) * 0.5 + 0.5;
-  target.copy(LOWLAND).lerp(GRASS, 0.34 + noise * 0.28).lerp(HIGHLAND, highlandMix);
-  target.lerp(ROCK, rockMix * (0.55 + highlandMix * 0.35));
-  return target.multiplyScalar(0.88 + noise * 0.16);
+  target.copy(LOWLAND)
+    .lerp(GRASS, 0.38 + broadVariation * 0.42)
+    .lerp(DRY_GRASS, dryMix)
+    .lerp(HIGHLAND, highlandMix * 0.72)
+    .lerp(SOIL, soilMix)
+    .lerp(ROCK, rockMix * 0.78);
+  return target.multiplyScalar(0.91 + fineVariation * 0.12);
+}
+
+function addTerrainSurfaceDetail(material: MeshStandardMaterial): void {
+  material.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nvarying vec3 vTerrainWorldPosition;',
+      )
+      .replace(
+        '#include <worldpos_vertex>',
+        '#include <worldpos_vertex>\nvTerrainWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+varying vec3 vTerrainWorldPosition;
+float terrainHash(vec2 point) {
+  return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453);
+}`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+float terrainGrain = terrainHash(floor(vTerrainWorldPosition.xz * 0.55));
+float terrainPatch = terrainHash(floor(vTerrainWorldPosition.xz * 0.055));
+diffuseColor.rgb *= 0.945 + terrainGrain * 0.065 + terrainPatch * 0.035;`,
+      );
+  };
+  material.customProgramCacheKey = () => 'natural-terrain-surface-v1';
+}
+
+function fractalTerrainNoise(x: number, y: number): number {
+  let value = 0;
+  let amplitude = 0.56;
+  let frequency = 1;
+  let normalizer = 0;
+  for (let octave = 0; octave < 4; octave += 1) {
+    value += valueNoise(x * frequency, y * frequency) * amplitude;
+    normalizer += amplitude;
+    amplitude *= 0.5;
+    frequency *= 2.07;
+  }
+  return value / normalizer;
+}
+
+function valueNoise(x: number, y: number): number {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const tx = smoothCurve(x - x0);
+  const ty = smoothCurve(y - y0);
+  const top = mix(hash2d(x0, y0), hash2d(x0 + 1, y0), tx);
+  const bottom = mix(hash2d(x0, y0 + 1), hash2d(x0 + 1, y0 + 1), tx);
+  return mix(top, bottom, ty);
+}
+
+function hash2d(x: number, y: number): number {
+  const value = Math.sin(x * 127.1 + y * 311.7) * 43_758.5453;
+  return value - Math.floor(value);
+}
+
+function smoothCurve(value: number): number {
+  return value * value * (3 - 2 * value);
+}
+
+function smoothStep(minimum: number, maximum: number, value: number): number {
+  return smoothCurve(Math.min(1, Math.max(0, (value - minimum) / (maximum - minimum))));
+}
+
+function mix(left: number, right: number, amount: number): number {
+  return left + (right - left) * amount;
 }

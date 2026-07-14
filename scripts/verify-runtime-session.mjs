@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const evidencePath = resolve(process.cwd(), 'runtime-evidence', 'events.jsonl');
-const requiredSchema = 4;
+const requiredSchema = 5;
 
 if (!existsSync(evidencePath)) fail('No runtime evidence has been recorded.');
 
@@ -49,6 +49,8 @@ for (const stage of [
   'Building Hong Kong terrain',
   'Blender pigeon ready',
   'building layer ready',
+  'infrastructure layer ready',
+  'road network ready',
 ]) {
   if (!stages.has(stage)) blockers.push(`Required loading stage was not recorded: ${stage}.`);
 }
@@ -85,6 +87,18 @@ if (!isPositive(materials?.details?.texturedMaterials)) {
   blockers.push('No official textured building material was recorded.');
 }
 
+const roads = session.find(event => event.type === 'road.network');
+if (
+  !isPositive(roads?.details?.features)
+  || !isPositive(roads?.details?.segments)
+  || !isPositive(roads?.details?.tilesLoaded)
+  || !isPositive(roads?.details?.meshes)
+  || !isPositive(roads?.details?.waterFeatures)
+  || !isPositive(roads?.details?.waterTriangles)
+) {
+  blockers.push('No rendered real-road network was recorded.');
+}
+
 if (blockers.length > 0) {
   console.error(`Runtime acceptance failed for session ${sessionId}:`);
   for (const blocker of blockers) console.error(`- ${blocker}`);
@@ -95,6 +109,8 @@ console.log(`Runtime acceptance passed for session ${sessionId}.`);
 console.log('Flow: screen.boot -> screen.menu -> screen.loading -> screen.game');
 console.log('World: official CSDI');
 console.log(`Textured building materials: ${materials.details.texturedMaterials}`);
+console.log(`Road network: ${roads.details.features} features, ${roads.details.segments} segments`);
+console.log(`Real water: ${roads.details.waterFeatures} features, ${roads.details.waterTriangles} triangles`);
 console.log(`Framebuffer: ${frame.details.width}x${frame.details.height}`);
 console.log(`Capture: ${capturedFramePath}`);
 console.log(`FPS samples: ${fpsValues.join(', ')}`);

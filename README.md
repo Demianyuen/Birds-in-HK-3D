@@ -15,7 +15,7 @@ The current machine is already configured locally. The API key remains server-si
 
 `Boot -> Main menu -> World selection -> Loading -> Flight`
 
-The first playable region streams official Tai Po CSDI Building and Infrastructure over a bounded Terrarium elevation grid. It enters flight only after a real model is parsed and camera-visible. There is no procedural-building fallback: an upstream failure returns to retry or region selection. Mouse or WASD steer, the wheel or Shift/Control changes speed, and Space flaps or launches from a surface.
+The first playable region streams official Tai Po CSDI Building and Infrastructure over a bounded Terrarium elevation grid. Regional OpenStreetMap vector tiles add real driveable roads and mapped water boundaries without replacing the official building source. It enters flight only after an official building is parsed and camera-visible and the road network is ready. There is no procedural-building fallback: an upstream failure returns to retry or region selection. Mouse or WASD steer, the wheel or Shift/Control changes speed, and Space flaps or launches from a surface.
 
 The official KTX2 building texture, UVs, geometry, and collision remain intact. A Three.js PBR facade layer adds stable building tones, window shading, reflections, and shadows. BlenderGIS is not part of the runtime map path: it does not consume the CSDI Cesium 3D Tiles service.
 
@@ -30,7 +30,7 @@ npm run qa:csdi
 npm run qa:runtime
 ```
 
-`qa:assets` and `qa:csdi` expect a dev or preview server to be running. Set `BIRDS_IN_HK_URL` to verify a non-default URL. `qa:runtime` accepts only a fresh evidence-schema session that completes the official CSDI flow, renders a nonblank framebuffer, saves a valid PNG capture, enters flight, records FPS, and emits no errors.
+`qa:assets` and `qa:csdi` expect a dev or preview server to be running. Set `BIRDS_IN_HK_URL` to verify a non-default URL. `qa:runtime` accepts only a fresh evidence-schema session that completes the official CSDI flow, renders a nonblank framebuffer, saves a valid PNG capture, enters flight, records FPS, proves real roads and water are rendered, and emits no errors.
 
 ## Bird Asset
 

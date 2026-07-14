@@ -13,7 +13,7 @@ Automated production-browser vertical slice passed on 2026-07-15. Manual long-fl
 5. Confirm the game HUD appears only after the readiness gate passes.
 6. Confirm game-rendered Tai Po terrain and official textured 3D buildings are visible and the canvas is not blank.
 7. Confirm no distant official building geometry appears outside the bounded Tai Po terrain.
-8. Confirm sea-level DEM areas render as water and no aerial-imagery requests occur.
+8. Confirm real road geometry follows the terrain, mapped water is horizontal, and no aerial-imagery requests occur.
 9. Confirm mouse/WASD steering, wheel/Shift speed control, and Space flap work.
 10. Fly into a loaded building at maximum speed; confirm the bird stops without tunnelling.
 11. Press Space while perched; confirm takeoff.
@@ -31,7 +31,7 @@ Failure of the official CSDI slice blocks release. There is no procedural-buildi
 ## Evidence Required
 
 - Console log with zero uncaught errors
-- Network evidence for elevation PNG, pigeon GLB, regional tileset, B3DM, Basis JS, and Basis WASM
+- Network evidence for elevation PNG, road PBF, pigeon GLB, regional tileset, B3DM, Basis JS, and Basis WASM
 - Desktop screenshot of loading and gameplay
 - FPS, frame-time, and memory snapshot after 60 seconds of flight
 - Tester, date, browser version, observed defects, and verdict

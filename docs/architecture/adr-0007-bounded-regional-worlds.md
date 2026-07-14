@@ -19,5 +19,5 @@ Tai Po is the first enabled world, centred on Wang Fuk Court with a 3.2 km radiu
 - Official Lands Department buildings and infrastructure remain the sole built-world source.
 - Distant geometry is neither refined nor rendered outside the active district.
 - Terrain requests drop from a territory-sized grid to a regional grid of roughly 16 surface meshes in Tai Po.
-- Sea-level DEM samples use game-rendered water colours; no satellite imagery is requested.
+- Roads and mapped water use the same regional tile envelope; no satellite imagery is requested.
 - A future region transition must load the next district as a separate world rather than expanding one unbounded scene.

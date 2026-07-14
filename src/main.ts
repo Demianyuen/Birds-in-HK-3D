@@ -39,6 +39,7 @@ let lastReportedLoadingStage = '';
 let lastReportedFlightState = '';
 let renderEvidenceReported = false;
 let materialEvidenceReported = false;
+let roadEvidenceReported = false;
 let lastPerformanceReport = 0;
 const game = new BirdsInHkGame(canvas, updateTelemetry);
 
@@ -174,6 +175,10 @@ function updateTelemetry(telemetry: GameTelemetry): void {
   ) {
     materialEvidenceReported = true;
     reportRuntimeEvent('building.materials', telemetry.buildingMaterials);
+  }
+  if (telemetry.roads.features > 0 && !roadEvidenceReported) {
+    roadEvidenceReported = true;
+    reportRuntimeEvent('road.network', telemetry.roads);
   }
   const now = performance.now();
   if (telemetry.renderVerified && now - lastPerformanceReport >= 10_000) {
