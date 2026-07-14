@@ -2,13 +2,13 @@
 
 ## Build Under Test
 
-- Commit: `2a03e16`
+- Code commit: `e023775`
 - Runtime: Node.js 24.2.0, Vite 6.2.2, Three.js 0.170.0
 - Production preview: `http://127.0.0.1:4173/`
 
 ## Passed Evidence
 
-- `npm run check`: 6 test files, 16 tests passed
+- `npm run check`: 8 test files, 21 tests passed
 - `npm run build`: production build completed without warnings
 - Production preview root: HTTP 200 and expected game title
 - Lands Department aerial imagery PNG: HTTP 200, valid PNG
@@ -19,6 +19,9 @@
 - CSDI infrastructure: root tileset HTTP 200 and B3DM HTTP 200 with `b3dm` magic
 - Secret scan: zero API-key matches outside ignored local environment files
 - Blender asset rebuild and Eevee preview render completed successfully
+- Maximum-speed collision stops before movement; perching and flap-to-takeoff are covered by focused tests
+- CSDI model tracking releases unloaded tile scenes during long-distance streaming
+- BlenderGIS evaluated as an offline GIS asset tool, not a CSDI 3D Tiles runtime replacement
 
 ## Pending Runtime Evidence
 
@@ -30,4 +33,4 @@ The current build still requires a fresh browser run showing:
 - Zero `world.error` and zero `screen.error`
 - Visual confirmation that aerial imagery, displaced terrain, the Blender pigeon, and the selected world source are visible
 
-Older runtime sessions reached `screen.game`, but they predate commit `2a03e16` and do not satisfy this final gate.
+Older runtime sessions reached `screen.game`, but they predate code commit `e023775` and do not satisfy this final gate.
