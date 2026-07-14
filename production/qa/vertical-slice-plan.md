@@ -2,7 +2,7 @@
 
 ## Status
 
-Pending playtest evidence
+Automated production-browser vertical slice passed on 2026-07-15. Manual long-flight observation remains part of release playtesting.
 
 ## Required Test
 

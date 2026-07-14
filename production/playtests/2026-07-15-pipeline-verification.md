@@ -8,7 +8,7 @@
 
 ## Passed Evidence
 
-- `npm run check`: 10 test files, 34 tests passed
+- `npm run check`: 11 test files, 38 tests passed
 - `npm run build`: production build completed without warnings
 - Production preview root: HTTP 200 and expected game title
 - Terrarium elevation PNG: HTTP 200, valid PNG
@@ -25,17 +25,23 @@
 - Sea-level DEM samples use game-rendered water; no aerial imagery is requested
 - Bird return steering prevents flight beyond the terrain envelope
 - BlenderGIS evaluated as an offline GIS asset tool, not a CSDI 3D Tiles runtime replacement
+- Entry-document tests require every Boot, Menu, Loading, Error, and Game control and reject credential inputs, mojibake, or broken closing tags
+- The browser interface contains no API-key field; `.env.local` is loaded only by the Vite server and remains ignored by Git
 
-## Pending Runtime Evidence
+## Passed Runtime Evidence
 
-The current schema 3 build still requires a fresh browser run showing:
+Fresh schema 4 session `8add81c7-4441-4c17-8cad-1074367b967e` passed `npm run qa:runtime`:
 
-- `screen.boot -> screen.menu -> screen.loading -> screen.game`
-- `render.frame` proving a nonblank WebGL framebuffer
-- At least one `performance.sample`
-- Zero `world.error` and zero `screen.error`
-- Visual confirmation that bounded terrain, rendered water, the Blender pigeon, and official buildings are visible without floating distant districts
+- Flow: `screen.boot -> screen.menu -> screen.loading -> screen.game`
+- World: official `csdi / tai-po`
+- WebGL framebuffer: `1440 x 900`
+- Official textured building materials: `80`
+- FPS samples: `21`, `20`
+- Flight state: `FLYING`
+- Runtime errors: `0`
+- Credential inputs in the browser: `0`
+- Browser console errors, page errors, failed requests, and HTTP error responses: `0`
+- Captured game frame: `runtime-evidence/frames/8add81c7-4441-4c17-8cad-1074367b967e.png`
+- Staged browser captures: `runtime-evidence/browser-smoke/01-boot.png` through `04-game.png`
 
-Run `npm run qa:runtime` after the playtest. It rejects all older evidence records and fails unless the latest versioned session proves the official CSDI world, complete screen flow, nonblank framebuffer, valid PNG capture, flying state, FPS sample, and zero errors.
-
-`npm run qa:runtime` currently reports that no schema 3 session exists. Older runtime sessions reached `screen.game`, but they predate regional clipping and do not satisfy this final gate.
+The captured game frame was visually inspected and contains rendered Tai Po terrain, the pigeon, and official buildings. The full-page game capture also contains the HUD and controls. The validator rejects older evidence schemas and fails unless the latest session proves the official CSDI world, complete screen flow, nonblank framebuffer, valid PNG capture, flying state, FPS, textured official materials, and zero runtime errors.

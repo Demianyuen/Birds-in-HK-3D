@@ -37,8 +37,9 @@ function runtimeEvidencePlugin(): Plugin {
           const event = JSON.parse(body) as Record<string, unknown>;
           mkdirSync(dirname(evidencePath), { recursive: true });
           appendFileSync(evidencePath, `${JSON.stringify({ receivedAt: new Date().toISOString(), ...event })}\n`, 'utf8');
-          response.statusCode = 204;
-          response.end();
+          response.statusCode = 200;
+          response.setHeader('Content-Type', 'application/json; charset=utf-8');
+          response.end('{"ok":true}');
         } catch {
           response.statusCode = 400;
           response.end('Invalid runtime event.');
@@ -81,8 +82,9 @@ function runtimeEvidencePlugin(): Plugin {
         }
         mkdirSync(framesPath, { recursive: true });
         writeFileSync(resolve(framesPath, `${sessionId}.png`), data);
-        response.statusCode = 204;
-        response.end();
+        response.statusCode = 200;
+        response.setHeader('Content-Type', 'application/json; charset=utf-8');
+        response.end('{"ok":true}');
       });
     });
   };

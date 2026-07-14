@@ -1,5 +1,5 @@
 const sessionId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-const evidenceSchema = 3;
+const evidenceSchema = 4;
 
 export function reportRuntimeEvent(type: string, details: Record<string, unknown> = {}): void {
   const payload = {

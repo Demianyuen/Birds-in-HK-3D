@@ -50,7 +50,7 @@ export const FLIGHT_REGIONS: readonly FlightRegion[] = Object.freeze([
   },
   {
     id: 'tsim-sha-tsui',
-    label: '尖沙咀 · 維港',
+    label: '尖沙咀',
     englishLabel: 'TSIM SHA TSUI',
     latitude: 22.2974,
     longitude: 114.1722,

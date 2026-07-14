@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const evidencePath = resolve(process.cwd(), 'runtime-evidence', 'events.jsonl');
-const requiredSchema = 3;
+const requiredSchema = 4;
 
 if (!existsSync(evidencePath)) fail('No runtime evidence has been recorded.');
 

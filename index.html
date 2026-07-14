@@ -4,78 +4,99 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#08151b" />
+    <link rel="icon" href="data:," />
     <title>Birds in HK</title>
   </head>
   <body>
     <main id="app" data-screen="boot">
-      <canvas id="game-canvas" aria-label="Birds in HK three-dimensional game scene"></canvas>
+      <canvas id="game-canvas" aria-label="Birds in HK 3D 遊戲畫面"></canvas>
 
       <section id="boot-screen" class="screen boot-screen" aria-labelledby="boot-title">
         <div class="brand-lockup">
           <p class="place-name">HONG KONG</p>
           <h1 id="boot-title">Birds in HK</h1>
-          <p class="tagline">在香港上空，自由飛行。</p>
+          <p class="tagline">化身白鴿，飛越真實香港。</p>
         </div>
-        <button id="continue-button" class="primary-button" type="button">Continue</button>
-        <p class="source-credit">Imagery and 3D data: Lands Department · Elevation: AWS Terrarium</p>
+        <button id="continue-button" class="primary-button" type="button">繼續</button>
+        <p class="source-credit">3D 資料：地政總署 CSDI · 地形：AWS Terrarium</p>
       </section>
 
       <section id="menu-screen" class="screen menu-screen" aria-labelledby="menu-title" hidden>
         <div class="menu-content">
           <p class="place-name">OFFICIAL 3D HONG KONG</p>
-          <h2 id="menu-title">選擇真實飛行區域</h2>
-          <div class="bird-option" aria-label="Selected bird">
+          <h2 id="menu-title">選擇飛行地區</h2>
+          <div class="bird-option" aria-label="已選擇白鴿">
             <span class="bird-index">01</span>
-            <div><strong>香港白鴿</strong><small>靈活 · 平衡 · 城市飛行</small></div>
-            <span class="selected-mark">已選</span>
+            <div>
+              <strong>香港白鴿</strong>
+              <small>靈活 · 平穩 · 適合城市飛行</small>
+            </div>
+            <span class="selected-mark">已選擇</span>
           </div>
           <fieldset class="region-picker">
-            <legend>FLIGHT REGION</legend>
+            <legend>飛行地區</legend>
             <label>
               <input type="radio" name="flight-region" value="tai-po" checked />
-              <span><strong>大埔 · 宏福苑</strong><small>官方 CSDI 立體建築 + 航拍地形</small></span>
+              <span>
+                <strong>大埔 · 宏福苑</strong>
+                <small>官方 CSDI 建築及基建 · 真實高程地形</small>
+              </span>
             </label>
           </fieldset>
           <button id="start-button" class="primary-button" type="button">開始飛行</button>
         </div>
-        <div class="menu-meta"><span>真實地區 01 · 大埔</span><span>LANDSD CSDI 3D</span></div>
+        <div class="menu-meta">
+          <span>飛行地區 01 · 大埔</span>
+          <span>LANDSD CSDI 3D</span>
+        </div>
       </section>
 
       <section id="loading-screen" class="screen loading-screen" aria-live="polite" hidden>
         <div class="loading-content">
           <p class="place-name">PREPARING HONG KONG</p>
-          <h2>建立飛行世界</h2>
-          <div class="progress-track" aria-hidden="true"><div id="progress-fill" class="progress-fill"></div></div>
-          <div class="loading-row"><span id="loading-stage">Starting renderer</span><strong id="loading-progress">0%</strong></div>
-          <p id="loading-detail">Connecting to official spatial data.</p>
+          <h2>正在建立飛行世界</h2>
+          <div class="progress-track" aria-hidden="true">
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+          <div class="loading-row">
+            <span id="loading-stage">啟動 3D 引擎</span>
+            <strong id="loading-progress">0%</strong>
+          </div>
+          <p id="loading-detail">正在連接官方三維空間數據。</p>
         </div>
       </section>
 
       <section id="error-screen" class="screen error-screen" role="alert" hidden>
         <div class="error-content">
           <p class="place-name">MAP CONNECTION</p>
-          <h2>香港場景未能載入</h2>
-          <p id="error-message">The CSDI service did not return a playable tile.</p>
+          <h2>未能載入官方地圖</h2>
+          <p id="error-message">CSDI 暫時未能提供可遊玩的三維模型。</p>
           <div class="error-actions">
-            <button id="retry-button" class="primary-button" type="button">再試一次</button>
+            <button id="retry-button" class="primary-button" type="button">重新載入</button>
             <button id="region-button" class="secondary-button" type="button">返回地區選擇</button>
           </div>
         </div>
       </section>
 
-      <section id="game-hud" class="game-hud" aria-label="Flight telemetry" hidden>
-        <div class="hud-brand"><strong>BIRDS IN HK</strong><span id="flight-state">FLYING</span></div>
+      <section id="game-hud" class="game-hud" aria-label="飛行儀表" hidden>
+        <div class="hud-brand">
+          <strong>BIRDS IN HK</strong>
+          <span id="flight-state">FLYING</span>
+        </div>
         <dl>
           <div><dt>ALT</dt><dd id="altitude-value">0 m</dd></div>
           <div><dt>SPD</dt><dd id="speed-value">0 km/h</dd></div>
           <div><dt>HDG</dt><dd id="heading-value">N</dd></div>
           <div><dt>FPS</dt><dd id="fps-value">0</dd></div>
         </dl>
-        <div class="map-state"><span class="live-dot"></span><span id="map-state-value">TAI PO · CSDI LIVE</span></div>
+        <div class="map-state">
+          <span class="live-dot"></span>
+          <span id="map-state-value">TAI PO · CSDI LIVE</span>
+        </div>
       </section>
 
       <div id="controls-hint" class="controls-hint" hidden>
-        <span>滑鼠 / WASD</span> 轉向 <span>滾輪 / Shift</span> 加速 <span>Space</span> 拍翼
+        <span>滑鼠 / WASD</span> 轉向 · <span>滾輪 / Shift</span> 加速 · <span>Space</span> 拍翼
       </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
