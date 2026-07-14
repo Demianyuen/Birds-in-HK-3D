@@ -100,7 +100,7 @@ export class CsdiTiles {
         event.scene.traverse(object => {
           if ('isMesh' in object && object.isMesh === true) containsMesh = true;
         });
-        if (!containsMesh) return;
+        if (!containsMesh || this.loadedModels.has(event.scene)) return;
         this.loadedModels.add(event.scene);
         this.modelsLoaded += 1;
         const percent = Math.min(92, 52 + this.modelsLoaded * 8);
@@ -115,6 +115,11 @@ export class CsdiTiles {
           window.clearTimeout(timeout);
           window.setTimeout(resolve, 650);
         }
+      });
+
+      tiles.addEventListener('dispose-model', event => {
+        if (!this.loadedModels.delete(event.scene)) return;
+        this.modelsLoaded = Math.max(0, this.modelsLoaded - 1);
       });
 
       tiles.addEventListener('load-error', event => {

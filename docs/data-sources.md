@@ -32,3 +32,11 @@ Confirm final public-release attribution and redistribution requirements against
 - Runtime asset: `public/models/pigeon.glb`
 - Generator: `tools/blender/build_pigeon.py`
 - Visual QA: `production/playtests/pigeon-preview.png`
+
+## BlenderGIS Evaluation
+
+- Status: evaluated, not installed as a runtime dependency
+- Suitable uses: offline DEM, GeoTIFF, Shapefile, and OSM asset preparation in Blender
+- Not suitable for: consuming or streaming the CSDI Cesium 3D Tiles API
+
+The official Hong Kong world therefore stays in the Three.js `3d-tiles-renderer` pipeline. BlenderGIS may be introduced later only for bounded offline art or simplified collision assets, with georeferencing and licensing verified separately.

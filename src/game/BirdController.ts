@@ -68,6 +68,9 @@ export class BirdController {
     this.verticalVelocity = 0;
     this.perched = false;
     this.flapQueued = false;
+    for (const control of Object.keys(this.controls) as FlightControl[]) {
+      this.controls[control] = false;
+    }
     this.applyOrientation();
   }
 
