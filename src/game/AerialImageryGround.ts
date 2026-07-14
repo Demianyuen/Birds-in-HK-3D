@@ -36,7 +36,9 @@ export class AerialImageryGround {
   public readonly group = new Group();
   public originElevation = 0;
   private readonly resources = new Set<{ dispose: () => void }>();
+  private readonly progressListeners = new Set<(progress: ImageryLoadProgress) => void>();
   private loadPromise: Promise<void> | null = null;
+  private progress: ImageryLoadProgress = { completed: 0, total: 0, successful: 0 };
 
   public constructor() {
     this.group.name = 'Lands Department aerial imagery';
@@ -46,11 +48,13 @@ export class AerialImageryGround {
     renderer: WebGLRenderer,
     onProgress: (progress: ImageryLoadProgress) => void = () => undefined,
   ): Promise<void> {
-    this.loadPromise ??= this.loadTiles(renderer, onProgress).catch(error => {
+    this.progressListeners.add(onProgress);
+    onProgress(this.progress);
+    this.loadPromise ??= this.loadTiles(renderer).catch(error => {
       this.loadPromise = null;
       throw error;
     });
-    return this.loadPromise;
+    return this.loadPromise.finally(() => this.progressListeners.delete(onProgress));
   }
 
   public dispose(): void {
@@ -58,14 +62,14 @@ export class AerialImageryGround {
     this.group.clear();
     for (const resource of this.resources) resource.dispose();
     this.resources.clear();
+    this.progressListeners.clear();
     this.loadPromise = null;
+    this.progress = { completed: 0, total: 0, successful: 0 };
   }
 
-  private async loadTiles(
-    renderer: WebGLRenderer,
-    onProgress: (progress: ImageryLoadProgress) => void,
-  ): Promise<void> {
+  private async loadTiles(renderer: WebGLRenderer): Promise<void> {
     const requests = createTileRequests();
+    this.progress = { completed: 0, total: requests.length, successful: 0 };
     const textureLoader = new TextureLoader();
     const elevationTiles = await this.loadElevationCoverage(requests);
     const center = geographicToTileFraction(TAI_PO.latitude, TAI_PO.longitude, IMAGERY_ZOOM);
@@ -98,7 +102,8 @@ export class AerialImageryGround {
           // A missing edge tile leaves the local fallback terrain visible.
         } finally {
           completed += 1;
-          onProgress({ completed, total: requests.length, successful });
+          this.progress = { completed, total: requests.length, successful };
+          for (const listener of this.progressListeners) listener(this.progress);
         }
       }
     };

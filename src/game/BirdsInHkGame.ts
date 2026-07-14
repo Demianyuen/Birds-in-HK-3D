@@ -86,6 +86,9 @@ export class BirdsInHkGame {
     void this.bird.loadVisual();
     this.scene.add(this.aerialGround.group);
     this.scene.add(this.stylizedCity.root);
+    void this.aerialGround.load(this.renderer).then(() => {
+      this.stylizedCity.root.position.y = this.aerialGround.originElevation;
+    }).catch(() => undefined);
     this.officialWorldRoot.name = 'Official CSDI 3D world';
     this.scene.add(this.officialWorldRoot);
 
@@ -109,10 +112,11 @@ export class BirdsInHkGame {
     this.camera.position.set(0, 185, 500);
     this.camera.lookAt(0, 72, 0);
     const imageryPromise = this.aerialGround.load(this.renderer, progress => {
+      const completionRatio = progress.total > 0 ? progress.completed / progress.total : 0;
       onProgress({
         stage: 'Streaming Lands Department imagery',
         detail: `${progress.successful} of ${progress.total} official aerial tiles ready.`,
-        percent: 12 + progress.completed / progress.total * 48,
+        percent: 12 + completionRatio * 48,
         modelsLoaded: progress.successful,
       });
     });
