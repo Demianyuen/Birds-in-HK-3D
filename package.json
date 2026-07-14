@@ -1,0 +1,28 @@
+{
+  "name": "birds-in-hk-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/copy-basis.mjs",
+    "asset:pigeon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-pigeon.ps1",
+    "dev": "vite",
+    "qa:csdi": "node scripts/verify-csdi.mjs",
+    "qa:assets": "node scripts/verify-runtime-assets.mjs",
+    "qa:report": "node scripts/runtime-report.mjs",
+    "check": "tsc --noEmit && vitest run",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "3d-tiles-renderer": "0.4.28",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "@types/three": "0.170.0",
+    "typescript": "5.6.3",
+    "vite": "6.2.2",
+    "vitest": "2.1.9"
+  }
+}

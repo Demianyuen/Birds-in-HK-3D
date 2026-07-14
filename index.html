@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#08151b" />
+    <title>Birds in HK</title>
+  </head>
+  <body>
+    <main id="app" data-screen="boot">
+      <canvas id="game-canvas" aria-label="Birds in HK three-dimensional game scene"></canvas>
+
+      <section id="boot-screen" class="screen boot-screen" aria-labelledby="boot-title">
+        <div class="brand-lockup">
+          <p class="place-name">HONG KONG</p>
+          <h1 id="boot-title">Birds in HK</h1>
+          <p class="tagline">在香港上空，自由飛行。</p>
+        </div>
+        <button id="continue-button" class="primary-button" type="button">Continue</button>
+        <p class="source-credit">Imagery and 3D data: Lands Department · Elevation: AWS Terrarium</p>
+      </section>
+
+      <section id="menu-screen" class="screen menu-screen" aria-labelledby="menu-title" hidden>
+        <div class="menu-content">
+          <p class="place-name">TAI PO · HONG KONG</p>
+          <h2 id="menu-title">選擇飛行世界</h2>
+          <div class="bird-option" aria-label="Selected bird">
+            <span class="bird-index">01</span>
+            <div><strong>香港白鴿</strong><small>靈活 · 平衡 · 城市飛行</small></div>
+            <span class="selected-mark">已選</span>
+          </div>
+          <fieldset class="world-source-picker">
+            <legend>WORLD SOURCE</legend>
+            <label>
+              <input type="radio" name="world-source" value="stylized" checked />
+              <span><strong>大埔實景飛行</strong><small>官方航拍影像 · 宏福苑</small></span>
+            </label>
+            <label>
+              <input type="radio" name="world-source" value="csdi" />
+              <span><strong>官方 3D 香港</strong><small>航拍影像 + CSDI Buildings</small></span>
+            </label>
+          </fieldset>
+          <button id="start-button" class="primary-button" type="button">開始飛行</button>
+        </div>
+        <div class="menu-meta"><span>大埔 · 宏福苑</span><span>THREE.JS FLIGHT</span></div>
+      </section>
+
+      <section id="loading-screen" class="screen loading-screen" aria-live="polite" hidden>
+        <div class="loading-content">
+          <p class="place-name">PREPARING HONG KONG</p>
+          <h2>建立飛行世界</h2>
+          <div class="progress-track" aria-hidden="true"><div id="progress-fill" class="progress-fill"></div></div>
+          <div class="loading-row"><span id="loading-stage">Starting renderer</span><strong id="loading-progress">0%</strong></div>
+          <p id="loading-detail">Connecting to official spatial data.</p>
+        </div>
+      </section>
+
+      <section id="error-screen" class="screen error-screen" role="alert" hidden>
+        <div class="error-content">
+          <p class="place-name">MAP CONNECTION</p>
+          <h2>香港場景未能載入</h2>
+          <p id="error-message">The CSDI service did not return a playable tile.</p>
+          <button id="retry-button" class="primary-button" type="button">再試一次</button>
+        </div>
+      </section>
+
+      <section id="game-hud" class="game-hud" aria-label="Flight telemetry" hidden>
+        <div class="hud-brand"><strong>BIRDS IN HK</strong><span id="flight-state">FLYING</span></div>
+        <dl>
+          <div><dt>ALT</dt><dd id="altitude-value">0 m</dd></div>
+          <div><dt>SPD</dt><dd id="speed-value">0 km/h</dd></div>
+          <div><dt>HDG</dt><dd id="heading-value">N</dd></div>
+        </dl>
+        <div class="map-state"><span class="live-dot"></span><span id="map-state-value">TAI PO RANGE</span></div>
+      </section>
+
+      <div id="controls-hint" class="controls-hint" hidden>
+        <span>滑鼠 / WASD</span> 轉向 <span>滾輪 / Shift</span> 加速 <span>Space</span> 拍翼
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
