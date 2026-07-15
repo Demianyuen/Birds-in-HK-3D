@@ -1,6 +1,6 @@
 # Birds in HK
 
-A Three.js pigeon flight simulator using official Hong Kong Buildings and Infrastructure from the Lands Department CSDI 3D Spatial Data API. The terrain keeps real elevation but uses game-rendered grass, soil, and rock instead of satellite imagery.
+A Three.js bird flight simulator using official Hong Kong Buildings and Infrastructure from the Lands Department CSDI 3D Spatial Data API. A bounded LandsD basemap shows complete real streets over Terrarium elevation without satellite imagery.
 
 ## Run
 
@@ -15,7 +15,9 @@ The current machine is already configured locally. The API key remains server-si
 
 `Boot -> Main menu -> World selection -> Loading -> Flight`
 
-The first playable region streams official Tai Po CSDI Building and Infrastructure over a bounded Terrarium elevation grid. Regional OpenStreetMap vector tiles add real driveable roads and mapped water boundaries without replacing the official building source. It enters flight only after an official building is parsed and camera-visible and the road network is ready. There is no procedural-building fallback: an upstream failure returns to retry or region selection. Mouse or WASD steer, the wheel or Shift/Control changes speed, and Space flaps or launches from a surface.
+The first playable region streams official Tai Po CSDI Building and Infrastructure over 16 bounded elevation meshes textured by 64 zoom-15 LandsD basemap tiles. OpenStreetMap vector tiles remain non-rendered navigation data, so they cannot create cracked road surfaces. It enters flight only after the complete official ground, a camera-visible official building, and navigation data are ready. There is no procedural-building fallback.
+
+The menu includes the production pigeon GLB plus low-poly black-kite and sparrow performance prototypes. They exercise different silhouettes and flight profiles before dedicated Blender or Meshy assets are approved.
 
 The official KTX2 building texture, UVs, geometry, and collision remain intact. A Three.js PBR facade layer adds stable building tones, window shading, reflections, and shadows. BlenderGIS is not part of the runtime map path: it does not consume the CSDI Cesium 3D Tiles service.
 

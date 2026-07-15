@@ -3,6 +3,7 @@ import { transitionFlow, type ScreenName } from './app/flow';
 import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
 import { BirdsInHkGame, type GameTelemetry } from './game/BirdsInHkGame';
 import type { FlightControl } from './game/BirdController';
+import { getBirdProfile, type BirdProfileId } from './game/birdProfiles';
 import type { MapLoadProgress } from './game/CsdiTiles';
 import { getFlightRegion, type FlightRegionId } from './game/regions';
 
@@ -40,6 +41,7 @@ let lastReportedFlightState = '';
 let renderEvidenceReported = false;
 let materialEvidenceReported = false;
 let roadEvidenceReported = false;
+let groundEvidenceReported = false;
 let lastPerformanceReport = 0;
 const game = new BirdsInHkGame(canvas, updateTelemetry);
 
@@ -100,6 +102,8 @@ async function beginFlight(): Promise<void> {
 
   try {
     const region = getFlightRegion(selectedRegionId());
+    const birdProfile = selectedBirdProfileId();
+    game.setBirdProfile(birdProfile);
     mapStateValue.textContent = `${region.englishLabel} · CSDI LIVE`;
     await Promise.all([
       game.loadWorld(region.id, updateLoading),
@@ -113,7 +117,7 @@ async function beginFlight(): Promise<void> {
     });
     await delay(700);
     game.startFlight();
-    reportRuntimeEvent('world.ready', { source: 'csdi', region: region.id });
+    reportRuntimeEvent('world.ready', { source: 'csdi', region: region.id, birdProfile });
     showScreen(transitionFlow(currentScreen, 'world-ready'));
   } catch (error) {
     reportRuntimeEvent('world.error', {
@@ -180,6 +184,10 @@ function updateTelemetry(telemetry: GameTelemetry): void {
     roadEvidenceReported = true;
     reportRuntimeEvent('road.network', telemetry.roads);
   }
+  if (telemetry.ground.texturedMeshes > 0 && !groundEvidenceReported) {
+    groundEvidenceReported = true;
+    reportRuntimeEvent('terrain.basemap', telemetry.ground);
+  }
   const now = performance.now();
   if (telemetry.renderVerified && now - lastPerformanceReport >= 10_000) {
     lastPerformanceReport = now;
@@ -214,6 +222,11 @@ function delay(milliseconds: number): Promise<void> {
 function selectedRegionId(): FlightRegionId {
   const selected = document.querySelector<HTMLInputElement>('input[name="flight-region"]:checked');
   return getFlightRegion(selected?.value).id;
+}
+
+function selectedBirdProfileId(): BirdProfileId {
+  const selected = document.querySelector<HTMLInputElement>('input[name="bird-profile"]:checked');
+  return getBirdProfile(selected?.value).id;
 }
 
 function keyboardControlForCode(code: string): FlightControl | null {

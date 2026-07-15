@@ -8,6 +8,7 @@ import {
   Vector3,
 } from 'three';
 import { Pigeon } from './Pigeon';
+import { getBirdProfile, type BirdProfile, type BirdProfileId } from './birdProfiles';
 
 const FORWARD = new Vector3(0, 0, -1);
 const UP = new Vector3(0, 1, 0);
@@ -46,6 +47,7 @@ export class BirdController {
   private perched = false;
   private enabled = false;
   private flightRadiusMetres = Number.POSITIVE_INFINITY;
+  private flightProfile: BirdProfile = getBirdProfile('pigeon');
   private readonly controls: Record<FlightControl, boolean> = {
     yawLeft: false,
     yawRight: false,
@@ -65,7 +67,7 @@ export class BirdController {
     this.yaw = 0;
     this.pitch = -0.03;
     this.roll = 0;
-    this.speed = 26;
+    this.speed = this.flightProfile.cruiseSpeed;
     this.verticalVelocity = 0;
     this.perched = false;
     this.flapQueued = false;
@@ -83,6 +85,12 @@ export class BirdController {
     this.flightRadiusMetres = radiusMetres > 0 ? radiusMetres : Number.POSITIVE_INFINITY;
   }
 
+  public setBirdProfile(profileId: BirdProfileId): void {
+    this.flightProfile = getBirdProfile(profileId);
+    this.pigeon.setProfile(this.flightProfile.id);
+    this.speed = this.flightProfile.cruiseSpeed;
+  }
+
   public steer(deltaX: number, deltaY: number): void {
     if (!this.enabled) return;
     this.yaw -= deltaX * 0.0022;
@@ -92,7 +100,7 @@ export class BirdController {
 
   public adjustSpeed(direction: number): void {
     if (!this.enabled) return;
-    this.speed = MathUtils.clamp(this.speed + direction * 3.5, 9, 68);
+    this.speed = MathUtils.clamp(this.speed + direction * 3.5, this.flightProfile.minimumSpeed, this.flightProfile.maximumSpeed);
   }
 
   public flap(): void {
@@ -114,10 +122,10 @@ export class BirdController {
       const yawDirection = Number(this.controls.yawLeft) - Number(this.controls.yawRight);
       const pitchDirection = Number(this.controls.pitchUp) - Number(this.controls.pitchDown);
       const speedDirection = Number(this.controls.accelerate) - Number(this.controls.decelerate);
-      this.yaw += yawDirection * 1.15 * deltaSeconds;
+      this.yaw += yawDirection * this.flightProfile.turnRate * deltaSeconds;
       this.pitch = MathUtils.clamp(this.pitch + pitchDirection * 0.72 * deltaSeconds, -0.65, 0.58);
       this.targetRoll = MathUtils.clamp(this.targetRoll + yawDirection * 0.85, -0.62, 0.62);
-      this.speed = MathUtils.clamp(this.speed + speedDirection * 24 * deltaSeconds, 9, 68);
+      this.speed = MathUtils.clamp(this.speed + speedDirection * 24 * deltaSeconds, this.flightProfile.minimumSpeed, this.flightProfile.maximumSpeed);
     }
     this.roll += (this.targetRoll - this.roll) * (1 - Math.exp(-5 * deltaSeconds));
     this.targetRoll *= Math.exp(-4 * deltaSeconds);
@@ -138,7 +146,7 @@ export class BirdController {
 
     const forward = FORWARD.clone().applyQuaternion(this.orientation).normalize();
     this.verticalVelocity -= 4.3 * deltaSeconds;
-    if (this.flapQueued) this.verticalVelocity += 8.8;
+    if (this.flapQueued) this.verticalVelocity += this.flightProfile.flapLift;
     this.flapQueued = false;
     this.velocity.copy(forward).multiplyScalar(this.speed);
     this.velocity.y += this.verticalVelocity;

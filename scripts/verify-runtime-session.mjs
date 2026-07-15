@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const evidencePath = resolve(process.cwd(), 'runtime-evidence', 'events.jsonl');
-const requiredSchema = 5;
+const requiredSchema = 6;
 
 if (!existsSync(evidencePath)) fail('No runtime evidence has been recorded.');
 
@@ -38,6 +38,9 @@ if (errors.length > 0) blockers.push(`${errors.length} runtime error event(s) we
 const worldReady = session.find(event => event.type === 'world.ready');
 if (worldReady?.details?.source !== 'csdi') blockers.push('The official CSDI world was not recorded as ready.');
 if (worldReady?.details?.region !== 'tai-po') blockers.push('The official Tai Po region was not recorded as ready.');
+if (!['pigeon', 'black-kite', 'sparrow'].includes(worldReady?.details?.birdProfile)) {
+  blockers.push('No approved bird performance profile was recorded.');
+}
 
 const stages = new Set(
   session
@@ -50,7 +53,7 @@ for (const stage of [
   'Blender pigeon ready',
   'building layer ready',
   'infrastructure layer ready',
-  'road network ready',
+  'navigation road data ready',
 ]) {
   if (!stages.has(stage)) blockers.push(`Required loading stage was not recorded: ${stage}.`);
 }
@@ -92,11 +95,21 @@ if (
   !isPositive(roads?.details?.features)
   || !isPositive(roads?.details?.segments)
   || !isPositive(roads?.details?.tilesLoaded)
-  || !isPositive(roads?.details?.meshes)
   || !isPositive(roads?.details?.waterFeatures)
-  || !isPositive(roads?.details?.waterTriangles)
+  || roads?.details?.visibleMeshes !== 0
+  || roads?.details?.surfacesRendered !== false
 ) {
-  blockers.push('No rendered real-road network was recorded.');
+  blockers.push('Navigation roads were missing or unstable vector surfaces were rendered.');
+}
+
+const ground = session.find(event => event.type === 'terrain.basemap');
+if (
+  !isPositive(ground?.details?.terrainMeshes)
+  || ground?.details?.texturedMeshes !== ground?.details?.terrainMeshes
+  || !isPositive(ground?.details?.basemapTilesLoaded)
+  || ground?.details?.basemapTilesLoaded !== ground?.details?.basemapTilesTotal
+) {
+  blockers.push('The complete LandsD official basemap terrain was not recorded.');
 }
 
 if (blockers.length > 0) {
@@ -108,9 +121,10 @@ if (blockers.length > 0) {
 console.log(`Runtime acceptance passed for session ${sessionId}.`);
 console.log('Flow: screen.boot -> screen.menu -> screen.loading -> screen.game');
 console.log('World: official CSDI');
+console.log(`Bird profile: ${worldReady.details.birdProfile}`);
 console.log(`Textured building materials: ${materials.details.texturedMaterials}`);
-console.log(`Road network: ${roads.details.features} features, ${roads.details.segments} segments`);
-console.log(`Real water: ${roads.details.waterFeatures} features, ${roads.details.waterTriangles} triangles`);
+console.log(`Official basemap: ${ground.details.basemapTilesLoaded} tiles on ${ground.details.texturedMeshes} terrain meshes`);
+console.log(`Navigation roads: ${roads.details.features} features, ${roads.details.segments} source segments`);
 console.log(`Framebuffer: ${frame.details.width}x${frame.details.height}`);
 console.log(`Capture: ${capturedFramePath}`);
 console.log(`FPS samples: ${fpsValues.join(', ')}`);

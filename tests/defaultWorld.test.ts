@@ -7,6 +7,10 @@ const groundSource = readFileSync(
   resolve(process.cwd(), 'src', 'game', 'AerialImageryGround.ts'),
   'utf8',
 );
+const roadSource = readFileSync(
+  resolve(process.cwd(), 'src', 'game', 'RoadNetwork.ts'),
+  'utf8',
+);
 
 describe('default flight region', () => {
   it('selects the official Tai Po CSDI region by default', () => {
@@ -19,8 +23,16 @@ describe('default flight region', () => {
     expect(html).not.toContain('CSDI_3D_API_KEY');
   });
 
-  it('does not use satellite or aerial imagery as the terrain material', () => {
+  it('uses the official non-satellite basemap as the terrain material', () => {
+    expect(groundSource).toContain('/landsd-map/basemap/');
+    expect(groundSource).not.toContain('/landsd-map/imagery/');
     expect(groundSource).not.toContain('/hk-imagery/');
     expect(groundSource).not.toContain('TextureLoader');
+  });
+
+  it('keeps OSM roads as navigation data without rendering road surfaces', () => {
+    expect(roadSource).toContain('surfacesRendered: false');
+    expect(roadSource).not.toContain('MeshStandardMaterial');
+    expect(roadSource).not.toContain('appendRoadRibbon');
   });
 });

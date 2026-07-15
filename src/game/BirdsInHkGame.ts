@@ -18,11 +18,15 @@ import {
   WebGLRenderer,
 } from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { AerialImageryGround } from './AerialImageryGround';
+import {
+  AerialImageryGround,
+  type OfficialGroundMetrics,
+} from './AerialImageryGround';
 import { BirdController, type FlightControl, type FlightTelemetry } from './BirdController';
 import { CsdiTiles, type MapLoadProgress } from './CsdiTiles';
 import { getFlightRegion, type FlightRegionId } from './regions';
 import { RoadNetwork, type RoadNetworkMetrics } from './RoadNetwork';
+import type { BirdProfileId } from './birdProfiles';
 import { evaluateWorldReadiness } from './worldReadiness';
 
 type GameMode = 'attract' | 'loading' | 'playing';
@@ -35,6 +39,7 @@ export interface GameTelemetry extends FlightTelemetry {
     texturedMaterials: number;
   };
   roads: Readonly<RoadNetworkMetrics>;
+  ground: Readonly<OfficialGroundMetrics>;
 }
 
 export class BirdsInHkGame {
@@ -89,7 +94,6 @@ export class BirdsInHkGame {
     this.scene.add(this.sun);
     this.configureSky();
     this.scene.add(this.bird.object);
-    void this.bird.loadVisual();
     this.scene.add(this.aerialGround.group);
     this.scene.add(this.roads.group);
     this.officialWorldRoot.name = 'Official CSDI 3D world';
@@ -116,11 +120,18 @@ export class BirdsInHkGame {
     this.camera.position.set(0, 185, 500);
     this.camera.lookAt(0, 72, 0);
     const terrainPromise = this.aerialGround.load(region, progress => {
-      const completionRatio = progress.total > 0 ? progress.completed / progress.total : 0;
+      const basemapRatio = progress.basemapTotal > 0
+        ? progress.basemapCompleted / progress.basemapTotal
+        : 0;
+      const meshRatio = progress.total > 0 ? progress.completed / progress.total : 0;
       onProgress({
-        stage: 'Building Hong Kong terrain',
-        detail: `${progress.successful} of ${progress.total} elevation meshes ready.`,
-        percent: 10 + completionRatio * 28,
+        stage: progress.basemapCompleted < progress.basemapTotal
+          ? 'Loading LandsD official streets'
+          : 'Building Hong Kong terrain',
+        detail: progress.basemapCompleted < progress.basemapTotal
+          ? `${progress.basemapSuccessful} of ${progress.basemapTotal} official basemap tiles ready.`
+          : `${progress.successful} of ${progress.total} textured elevation meshes ready.`,
+        percent: 10 + basemapRatio * 22 + meshRatio * 6,
         modelsLoaded: progress.successful,
       });
     });
@@ -160,7 +171,6 @@ export class BirdsInHkGame {
     ]);
     await this.roads.load(
       region,
-      (worldX, worldZ) => this.aerialGround.getElevationAtWorld(worldX, worldZ),
       progress => {
         const completionRatio = progress.total > 0 ? progress.completed / progress.total : 0;
         onProgress({
@@ -172,8 +182,8 @@ export class BirdsInHkGame {
       },
     );
     onProgress({
-      stage: 'road network ready',
-      detail: `${this.roads.metrics.features} real road features follow the Hong Kong terrain.`,
+      stage: 'navigation road data ready',
+      detail: `${this.roads.metrics.features} road features are available without rendered ribbon meshes.`,
       percent: 94,
       modelsLoaded: this.roads.metrics.features,
     });
@@ -191,6 +201,10 @@ export class BirdsInHkGame {
     this.renderVerified = false;
     this.bird.reset();
     this.bird.setEnabled(true);
+  }
+
+  public setBirdProfile(profileId: BirdProfileId): void {
+    this.bird.setBirdProfile(profileId);
   }
 
   public steer(deltaX: number, deltaY: number): void {
@@ -296,6 +310,7 @@ export class BirdsInHkGame {
         renderVerified: this.renderVerified,
         buildingMaterials: this.city.materials,
         roads: this.roads.metrics,
+        ground: this.aerialGround.metrics,
       });
     }
   };

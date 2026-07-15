@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   decodeTerrariumElevation,
   geographicToTileFraction,
+  officialBasemapTileCount,
+  OFFICIAL_BASEMAP_ZOOM,
   sampleTerrainColor,
   TERRAIN_SEGMENTS,
   terrainCoverageMetres,
@@ -25,6 +27,13 @@ describe('Tai Po terrain data', () => {
     const tile = geographicToTileFraction(22.44705, 114.17544, 16);
     expect(Math.floor(tile.x)).toBe(53_553);
     expect(Math.floor(tile.y)).toBe(28_572);
+  });
+
+  it('uses a bounded zoom-15 official basemap for complete streets', () => {
+    const taiPo = getFlightRegion('tai-po');
+    expect(OFFICIAL_BASEMAP_ZOOM).toBe(15);
+    expect(officialBasemapTileCount(taiPo)).toBe(terrainTileCount(taiPo) * 4);
+    expect(officialBasemapTileCount(taiPo)).toBeLessThanOrEqual(80);
   });
 
   it('renders DEM terrain with game materials instead of aerial imagery', () => {

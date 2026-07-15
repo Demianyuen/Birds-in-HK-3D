@@ -21,6 +21,13 @@ describe('game entry document', () => {
     }
   });
 
+  it('offers three explicit bird performance profiles', () => {
+    expect(countMatches(html, /name="bird-profile"/g)).toBe(3);
+    expect(html).toMatch(/value="pigeon"\s+checked/);
+    expect(html).toContain('value="black-kite"');
+    expect(html).toContain('value="sparrow"');
+  });
+
   it('keeps the server-managed API credential out of the interface', () => {
     expect(html).not.toMatch(/<input[^>]+(?:api.?key|token|credential)/i);
     expect(html).not.toContain('CSDI_3D_API_KEY');

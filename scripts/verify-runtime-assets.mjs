@@ -6,6 +6,11 @@ const assets = [
     validate: data => data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
   },
   {
+    name: 'LandsD official basemap',
+    path: '/landsd-map/basemap/15/26776/14287.png',
+    validate: data => data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+  },
+  {
     name: 'Blender pigeon GLB',
     path: '/models/pigeon.glb',
     validate: data => data.subarray(0, 4).toString('ascii') === 'glTF',

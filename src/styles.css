@@ -106,6 +106,41 @@ h1 {
 
 .bird-index, .selected-mark, .bird-option small { color: #a9b9b7; font-size: 11px; }
 .bird-option strong { display: block; margin-bottom: 5px; font-size: 17px; }
+
+.bird-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.bird-picker legend {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  color: #a9b9b7;
+  font-size: 10px;
+  font-weight: 800;
+}
+.bird-picker label { position: relative; min-width: 0; cursor: pointer; }
+.bird-picker input { position: absolute; opacity: 0; pointer-events: none; }
+.bird-picker label > span {
+  display: block;
+  min-height: 66px;
+  padding: 11px;
+  border: 1px solid rgba(180, 205, 197, 0.32);
+  background: rgba(8, 22, 27, 0.58);
+}
+.bird-picker strong, .bird-picker small { display: block; }
+.bird-picker strong { font-size: 12px; }
+.bird-picker small { margin-top: 5px; color: #a9b9b7; font-size: 9px; }
+.bird-picker input:checked + span {
+  border-color: #8ce0b2;
+  background: #b7dfc9;
+  color: #10251c;
+}
+.bird-picker input:checked + span small { color: #456358; }
+.bird-picker input:focus-visible + span { outline: 3px solid #fff; outline-offset: -3px; }
 .selected-mark { color: #81d5a7; font-weight: 700; }
 .menu-meta { position: absolute; right: 7vw; bottom: 7vh; display: flex; gap: 28px; color: #b6c3c1; font-size: 11px; }
 
@@ -207,7 +242,7 @@ h1 {
   .source-credit { right: 20px; bottom: 18px; left: 20px; }
   .menu-screen { align-items: flex-end; padding: 20px 20px 11vh; }
   .menu-content h2 { font-size: 42px; }
-  .region-picker { grid-template-columns: 1fr; }
+  .bird-picker, .region-picker { grid-template-columns: 1fr; }
   .menu-meta { right: 20px; bottom: 22px; left: 20px; justify-content: space-between; gap: 12px; }
   .game-hud { top: 10px; left: 10px; width: min(286px, calc(100vw - 20px)); }
   .controls-hint { display: none; }

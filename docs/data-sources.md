@@ -16,17 +16,27 @@ The credential is never placed in HTML, browser JavaScript, runtime evidence, do
 - Usage: zoom 13 height sampling for displacement, road placement, and terrain collision
 - Access: same-origin `/terrain-elevation` proxy
 
-No satellite or aerial imagery is used as the terrain material. The elevation mesh is rendered with game-generated PBR grass, soil, and rock colours derived from height, slope, and deterministic detail noise.
+No satellite or aerial imagery is used as the default terrain material. Terrarium supplies height and collision only.
+
+## LandsD Map API
+
+- Runtime layer: `basemap/WGS84`
+- Usage: official roads, streets, water, land parcels, paths, and labels on the DEM terrain
+- Resolution: zoom 15, composed as four 256-pixel tiles per zoom-14 terrain mesh
+- Regional budget: 64 PNG tiles on 16 terrain meshes for Tai Po
+- Access: same-origin `/landsd-map/basemap` proxy with server-side credential injection
+
+The game rejects an incomplete basemap instead of exposing fallback road geometry. The optional LandsD `imagery` endpoint is verified but is not requested by the default world.
 
 ## OpenStreetMap Vector Data
 
 - Delivery: OpenFreeMap vector-tile service and OpenMapTiles schema
 - Runtime layers: `transportation`, `water`
-- Usage: driveable road ribbons and mapped water polygons only
+- Usage: non-rendered navigation classification and future AI routing only
 - Access: same-origin `/road-data` middleware with server-side TileJSON discovery and memory caching
 - Attribution: OpenFreeMap, OpenMapTiles, and OpenStreetMap contributors
 
-The road renderer accepts motorway, primary, secondary, tertiary, minor, and service line features. Paths, tracks, railways, and tunnels are excluded. Roads are subdivided and sampled against the Terrarium DEM so their mesh follows local terrain. Water uses mapped polygon boundaries; ocean polygons remain at sea level and inland polygons use a robust local DEM height.
+Motorway, primary, secondary, tertiary, minor, and service features are retained as data. Paths, tracks, railways, and tunnels are excluded. No OSM road or water mesh is added to the Three.js scene.
 
 OpenStreetMap data is not a building fallback. Lands Department CSDI remains the sole source for buildings and infrastructure. Confirm the current OpenFreeMap, OpenMapTiles, and OpenStreetMap attribution and redistribution terms before public deployment.
 

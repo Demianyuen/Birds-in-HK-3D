@@ -5,8 +5,8 @@
 ```text
 Browser UI state machine
   → BirdsInHkGame
-    → AerialImageryGround → Terrarium elevation → game-rendered PBR terrain
-    → RoadNetwork → regional vector-tile proxy → OSM roads + mapped water
+    → AerialImageryGround → Terrarium elevation + LandsD basemap → official regional ground
+    → RoadNetwork → regional vector-tile proxy → non-rendered OSM navigation data
     → CsdiTiles → regional same-origin proxy → LandsD CSDI Building + Infrastructure
       → BuildingMaterial → official KTX2 texture + facade PBR shading
     → BirdController → pre-movement raycasts → active world meshes
@@ -19,7 +19,7 @@ Browser UI state machine
 - `BirdsInHkGame`: scene lifecycle, camera, render loop, and readiness gate.
 - `CsdiTiles`: official map streaming, ECEF regional traversal mask, local render clipping, KTX2 setup, tile metrics, and disposal.
 - `AerialImageryGround`: flight-region Terrarium elevation coverage with 64-segment tiles, multiscale land colouring, shader surface detail, collision, and world-height sampling.
-- `RoadNetwork`: parses regional vector tiles, builds width-classed PBR road ribbons, follows DEM heights, and triangulates horizontal mapped-water surfaces.
+- `RoadNetwork`: validates bounded navigation-road data while deliberately creating no visible surface meshes.
 - `BuildingMaterial`: preserves official CSDI textures and adds window, tone, roughness, and reflection rendering.
 - `regions.ts`: verified coordinates, radii, and official root tiles for independent Hong Kong flight regions.
 - `BirdController`: deterministic flight state, collision response, and bounded-region return steering.

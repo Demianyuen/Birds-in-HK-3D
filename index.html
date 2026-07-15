@@ -18,28 +18,26 @@
           <p class="tagline">化身白鴿，飛越真實香港。</p>
         </div>
         <button id="continue-button" class="primary-button" type="button">繼續</button>
-        <p class="source-credit">3D 資料：地政總署 CSDI · 地形：AWS Terrarium</p>
+        <p class="source-credit">3D：地政總署 CSDI · 街道：LandsD Map API · 高程：AWS Terrarium</p>
       </section>
 
       <section id="menu-screen" class="screen menu-screen" aria-labelledby="menu-title" hidden>
         <div class="menu-content">
           <p class="place-name">OFFICIAL 3D HONG KONG</p>
           <h2 id="menu-title">選擇飛行地區</h2>
-          <div class="bird-option" aria-label="已選擇白鴿">
-            <span class="bird-index">01</span>
-            <div>
-              <strong>香港白鴿</strong>
-              <small>靈活 · 平穩 · 適合城市飛行</small>
-            </div>
-            <span class="selected-mark">已選擇</span>
-          </div>
+          <fieldset class="bird-picker">
+            <legend>測試鳥類</legend>
+            <label><input type="radio" name="bird-profile" value="pigeon" checked /><span><strong>香港白鴿</strong><small>Blender GLB · 城市巡航</small></span></label>
+            <label><input type="radio" name="bird-profile" value="black-kite" /><span><strong>黑鳶 Prototype</strong><small>寬翼 · 滑翔測試</small></span></label>
+            <label><input type="radio" name="bird-profile" value="sparrow" /><span><strong>樹麻雀 Prototype</strong><small>輕量 · 快速轉向</small></span></label>
+          </fieldset>
           <fieldset class="region-picker">
             <legend>飛行地區</legend>
             <label>
               <input type="radio" name="flight-region" value="tai-po" checked />
               <span>
                 <strong>大埔 · 宏福苑</strong>
-                <small>官方 CSDI 建築及基建 · 真實高程地形</small>
+                <small>官方 CSDI 建築及基建 · LandsD 街道地圖</small>
               </span>
             </label>
           </fieldset>
@@ -100,7 +98,8 @@
       </div>
       <p class="map-attribution">
         3D: <a href="https://portal.csdi.gov.hk/" target="_blank" rel="noreferrer">LandsD CSDI</a> |
-        Map: <a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a> /
+        Map: <a href="https://portal.csdi.gov.hk/" target="_blank" rel="noreferrer">LandsD Map API</a> |
+        Navigation: <a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a> /
         <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">&copy; OpenMapTiles</a> /
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">&copy; OpenStreetMap contributors</a>
       </p>

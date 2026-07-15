@@ -1,17 +1,20 @@
 import {
+  CanvasTexture,
   Color,
-  Float32BufferAttribute,
   Group,
   Mesh,
   MeshStandardMaterial,
   PlaneGeometry,
+  SRGBColorSpace,
 } from 'three';
 import type { FlightRegion } from './regions';
 
 const EARTH_CIRCUMFERENCE_METRES = 40_075_016.686;
 const SURFACE_ZOOM = 14;
+export const OFFICIAL_BASEMAP_ZOOM = 15;
 const ELEVATION_ZOOM = 13;
 const TERRAIN_TILE_SIZE = 256;
+const BASEMAP_SCALE = 2 ** (OFFICIAL_BASEMAP_ZOOM - SURFACE_ZOOM);
 export const TERRAIN_SEGMENTS = 64;
 const SURFACE_TO_ELEVATION_SCALE = 2 ** (SURFACE_ZOOM - ELEVATION_ZOOM);
 const TERRAIN_EDGE_BUFFER_METRES = 450;
@@ -20,6 +23,16 @@ export interface ImageryLoadProgress {
   completed: number;
   total: number;
   successful: number;
+  basemapCompleted: number;
+  basemapTotal: number;
+  basemapSuccessful: number;
+}
+
+export interface OfficialGroundMetrics {
+  terrainMeshes: number;
+  texturedMeshes: number;
+  basemapTilesLoaded: number;
+  basemapTilesTotal: number;
 }
 
 interface TileRequest {
@@ -35,7 +48,8 @@ export class AerialImageryGround {
   private readonly resources = new Set<{ dispose: () => void }>();
   private readonly progressListeners = new Set<(progress: ImageryLoadProgress) => void>();
   private loadPromise: Promise<void> | null = null;
-  private progress: ImageryLoadProgress = { completed: 0, total: 0, successful: 0 };
+  private progress: ImageryLoadProgress = emptyProgress();
+  private groundMetrics: OfficialGroundMetrics = emptyGroundMetrics();
   private activeRegionId: string | null = null;
   private activeElevationTiles = new Map<string, Uint8ClampedArray>();
   private activeSurfaceCenter: { x: number; y: number } | null = null;
@@ -75,13 +89,18 @@ export class AerialImageryGround {
     return this.sampleElevation(this.activeElevationTiles, surfaceX, surfaceY);
   }
 
+  public get metrics(): Readonly<OfficialGroundMetrics> {
+    return this.groundMetrics;
+  }
+
   private clearTiles(): void {
     this.group.clear();
     for (const resource of this.resources) resource.dispose();
     this.resources.clear();
     this.progressListeners.clear();
     this.loadPromise = null;
-    this.progress = { completed: 0, total: 0, successful: 0 };
+    this.progress = emptyProgress();
+    this.groundMetrics = emptyGroundMetrics();
     this.activeElevationTiles.clear();
     this.activeSurfaceCenter = null;
     this.activeTileWidthMetres = 0;
@@ -89,7 +108,15 @@ export class AerialImageryGround {
 
   private async loadTiles(region: FlightRegion): Promise<void> {
     const requests = createTileRequests(region);
-    this.progress = { completed: 0, total: requests.length, successful: 0 };
+    this.progress = {
+      completed: 0,
+      total: requests.length,
+      successful: 0,
+      basemapCompleted: 0,
+      basemapTotal: requests.length * BASEMAP_SCALE ** 2,
+      basemapSuccessful: 0,
+    };
+    this.notifyProgress();
     const elevationTiles = await this.loadElevationCoverage(requests);
     if (elevationTiles.size === 0) throw new Error('Hong Kong elevation terrain could not be loaded.');
     const center = geographicToTileFraction(region.latitude, region.longitude, SURFACE_ZOOM);
@@ -97,15 +124,21 @@ export class AerialImageryGround {
     this.activeSurfaceCenter = center;
     this.activeTileWidthMetres = tileWidthMetres(region.latitude);
     this.originElevation = this.sampleElevation(elevationTiles, center.x, center.y);
-    const material = this.track(new MeshStandardMaterial({
-      vertexColors: true,
-      roughness: 0.96,
-      metalness: 0,
-    }));
-    addTerrainSurfaceDetail(material);
+    const basemapTextures = await Promise.all(
+      requests.map(request => this.loadOfficialBasemapTexture(request)),
+    );
+    if (basemapTextures.some(texture => texture === null)) {
+      throw new Error('The LandsD basemap could not deliver the complete Tai Po street surface.');
+    }
     for (let index = 0; index < requests.length; index += 1) {
       const request = requests[index];
       const geometry = this.createGroundGeometry(request, elevationTiles, region.latitude);
+      const material = this.track(new MeshStandardMaterial({
+        map: basemapTextures[index],
+        color: '#ffffff',
+        roughness: 0.94,
+        metalness: 0,
+      }));
       const tile = new Mesh(geometry, material);
       tile.position.set(request.worldX, 0.16, request.worldZ);
       tile.receiveShadow = true;
@@ -114,9 +147,69 @@ export class AerialImageryGround {
         completed: index + 1,
         total: requests.length,
         successful: index + 1,
+        basemapCompleted: this.progress.basemapCompleted,
+        basemapTotal: this.progress.basemapTotal,
+        basemapSuccessful: this.progress.basemapSuccessful,
       };
-      for (const listener of this.progressListeners) listener(this.progress);
+      this.groundMetrics = {
+        terrainMeshes: index + 1,
+        texturedMeshes: index + 1,
+        basemapTilesLoaded: this.progress.basemapSuccessful,
+        basemapTilesTotal: this.progress.basemapTotal,
+      };
+      this.notifyProgress();
     }
+  }
+
+  private async loadOfficialBasemapTexture(request: TileRequest): Promise<CanvasTexture | null> {
+    const canvas = document.createElement('canvas');
+    canvas.width = TERRAIN_TILE_SIZE * BASEMAP_SCALE;
+    canvas.height = TERRAIN_TILE_SIZE * BASEMAP_SCALE;
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    context.fillStyle = '#68775f';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    let successful = 0;
+    await Promise.all(Array.from({ length: BASEMAP_SCALE ** 2 }, async (_, index) => {
+      const offsetX = index % BASEMAP_SCALE;
+      const offsetY = Math.floor(index / BASEMAP_SCALE);
+      const x = request.x * BASEMAP_SCALE + offsetX;
+      const y = request.y * BASEMAP_SCALE + offsetY;
+      const bitmap = await this.loadBasemapBitmap(x, y);
+      this.progress.basemapCompleted += 1;
+      if (bitmap) {
+        successful += 1;
+        this.progress.basemapSuccessful += 1;
+        context.drawImage(
+          bitmap,
+          offsetX * TERRAIN_TILE_SIZE,
+          offsetY * TERRAIN_TILE_SIZE,
+          TERRAIN_TILE_SIZE,
+          TERRAIN_TILE_SIZE,
+        );
+        bitmap.close();
+      }
+      this.notifyProgress();
+    }));
+    if (successful !== BASEMAP_SCALE ** 2) return null;
+    const texture = this.track(new CanvasTexture(canvas));
+    texture.colorSpace = SRGBColorSpace;
+    texture.anisotropy = 4;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  private async loadBasemapBitmap(x: number, y: number): Promise<ImageBitmap | null> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await fetch(`/landsd-map/basemap/${OFFICIAL_BASEMAP_ZOOM}/${x}/${y}.png`);
+        if (!response.ok) continue;
+        return await createImageBitmap(await response.blob());
+      } catch {
+        // A single retry handles transient tile delivery without hiding persistent failures.
+      }
+    }
+    return null;
   }
 
   private createGroundGeometry(
@@ -136,20 +229,6 @@ export class AerialImageryGround {
     }
     positions.needsUpdate = true;
     geometry.computeVertexNormals();
-    const normals = geometry.attributes.normal;
-    const colors = new Float32Array(positions.count * 3);
-    const terrainColor = new Color();
-    for (let index = 0; index < positions.count; index += 1) {
-      const elevation = positions.getY(index);
-      const slope = 1 - Math.max(0, normals.getY(index));
-      const worldX = request.worldX + positions.getX(index);
-      const worldZ = request.worldZ + positions.getZ(index);
-      sampleTerrainColor(elevation, slope, worldX, worldZ, terrainColor);
-      colors[index * 3] = terrainColor.r;
-      colors[index * 3 + 1] = terrainColor.g;
-      colors[index * 3 + 2] = terrainColor.b;
-    }
-    geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
     return geometry;
   }
 
@@ -213,6 +292,10 @@ export class AerialImageryGround {
     this.resources.add(resource);
     return resource;
   }
+
+  private notifyProgress(): void {
+    for (const listener of this.progressListeners) listener(this.progress);
+  }
 }
 
 function createTileRequests(region: FlightRegion): TileRequest[] {
@@ -273,6 +356,10 @@ export function terrainTileCount(region: FlightRegion): number {
   return createTileRequests(region).length;
 }
 
+export function officialBasemapTileCount(region: FlightRegion): number {
+  return terrainTileCount(region) * BASEMAP_SCALE ** 2;
+}
+
 const LOWLAND = new Color('#61705a');
 const GRASS = new Color('#4f6748');
 const DRY_GRASS = new Color('#77765b');
@@ -301,37 +388,6 @@ export function sampleTerrainColor(
     .lerp(SOIL, soilMix)
     .lerp(ROCK, rockMix * 0.78);
   return target.multiplyScalar(0.91 + fineVariation * 0.12);
-}
-
-function addTerrainSurfaceDetail(material: MeshStandardMaterial): void {
-  material.onBeforeCompile = shader => {
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        '#include <common>\nvarying vec3 vTerrainWorldPosition;',
-      )
-      .replace(
-        '#include <worldpos_vertex>',
-        '#include <worldpos_vertex>\nvTerrainWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;',
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-varying vec3 vTerrainWorldPosition;
-float terrainHash(vec2 point) {
-  return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453);
-}`,
-      )
-      .replace(
-        '#include <color_fragment>',
-        `#include <color_fragment>
-float terrainGrain = terrainHash(floor(vTerrainWorldPosition.xz * 0.55));
-float terrainPatch = terrainHash(floor(vTerrainWorldPosition.xz * 0.055));
-diffuseColor.rgb *= 0.945 + terrainGrain * 0.065 + terrainPatch * 0.035;`,
-      );
-  };
-  material.customProgramCacheKey = () => 'natural-terrain-surface-v1';
 }
 
 function fractalTerrainNoise(x: number, y: number): number {
@@ -373,4 +429,24 @@ function smoothStep(minimum: number, maximum: number, value: number): number {
 
 function mix(left: number, right: number, amount: number): number {
   return left + (right - left) * amount;
+}
+
+function emptyProgress(): ImageryLoadProgress {
+  return {
+    completed: 0,
+    total: 0,
+    successful: 0,
+    basemapCompleted: 0,
+    basemapTotal: 0,
+    basemapSuccessful: 0,
+  };
+}
+
+function emptyGroundMetrics(): OfficialGroundMetrics {
+  return {
+    terrainMeshes: 0,
+    texturedMeshes: 0,
+    basemapTilesLoaded: 0,
+    basemapTilesTotal: 0,
+  };
 }

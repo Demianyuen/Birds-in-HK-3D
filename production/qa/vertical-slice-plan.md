@@ -13,7 +13,7 @@ Automated production-browser vertical slice passed on 2026-07-15. Manual long-fl
 5. Confirm the game HUD appears only after the readiness gate passes.
 6. Confirm game-rendered Tai Po terrain and official textured 3D buildings are visible and the canvas is not blank.
 7. Confirm no distant official building geometry appears outside the bounded Tai Po terrain.
-8. Confirm real road geometry follows the terrain, mapped water is horizontal, and no aerial-imagery requests occur.
+8. Confirm the complete LandsD basemap follows the terrain, no vector-road cracks are visible, and no aerial-imagery requests occur.
 9. Confirm mouse/WASD steering, wheel/Shift speed control, and Space flap work.
 10. Fly into a loaded building at maximum speed; confirm the bird stops without tunnelling.
 11. Press Space while perched; confirm takeoff.

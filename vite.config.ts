@@ -261,6 +261,22 @@ export default defineConfig(({ mode }) => {
         '/elevation-tiles-prod/terrarium',
       ),
     },
+    '/landsd-map': {
+      target: 'https://mapapi.geodata.gov.hk',
+      changeOrigin: true,
+      secure: true,
+      rewrite: path => path.replace(
+        /^\/landsd-map\/(basemap|imagery)/,
+        '/gs/api/v1.0.0/xyz/$1/WGS84',
+      ),
+      configure: proxyServer => {
+        proxyServer.on('proxyReq', proxyRequest => {
+          if (!apiKey) return;
+          const separator = proxyRequest.path.includes('?') ? '&' : '?';
+          proxyRequest.path = `${proxyRequest.path}${separator}key=${encodeURIComponent(apiKey)}`;
+        });
+      },
+    },
     '/csdi-3d': {
       target: 'https://data.map.gov.hk',
       changeOrigin: true,

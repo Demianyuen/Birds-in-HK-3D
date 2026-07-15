@@ -9,6 +9,7 @@ import {
   SphereGeometry,
 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import type { BirdProfileId } from './birdProfiles';
 
 export class Pigeon {
   public readonly root = new Group();
@@ -21,6 +22,7 @@ export class Pigeon {
   private modelPromise: Promise<boolean> | null = null;
   private animationTime = 0;
   private flapImpulse = 0;
+  private profileId: BirdProfileId = 'pigeon';
 
   public constructor() {
     const white = new MeshStandardMaterial({ color: new Color('#e5e8e6'), roughness: 0.74 });
@@ -29,6 +31,10 @@ export class Pigeon {
     const neck = new MeshStandardMaterial({ color: new Color('#428071'), roughness: 0.64, metalness: 0.05 });
     const orange = new MeshStandardMaterial({ color: new Color('#d8902f'), roughness: 0.62 });
     const black = new MeshStandardMaterial({ color: new Color('#101719'), roughness: 0.3 });
+    white.name = 'plumage';
+    silver.name = 'breast';
+    charcoal.name = 'flight-feathers';
+    neck.name = 'neck';
 
     const body = new Mesh(new SphereGeometry(0.72, 24, 16), white);
     body.scale.set(0.88, 0.82, 1.38);
@@ -76,8 +82,38 @@ export class Pigeon {
     this.flapImpulse = 1;
   }
 
+  public setProfile(profileId: BirdProfileId): void {
+    if (this.modelPromise) return;
+    this.profileId = profileId;
+    const profileScale = profileId === 'sparrow' ? 0.72 : profileId === 'black-kite' ? 1.18 : 1;
+    this.root.scale.setScalar(profileScale);
+    const wingScale = profileId === 'black-kite' ? 1.55 : profileId === 'sparrow' ? 0.9 : 1;
+    this.leftWing.scale.set(wingScale, 1, 1);
+    this.rightWing.scale.set(wingScale, 1, 1);
+    this.root.traverse(object => {
+      if (!(object instanceof Mesh)) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) {
+        if (!(material instanceof MeshStandardMaterial)) continue;
+        if (profileId === 'black-kite') {
+          if (material.name === 'plumage') material.color.set('#3c342c');
+          if (material.name === 'breast') material.color.set('#5b4b3b');
+          if (material.name === 'flight-feathers') material.color.set('#1d1a18');
+          if (material.name === 'neck') material.color.set('#4b4035');
+        } else if (profileId === 'sparrow') {
+          if (material.name === 'plumage') material.color.set('#9b8064');
+          if (material.name === 'breast') material.color.set('#c4ad8b');
+          if (material.name === 'flight-feathers') material.color.set('#4b3828');
+          if (material.name === 'neck') material.color.set('#6a4b34');
+        }
+      }
+    });
+  }
+
   public loadModel(): Promise<boolean> {
-    this.modelPromise ??= this.loadGlbModel();
+    this.modelPromise ??= this.profileId === 'pigeon'
+      ? this.loadGlbModel()
+      : Promise.resolve(true);
     return this.modelPromise;
   }
 
