@@ -9,14 +9,14 @@ import {
   SphereGeometry,
 } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import type { BirdProfileId } from './birdProfiles';
+import { getBirdProfile, type BirdProfileId } from './birdProfiles';
 
 export class Pigeon {
   public readonly root = new Group();
   private readonly leftWing = new Group();
   private readonly rightWing = new Group();
-  private activeLeftWing: Object3D = this.leftWing;
-  private activeRightWing: Object3D = this.rightWing;
+  private activeLeftWing: Object3D | null = this.leftWing;
+  private activeRightWing: Object3D | null = this.rightWing;
   private leftWingBaseRotation = 0;
   private rightWingBaseRotation = 0;
   private modelPromise: Promise<boolean> | null = null;
@@ -85,9 +85,9 @@ export class Pigeon {
   public setProfile(profileId: BirdProfileId): void {
     if (this.modelPromise) return;
     this.profileId = profileId;
-    const profileScale = profileId === 'sparrow' ? 0.72 : profileId === 'black-kite' ? 1.18 : 1;
+    const profileScale = profileId === 'eagle' ? 1.45 : profileId === 'dove' ? 0.94 : 1;
     this.root.scale.setScalar(profileScale);
-    const wingScale = profileId === 'black-kite' ? 1.55 : profileId === 'sparrow' ? 0.9 : 1;
+    const wingScale = profileId === 'eagle' ? 1.72 : profileId === 'dove' ? 1.06 : 1;
     this.leftWing.scale.set(wingScale, 1, 1);
     this.rightWing.scale.set(wingScale, 1, 1);
     this.root.traverse(object => {
@@ -95,25 +95,23 @@ export class Pigeon {
       const materials = Array.isArray(object.material) ? object.material : [object.material];
       for (const material of materials) {
         if (!(material instanceof MeshStandardMaterial)) continue;
-        if (profileId === 'black-kite') {
-          if (material.name === 'plumage') material.color.set('#3c342c');
-          if (material.name === 'breast') material.color.set('#5b4b3b');
+        if (profileId === 'eagle') {
+          if (material.name === 'plumage') material.color.set('#5a4630');
+          if (material.name === 'breast') material.color.set('#8b7351');
           if (material.name === 'flight-feathers') material.color.set('#1d1a18');
-          if (material.name === 'neck') material.color.set('#4b4035');
-        } else if (profileId === 'sparrow') {
-          if (material.name === 'plumage') material.color.set('#9b8064');
-          if (material.name === 'breast') material.color.set('#c4ad8b');
-          if (material.name === 'flight-feathers') material.color.set('#4b3828');
-          if (material.name === 'neck') material.color.set('#6a4b34');
+          if (material.name === 'neck') material.color.set('#655035');
+        } else if (profileId === 'dove') {
+          if (material.name === 'plumage') material.color.set('#f1f3ef');
+          if (material.name === 'breast') material.color.set('#d7dfdb');
+          if (material.name === 'flight-feathers') material.color.set('#aebbb6');
+          if (material.name === 'neck') material.color.set('#c4d8d1');
         }
       }
     });
   }
 
   public loadModel(): Promise<boolean> {
-    this.modelPromise ??= this.profileId === 'pigeon'
-      ? this.loadGlbModel()
-      : Promise.resolve(true);
+    this.modelPromise ??= this.loadGlbModel(getBirdProfile(this.profileId).modelPath);
     return this.modelPromise;
   }
 
@@ -122,20 +120,19 @@ export class Pigeon {
     this.flapImpulse = Math.max(0, this.flapImpulse - deltaSeconds * 3.5);
     const amplitude = perched ? 0.05 : 0.28 + this.flapImpulse * 0.62;
     const wingAngle = Math.sin(this.animationTime) * amplitude;
-    this.activeLeftWing.rotation.z = this.leftWingBaseRotation + wingAngle;
-    this.activeRightWing.rotation.z = this.rightWingBaseRotation - wingAngle;
+    if (this.activeLeftWing) this.activeLeftWing.rotation.z = this.leftWingBaseRotation + wingAngle;
+    if (this.activeRightWing) this.activeRightWing.rotation.z = this.rightWingBaseRotation - wingAngle;
     this.root.position.y = Math.sin(this.animationTime * 0.5) * (perched ? 0.02 : 0.05);
   }
 
-  private async loadGlbModel(): Promise<boolean> {
+  private async loadGlbModel(modelPath: string): Promise<boolean> {
     try {
-      const gltf = await new GLTFLoader().loadAsync('/models/pigeon.glb');
-      const { leftWing, rightWing } = findPigeonWingPivots(gltf.scene);
-      if (!leftWing || !rightWing) throw new Error('Pigeon GLB is missing animated wing pivots.');
+      const gltf = await new GLTFLoader().loadAsync(modelPath);
+      const { leftWing, rightWing } = findBirdWingPivots(gltf.scene);
 
       this.disposeCurrentVisual();
       this.root.clear();
-      gltf.scene.name = 'Blender pigeon model';
+      gltf.scene.name = `${getBirdProfile(this.profileId).loadingLabel} GLB model`;
       gltf.scene.scale.setScalar(1.02);
       gltf.scene.traverse(object => {
         if (object instanceof Mesh) {
@@ -144,10 +141,10 @@ export class Pigeon {
         }
       });
       this.root.add(gltf.scene);
-      this.activeLeftWing = leftWing;
-      this.activeRightWing = rightWing;
-      this.leftWingBaseRotation = leftWing.rotation.z;
-      this.rightWingBaseRotation = rightWing.rotation.z;
+      this.activeLeftWing = leftWing ?? null;
+      this.activeRightWing = rightWing ?? null;
+      this.leftWingBaseRotation = leftWing?.rotation.z ?? 0;
+      this.rightWingBaseRotation = rightWing?.rotation.z ?? 0;
       return true;
     } catch {
       return false;
@@ -172,4 +169,22 @@ export function findPigeonWingPivots(root: Object3D): {
     leftWing: root.getObjectByName('Wing.L') ?? root.getObjectByName('WingL'),
     rightWing: root.getObjectByName('Wing.R') ?? root.getObjectByName('WingR'),
   };
+}
+
+function findBirdWingPivots(root: Object3D): {
+  leftWing: Object3D | undefined;
+  rightWing: Object3D | undefined;
+} {
+  const blenderPivots = findPigeonWingPivots(root);
+  if (blenderPivots.leftWing && blenderPivots.rightWing) return blenderPivots;
+
+  let leftWing: Object3D | undefined;
+  let rightWing: Object3D | undefined;
+  root.traverse(object => {
+    const name = object.name.toLowerCase();
+    if (!name.includes('wing')) return;
+    if (!leftWing && /(^|[_ .-])(left|l)([_ .-]|$)/.test(name)) leftWing = object;
+    if (!rightWing && /(^|[_ .-])(right|r)([_ .-]|$)/.test(name)) rightWing = object;
+  });
+  return { leftWing, rightWing };
 }

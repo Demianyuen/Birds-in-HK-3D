@@ -6,6 +6,11 @@ import type { FlightControl } from './game/BirdController';
 import { getBirdProfile, type BirdProfileId } from './game/birdProfiles';
 import type { MapLoadProgress } from './game/CsdiTiles';
 import { getFlightRegion, type FlightRegionId } from './game/regions';
+import {
+  configuredGoogleMaps,
+  mountGoogleMapsCsdiOverlay,
+  type GoogleMapsCsdiOverlay,
+} from './integrations/GoogleMapsCsdiOverlay';
 
 const app = requireElement<HTMLElement>('app');
 const canvas = requireElement<HTMLCanvasElement>('game-canvas');
@@ -13,6 +18,11 @@ const continueButton = requireElement<HTMLButtonElement>('continue-button');
 const startButton = requireElement<HTMLButtonElement>('start-button');
 const retryButton = requireElement<HTMLButtonElement>('retry-button');
 const regionButton = requireElement<HTMLButtonElement>('region-button');
+const googleMapsButton = requireElement<HTMLButtonElement>('google-maps-button');
+const googleMapsCloseButton = requireElement<HTMLButtonElement>('google-maps-close-button');
+const googleMapsPanel = requireElement<HTMLElement>('google-maps-panel');
+const googleMapsCanvas = requireElement<HTMLElement>('google-maps-canvas');
+const googleMapsStatus = requireElement<HTMLElement>('google-maps-status');
 const progressFill = requireElement<HTMLElement>('progress-fill');
 const loadingStage = requireElement<HTMLElement>('loading-stage');
 const loadingProgress = requireElement<HTMLElement>('loading-progress');
@@ -43,12 +53,17 @@ let materialEvidenceReported = false;
 let roadEvidenceReported = false;
 let groundEvidenceReported = false;
 let lastPerformanceReport = 0;
+let googleMapsOverlay: GoogleMapsCsdiOverlay | null = null;
+const googleMapsConfigured = configuredGoogleMaps() !== null;
 const game = new BirdsInHkGame(canvas, updateTelemetry);
 
 continueButton.addEventListener('click', () => showScreen(transitionFlow(currentScreen, 'continue')));
 startButton.addEventListener('click', () => void beginFlight());
 retryButton.addEventListener('click', () => void beginFlight());
 regionButton.addEventListener('click', () => showScreen(transitionFlow(currentScreen, 'change-region')));
+googleMapsButton.addEventListener('click', () => void openGoogleMapsContext());
+googleMapsCloseButton.addEventListener('click', closeGoogleMapsContext);
+googleMapsButton.hidden = !googleMapsConfigured;
 
 canvas.addEventListener('click', () => {
   if (currentScreen === 'game') void canvas.requestPointerLock();
@@ -83,7 +98,10 @@ window.addEventListener('keyup', event => {
   if (control) game.setControl(control, false);
 });
 
-window.addEventListener('beforeunload', () => game.dispose());
+window.addEventListener('beforeunload', () => {
+  closeGoogleMapsContext();
+  game.dispose();
+});
 showScreen('boot');
 
 async function beginFlight(): Promise<void> {
@@ -207,6 +225,34 @@ function showScreen(screen: ScreenName): void {
   gameHud.hidden = !inGame;
   controlsHint.hidden = !inGame;
   reportRuntimeEvent(`screen.${screen}`);
+}
+
+async function openGoogleMapsContext(): Promise<void> {
+  if (!googleMapsConfigured) return;
+  closeGoogleMapsContext();
+  googleMapsPanel.hidden = false;
+  googleMapsStatus.textContent = 'Preparing Google Maps 3D context.';
+  try {
+    const region = getFlightRegion(selectedRegionId());
+    googleMapsOverlay = await mountGoogleMapsCsdiOverlay({
+      container: googleMapsCanvas,
+      region,
+      onStatus: message => { googleMapsStatus.textContent = message; },
+    });
+    reportRuntimeEvent('google-maps.opened', { region: region.id, source: 'csdi' });
+  } catch (error) {
+    googleMapsStatus.textContent = error instanceof Error
+      ? error.message
+      : 'Google Maps 3D context could not be prepared.';
+    reportRuntimeEvent('google-maps.error', { message: googleMapsStatus.textContent });
+  }
+}
+
+function closeGoogleMapsContext(): void {
+  googleMapsOverlay?.dispose();
+  googleMapsOverlay = null;
+  googleMapsCanvas.replaceChildren();
+  googleMapsPanel.hidden = true;
 }
 
 function requireElement<T extends HTMLElement>(id: string): T {

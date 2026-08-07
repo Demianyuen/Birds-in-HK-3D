@@ -26,7 +26,7 @@ import { BirdController, type FlightControl, type FlightTelemetry } from './Bird
 import { CsdiTiles, type MapLoadProgress } from './CsdiTiles';
 import { getFlightRegion, type FlightRegionId } from './regions';
 import { RoadNetwork, type RoadNetworkMetrics } from './RoadNetwork';
-import type { BirdProfileId } from './birdProfiles';
+import { getBirdProfile, type BirdProfileId } from './birdProfiles';
 import { evaluateWorldReadiness } from './worldReadiness';
 
 type GameMode = 'attract' | 'loading' | 'playing';
@@ -136,11 +136,12 @@ export class BirdsInHkGame {
       });
     });
     const birdVisualPromise = this.bird.loadVisual().then(loaded => {
+      const birdProfile = getBirdProfile(this.bird.profileId);
       onProgress({
-        stage: loaded ? 'Blender pigeon ready' : 'Using reserve pigeon model',
+        stage: loaded ? `${birdProfile.loadingLabel} GLB ready` : `Using reserve ${birdProfile.loadingLabel} model`,
         detail: loaded
-          ? 'Animated GLB plumage, wings, and flight silhouette are active.'
-          : 'The GLB could not be loaded; the built-in bird remains available.',
+          ? 'The selected GLB bird visual is active.'
+          : 'The selected GLB could not be loaded; the built-in bird remains available.',
         percent: 40,
         modelsLoaded: loaded ? 1 : 0,
       });

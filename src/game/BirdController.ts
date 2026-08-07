@@ -91,6 +91,10 @@ export class BirdController {
     this.speed = this.flightProfile.cruiseSpeed;
   }
 
+  public get profileId(): BirdProfileId {
+    return this.flightProfile.id;
+  }
+
   public steer(deltaX: number, deltaY: number): void {
     if (!this.enabled) return;
     this.yaw -= deltaX * 0.0022;

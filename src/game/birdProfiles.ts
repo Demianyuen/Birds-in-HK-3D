@@ -1,7 +1,9 @@
-export type BirdProfileId = 'pigeon' | 'black-kite' | 'sparrow';
+export type BirdProfileId = 'pigeon' | 'dove' | 'eagle';
 
 export interface BirdProfile {
   id: BirdProfileId;
+  modelPath: string;
+  loadingLabel: string;
   cruiseSpeed: number;
   minimumSpeed: number;
   maximumSpeed: number;
@@ -10,9 +12,18 @@ export interface BirdProfile {
 }
 
 export const BIRD_PROFILES: Readonly<Record<BirdProfileId, BirdProfile>> = Object.freeze({
-  pigeon: { id: 'pigeon', cruiseSpeed: 26, minimumSpeed: 9, maximumSpeed: 68, turnRate: 1.15, flapLift: 8.8 },
-  'black-kite': { id: 'black-kite', cruiseSpeed: 31, minimumSpeed: 12, maximumSpeed: 78, turnRate: 0.9, flapLift: 7.2 },
-  sparrow: { id: 'sparrow', cruiseSpeed: 22, minimumSpeed: 8, maximumSpeed: 58, turnRate: 1.35, flapLift: 9.6 },
+  pigeon: {
+    id: 'pigeon', modelPath: '/models/pigeon.glb', loadingLabel: 'Pigeon',
+    cruiseSpeed: 26, minimumSpeed: 9, maximumSpeed: 68, turnRate: 1.15, flapLift: 8.8,
+  },
+  dove: {
+    id: 'dove', modelPath: '/models/dove.glb', loadingLabel: 'Dove',
+    cruiseSpeed: 24, minimumSpeed: 8, maximumSpeed: 62, turnRate: 1.2, flapLift: 9.2,
+  },
+  eagle: {
+    id: 'eagle', modelPath: '/models/eagle.glb', loadingLabel: 'Eagle',
+    cruiseSpeed: 34, minimumSpeed: 13, maximumSpeed: 84, turnRate: 0.82, flapLift: 7.6,
+  },
 });
 
 export function getBirdProfile(id: string | null | undefined): BirdProfile {

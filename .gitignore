@@ -8,3 +8,4 @@ dist/
 runtime-evidence/
 .DS_Store
 Thumbs.db
+public/models/city-style/**/*.glb

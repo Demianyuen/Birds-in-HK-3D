@@ -38,7 +38,8 @@ if (errors.length > 0) blockers.push(`${errors.length} runtime error event(s) we
 const worldReady = session.find(event => event.type === 'world.ready');
 if (worldReady?.details?.source !== 'csdi') blockers.push('The official CSDI world was not recorded as ready.');
 if (worldReady?.details?.region !== 'tai-po') blockers.push('The official Tai Po region was not recorded as ready.');
-if (!['pigeon', 'black-kite', 'sparrow'].includes(worldReady?.details?.birdProfile)) {
+const birdLabels = { pigeon: 'Pigeon', dove: 'Dove', eagle: 'Eagle' };
+if (!Object.hasOwn(birdLabels, worldReady?.details?.birdProfile)) {
   blockers.push('No approved bird performance profile was recorded.');
 }
 
@@ -50,12 +51,19 @@ const stages = new Set(
 );
 for (const stage of [
   'Building Hong Kong terrain',
-  'Blender pigeon ready',
   'building layer ready',
   'infrastructure layer ready',
   'navigation road data ready',
 ]) {
   if (!stages.has(stage)) blockers.push(`Required loading stage was not recorded: ${stage}.`);
+}
+const birdLabel = birdLabels[worldReady?.details?.birdProfile];
+if (
+  birdLabel
+  && !stages.has(`${birdLabel} GLB ready`)
+  && !stages.has(`Using reserve ${birdLabel} model`)
+) {
+  blockers.push('The selected bird visual did not report a GLB or reserve-model stage.');
 }
 
 const frame = session.find(event => event.type === 'render.frame');

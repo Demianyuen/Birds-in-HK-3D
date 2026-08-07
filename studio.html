@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#173f3a" />
+    <link rel="icon" href="data:," />
+    <title>Birds in HK | 統一作戰藝術村</title>
+  </head>
+  <body>
+    <main id="studio-app">
+      <header class="studio-bar">
+        <div class="studio-brand">
+          <p>BIRDS IN HK / OPEN STUDIO</p>
+          <h1>統一作戰藝術村</h1>
+        </div>
+        <div class="studio-feed" aria-live="polite">
+          <span class="feed-dot" aria-hidden="true"></span>
+          <span id="feed-source" data-mode="snapshot">本週證據快照</span>
+          <time id="feed-time">feed 尚未連線</time>
+        </div>
+        <a class="flight-link" href="/">返回飛行世界</a>
+      </header>
+
+      <section class="studio-shell" aria-label="開放式藝術家工作室 dashboard">
+        <div class="world-column">
+          <nav id="agent-list" class="agent-list" aria-label="工作角色"></nav>
+          <div id="studio-world" class="studio-world" role="application" aria-label="可互動的 3D 草原藝術村">
+            <div class="world-controls" aria-label="場景控制">
+              <label class="motion-switch" for="motion-toggle">
+                <input id="motion-toggle" type="checkbox" checked />
+                <span aria-hidden="true"></span>
+                動態
+              </label>
+              <button id="camera-reset" class="camera-reset" type="button">重設視角</button>
+            </div>
+            <div class="world-key" aria-hidden="true">
+              <span><b data-state="working"></b>製作</span>
+              <span><b data-state="reviewing"></b>驗收</span>
+              <span><b data-state="handoff"></b>交接</span>
+              <span><b data-state="waiting"></b>等候</span>
+            </div>
+          </div>
+          <div class="evidence-strip">
+            <span><b>主專案</b> F:\Project\Birds-in-HK-3D</span>
+            <span><b>公開欄位</b> 狀態 · 短任務 · runtime · 時間</span>
+          </div>
+        </div>
+
+        <aside class="studio-inspector" aria-live="polite">
+          <div class="inspector-heading">
+            <div>
+              <p>SELECTED WORKER</p>
+              <h2 id="inspector-name">豆豆</h2>
+            </div>
+            <span id="inspector-status" class="inspector-status" data-state="working">製作中</span>
+          </div>
+          <p id="inspector-role" class="inspector-role">CFO / Codex 作戰編排</p>
+          <p id="inspector-summary" class="inspector-summary"></p>
+
+          <div class="view-tabs" role="tablist" aria-label="工作資料檢視">
+            <button type="button" role="tab" data-view="current" class="is-selected" aria-selected="true">現況</button>
+            <button type="button" role="tab" data-view="week" aria-selected="false">本週</button>
+            <button type="button" role="tab" data-view="deliverables" aria-selected="false">交付</button>
+            <button type="button" role="tab" data-view="next" aria-selected="false">下一步</button>
+          </div>
+          <div id="inspector-content" class="inspector-content"></div>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="/src/studio/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-Hant" data-scene-state="loading">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#20262a" />
+    <link rel="icon" href="data:," />
+    <title>Birds in HK | 城市風格研究</title>
+  </head>
+  <body>
+    <main id="city-style-app">
+      <header class="lab-bar">
+        <div class="lab-title">
+          <p>BIRDS IN HK / CITY STYLE LAB</p>
+          <h1>香港城市風格研究</h1>
+        </div>
+        <div class="lab-status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="scene-status">正在載入 16 個 Free GLB</span>
+        </div>
+        <nav class="lab-nav" aria-label="專案頁面">
+          <a href="/">飛行地圖</a>
+          <a href="/studio.html">藝術工作室</a>
+        </nav>
+      </header>
+
+      <section class="lab-layout" aria-label="Three.js 建築風格比較">
+        <div id="city-style-world" class="city-style-world" role="application" aria-label="三個免費建築模型的 3D 比較場景">
+          <div class="scene-tools">
+            <button id="camera-reset" type="button">重設視角</button>
+          </div>
+          <div class="scale-key" aria-hidden="true">
+            <span><b></b>10 m</span>
+            <span>場景單位：米</span>
+          </div>
+        </div>
+
+        <aside class="model-rail" aria-label="模型資料與載入狀態">
+          <div class="rail-heading">
+            <p>FREE ASSET STUDY</p>
+            <h2>建築樣式</h2>
+            <p>CSDI 保留為飛行世界唯一真實建築來源；此頁只比較可重用的 Three.js 美術語言。</p>
+          </div>
+
+          <div id="model-list" class="model-list">
+            <article data-model-card="apartment-block-01" data-state="loading">
+              <div class="model-heading">
+                <div><span>01</span><h3>Apartment Block 01</h3></div>
+                <strong data-model-state>載入中</strong>
+              </div>
+              <dl>
+                <div><dt>目標高度</dt><dd>28 m</dd></div>
+                <div><dt>定位</dt><dd>舊區中低層住宅</dd></div>
+              </dl>
+              <p data-model-detail>正在讀取 GLB</p>
+              <div class="model-links">
+                <a href="https://threejsassets.com/assets/apartment-block-01" target="_blank" rel="noreferrer">來源</a>
+                <a href="https://threejsassets.com/license#free-asset-license" target="_blank" rel="noreferrer">Free 授權</a>
+              </div>
+            </article>
+
+            <article data-model-card="glass-skyscraper-01" data-state="loading">
+              <div class="model-heading">
+                <div><span>02</span><h3>Glass Skyscraper 01</h3></div>
+                <strong data-model-state>載入中</strong>
+              </div>
+              <dl>
+                <div><dt>目標高度</dt><dd>88 m</dd></div>
+                <div><dt>定位</dt><dd>商業核心高樓</dd></div>
+              </dl>
+              <p data-model-detail>正在讀取 GLB</p>
+              <div class="model-links">
+                <a href="https://threejsassets.com/assets/glass-skyscraper-01" target="_blank" rel="noreferrer">來源</a>
+                <a href="https://threejsassets.com/license#free-asset-license" target="_blank" rel="noreferrer">Free 授權</a>
+              </div>
+            </article>
+
+            <article data-model-card="convenience-store-01" data-state="loading">
+              <div class="model-heading">
+                <div><span>03</span><h3>Convenience Store 01</h3></div>
+                <strong data-model-state>載入中</strong>
+              </div>
+              <dl>
+                <div><dt>目標高度</dt><dd>7 m</dd></div>
+                <div><dt>定位</dt><dd>街角零售地標</dd></div>
+              </dl>
+              <p data-model-detail>正在讀取 GLB</p>
+              <div class="model-links">
+                <a href="https://threejsassets.com/assets/convenience-store-01" target="_blank" rel="noreferrer">來源</a>
+                <a href="https://threejsassets.com/license#free-asset-license" target="_blank" rel="noreferrer">Free 授權</a>
+              </div>
+            </article>
+          </div>
+
+          <section class="asset-collection" aria-labelledby="asset-collection-title">
+            <div class="collection-heading">
+              <div>
+                <p>SCENE COLLECTION</p>
+                <h2 id="asset-collection-title">場景資產</h2>
+              </div>
+              <span>13 ITEMS</span>
+            </div>
+            <div id="asset-list"></div>
+          </section>
+
+          <div class="source-note">
+            <span>來源</span>
+            <p>Three.js Assets · Free Commercial License</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+    <script type="module" src="/src/city-style/main.ts"></script>
+  </body>
+</html>

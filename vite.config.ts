@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { defineConfig, loadEnv, type Plugin, type ProxyOptions } from 'vite';
 import { FLIGHT_REGIONS, type CsdiRegionLayer } from './src/game/regions';
@@ -86,6 +86,73 @@ function roadDataPlugin(): Plugin {
 
 interface Middlewares {
   use: (path: string, handler: (request: MiddlewareRequest, response: MiddlewareResponse, next: () => void) => void) => void;
+}
+
+function studioStatePlugin(): Plugin {
+  const statePath = resolve(process.cwd(), 'runtime-evidence', 'studio-state.json');
+  const agentIds = new Set(['dou-dou', 'nian-nian', 'map-agent', 'qa-agent', 'asset-agent']);
+  const states = new Set(['working', 'reviewing', 'handoff', 'done', 'waiting', 'blocked', 'offline']);
+  const sensitiveText = /(?:api[ _-]?key|access[ _-]?token|password|credential|bearer\s+|sk-[a-z0-9_-]{8,})/i;
+
+  const safeText = (value: unknown, maxLength: number): value is string => {
+    return typeof value === 'string' && value.length > 0 && value.length <= maxLength && !sensitiveText.test(value);
+  };
+
+  const sanitize = (input: unknown): Record<string, unknown> | null => {
+    if (typeof input !== 'object' || input === null || !('agents' in input) || !Array.isArray(input.agents)) return null;
+    const source = 'source' in input ? input.source : undefined;
+    const updatedAt = 'updatedAt' in input ? input.updatedAt : undefined;
+    if (source !== 'local-feed' || typeof updatedAt !== 'string' || Number.isNaN(Date.parse(updatedAt))) return null;
+    const agents = [];
+    for (const item of input.agents) {
+      if (typeof item !== 'object' || item === null) return null;
+      const candidate = item as Record<string, unknown>;
+      if (typeof candidate.id !== 'string' || !agentIds.has(candidate.id)) return null;
+      if (typeof candidate.state !== 'string' || !states.has(candidate.state)) return null;
+      if (!safeText(candidate.task, 160) || !safeText(candidate.runtime, 60)) return null;
+      if (typeof candidate.updatedAt !== 'string' || Number.isNaN(Date.parse(candidate.updatedAt))) return null;
+      agents.push({
+        id: candidate.id,
+        state: candidate.state,
+        task: candidate.task,
+        runtime: candidate.runtime,
+        updatedAt: candidate.updatedAt,
+      });
+    }
+    return { source: 'local-feed', updatedAt, agents };
+  };
+
+  const installMiddleware = (middlewares: Middlewares): void => {
+    middlewares.use('/api/studio-state', (request, response, next) => {
+      if (request.method !== 'GET') {
+        next();
+        return;
+      }
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      response.setHeader('Cache-Control', 'no-store');
+      if (!existsSync(statePath)) {
+        response.statusCode = 404;
+        response.end('{"source":"snapshot"}');
+        return;
+      }
+      try {
+        if (statSync(statePath).size > 32_768) throw new Error('Studio state is too large.');
+        const state = sanitize(JSON.parse(readFileSync(statePath, 'utf8')));
+        if (!state) throw new Error('Studio state does not match the public schema.');
+        response.statusCode = 200;
+        response.end(JSON.stringify(state));
+      } catch {
+        response.statusCode = 422;
+        response.end('{"error":"Invalid studio state."}');
+      }
+    });
+  };
+
+  return {
+    name: 'studio-state',
+    configureServer: server => installMiddleware(server.middlewares),
+    configurePreviewServer: server => installMiddleware(server.middlewares),
+  };
 }
 
 function runtimeEvidencePlugin(): Plugin {
@@ -293,9 +360,16 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    plugins: [runtimeEvidencePlugin(), roadDataPlugin(), csdiRegionPlugin(apiKey)],
+    plugins: [studioStatePlugin(), runtimeEvidencePlugin(), roadDataPlugin(), csdiRegionPlugin(apiKey)],
     build: {
       chunkSizeWarningLimit: 750,
+      rollupOptions: {
+        input: {
+          app: resolve(process.cwd(), 'index.html'),
+          studio: resolve(process.cwd(), 'studio.html'),
+          cityStyle: resolve(process.cwd(), 'city-style.html'),
+        },
+      },
     },
     server: {
       host: '127.0.0.1',

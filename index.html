@@ -28,8 +28,8 @@
           <fieldset class="bird-picker">
             <legend>測試鳥類</legend>
             <label><input type="radio" name="bird-profile" value="pigeon" checked /><span><strong>香港白鴿</strong><small>Blender GLB · 城市巡航</small></span></label>
-            <label><input type="radio" name="bird-profile" value="black-kite" /><span><strong>黑鳶 Prototype</strong><small>寬翼 · 滑翔測試</small></span></label>
-            <label><input type="radio" name="bird-profile" value="sparrow" /><span><strong>樹麻雀 Prototype</strong><small>輕量 · 快速轉向</small></span></label>
+            <label><input type="radio" name="bird-profile" value="dove" /><span><strong>白鴿</strong><small>dove.glb · 城市巡航</small></span></label>
+            <label><input type="radio" name="bird-profile" value="eagle" /><span><strong>鷹</strong><small>eagle.glb · 高空滑翔</small></span></label>
           </fieldset>
           <fieldset class="region-picker">
             <legend>飛行地區</legend>
@@ -42,6 +42,7 @@
             </label>
           </fieldset>
           <button id="start-button" class="primary-button" type="button">開始飛行</button>
+          <button id="google-maps-button" class="secondary-button google-maps-button" type="button" hidden>Google Maps 3D</button>
         </div>
         <div class="menu-meta">
           <span>飛行地區 01 · 大埔</span>
@@ -92,6 +93,15 @@
           <span id="map-state-value">TAI PO · CSDI LIVE</span>
         </div>
       </section>
+
+      <aside id="google-maps-panel" class="google-maps-panel" aria-label="Google Maps CSDI 3D" hidden>
+        <div class="google-maps-toolbar">
+          <strong>GOOGLE MAPS / LANDSD CSDI</strong>
+          <button id="google-maps-close-button" class="secondary-button" type="button">關閉</button>
+        </div>
+        <div id="google-maps-canvas" class="google-maps-canvas"></div>
+        <p id="google-maps-status" class="google-maps-status"></p>
+      </aside>
 
       <div id="controls-hint" class="controls-hint" hidden>
         <span>滑鼠 / WASD</span> 轉向 · <span>滾輪 / Shift</span> 加速 · <span>Space</span> 拍翼

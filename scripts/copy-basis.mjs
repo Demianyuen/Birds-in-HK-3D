@@ -3,10 +3,22 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const source = join(projectRoot, 'node_modules', 'three', 'examples', 'jsm', 'libs', 'basis');
-const destination = join(projectRoot, 'public', 'basis');
-mkdirSync(destination, { recursive: true });
+const copySets = [
+  {
+    source: join(projectRoot, 'node_modules', 'three', 'examples', 'jsm', 'libs', 'basis'),
+    destination: join(projectRoot, 'public', 'basis'),
+    files: ['basis_transcoder.js', 'basis_transcoder.wasm'],
+  },
+  {
+    source: join(projectRoot, 'node_modules', 'three', 'examples', 'jsm', 'libs', 'draco', 'gltf'),
+    destination: join(projectRoot, 'public', 'draco', 'gltf'),
+    files: ['draco_decoder.js', 'draco_decoder.wasm', 'draco_wasm_wrapper.js'],
+  },
+];
 
-for (const filename of ['basis_transcoder.js', 'basis_transcoder.wasm']) {
-  copyFileSync(join(source, filename), join(destination, filename));
+for (const copySet of copySets) {
+  mkdirSync(copySet.destination, { recursive: true });
+  for (const filename of copySet.files) {
+    copyFileSync(join(copySet.source, filename), join(copySet.destination, filename));
+  }
 }

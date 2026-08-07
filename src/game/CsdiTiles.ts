@@ -82,7 +82,6 @@ export class CsdiTiles {
       .detectSupport(renderer);
     this.tiles = tiles;
     this.ktx2Loader = ktx2Loader;
-    tiles.optimizeRaycast = true;
     tiles.errorTarget = 16;
     tiles.loadAncestors = true;
     tiles.displayActiveTiles = true;

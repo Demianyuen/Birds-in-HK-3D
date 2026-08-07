@@ -11,6 +11,8 @@
     "qa:assets": "node scripts/verify-runtime-assets.mjs",
     "qa:report": "node scripts/runtime-report.mjs",
     "qa:runtime": "node scripts/verify-runtime-session.mjs",
+    "qa:city-assets": "node scripts/verify-city-models.mjs",
+    "studio:state": "node scripts/set-studio-state.mjs",
     "check": "tsc --noEmit && vitest run",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"

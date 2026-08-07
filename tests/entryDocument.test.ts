@@ -16,6 +16,10 @@ describe('game entry document', () => {
       'start-button',
       'retry-button',
       'region-button',
+      'google-maps-button',
+      'google-maps-panel',
+      'google-maps-canvas',
+      'google-maps-close-button',
     ]) {
       expect(html).toContain(`id="${id}"`);
     }
@@ -24,8 +28,8 @@ describe('game entry document', () => {
   it('offers three explicit bird performance profiles', () => {
     expect(countMatches(html, /name="bird-profile"/g)).toBe(3);
     expect(html).toMatch(/value="pigeon"\s+checked/);
-    expect(html).toContain('value="black-kite"');
-    expect(html).toContain('value="sparrow"');
+    expect(html).toContain('value="dove"');
+    expect(html).toContain('value="eagle"');
   });
 
   it('keeps the server-managed API credential out of the interface', () => {

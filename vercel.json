@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/csdi-region/:path*", "destination": "/api/proxy?service=csdi-region&path=:path*" },
+    { "source": "/csdi-3d/:path*", "destination": "/api/proxy?service=csdi-3d&path=:path*" },
+    { "source": "/landsd-map/:path*", "destination": "/api/proxy?service=landsd-map&path=:path*" },
+    { "source": "/terrain-elevation/:path*", "destination": "/api/proxy?service=terrain-elevation&path=:path*" },
+    { "source": "/road-data/:path*", "destination": "/api/proxy?service=road-data&path=:path*" }
+  ]
+}

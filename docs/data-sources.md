@@ -50,6 +50,27 @@ Confirm final Terrarium public-release attribution and redistribution requiremen
 - Generator: `tools/blender/build_pigeon.py`
 - Visual QA: `production/playtests/pigeon-preview.png`
 
+## Dove and Eagle
+
+- Runtime paths: `public/models/dove.glb`, `public/models/eagle.glb`
+- Local provenance: imported from the existing `C:\Users\kin16\Bird-in-HK\models` checkout after GLB-header validation; this is a development provenance record, not an upstream licence assertion.
+- SHA-256: `dove.glb` = `1D426EF48548669B97CFC1052D00F04BBC6F80183C0AD400EC406A93D1730686`; `eagle.glb` = `7B08841A6BFB90C6DF4AF54A42D193A9C70C3BD1377FE3BA703AFD6655F0F4EA`.
+- Runtime note: the loader accepts models without named wing pivots, so these assets render with the profile's safe idle animation until their rig metadata is confirmed.
+- Required before release: confirm the exact upstream URL, licence, author attribution, and any animation limitations.
+
+## Google Maps Interoperability
+
+- The in-game 3D model remains the LandsD CSDI WGS84 tileset; it is not replaced by Google building data.
+- `src/integrations/GoogleMapsCsdiOverlay.ts` mounts the same official CSDI building and infrastructure layers in a Google Maps `WebGLOverlayView`, anchored at the selected flight region's WGS84 latitude, longitude, and altitude origin.
+- Enable it only with a browser-origin-restricted Google Maps JavaScript API key and a vector map ID in `VITE_GOOGLE_MAPS_API_KEY` and `VITE_GOOGLE_MAP_ID`. The supplied configuration provides project identifiers only, so the integration stays hidden until both settings exist.
+- Never send the CSDI credential to Google Maps. The overlay requests CSDI only through this project's same-origin server proxy, then resets the shared WebGL state after every draw.
+
+## Three.js Assets City Style Study
+
+The separate `/city-style.html` scene loads 16 authenticated Free GLBs as a composed village-and-city study. They do not replace or supplement LandsD CSDI buildings in the flight world.
+
+See [Three.js Assets Free Collection](threejs-assets.md) for every official asset URL, category, local runtime path, intended use, byte size, SHA-256, and the Free Commercial License restrictions. The standalone GLBs are ignored by Git and `npm run qa:city-assets` verifies the complete local collection.
+
 ## BlenderGIS Evaluation
 
 - Status: evaluated, not installed as a runtime dependency

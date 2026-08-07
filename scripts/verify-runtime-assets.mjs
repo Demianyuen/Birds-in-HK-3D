@@ -16,6 +16,16 @@ const assets = [
     validate: data => data.subarray(0, 4).toString('ascii') === 'glTF',
   },
   {
+    name: 'Dove GLB',
+    path: '/models/dove.glb',
+    validate: data => data.subarray(0, 4).toString('ascii') === 'glTF',
+  },
+  {
+    name: 'Eagle GLB',
+    path: '/models/eagle.glb',
+    validate: data => data.subarray(0, 4).toString('ascii') === 'glTF',
+  },
+  {
     name: 'Basis transcoder JavaScript',
     path: '/basis/basis_transcoder.js',
     validate: data => data.length > 10_000,
