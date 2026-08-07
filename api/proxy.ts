@@ -66,7 +66,7 @@ async function buildUpstreamUrl(service: Exclude<Service, 'csdi-region'>, route:
     return url.toString();
   }
   if (service === 'landsd-map') {
-    const match = cleanRoute.match(/^(basemap|imagery)\/WGS84\/(.+)$/);
+    const match = cleanRoute.match(/^(basemap|imagery)\/(.+)$/);
     if (!match) throw new Error('Invalid LandsD map route.');
     const url = new URL(`/gs/api/v1.0.0/xyz/${match[1]}/WGS84/${match[2]}`, LANDSD_ORIGIN);
     addCsdiKey(url);
