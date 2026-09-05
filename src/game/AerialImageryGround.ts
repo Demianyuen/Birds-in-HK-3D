@@ -8,6 +8,7 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { FlightRegion } from './regions';
+import { loadDetailTiles } from './detailTiles';
 
 const EARTH_CIRCUMFERENCE_METRES = 40_075_016.686;
 const SURFACE_ZOOM = 14;
@@ -54,6 +55,12 @@ export class AerialImageryGround {
   private activeElevationTiles = new Map<string, Uint8ClampedArray>();
   private activeSurfaceCenter: { x: number; y: number } | null = null;
   private activeTileWidthMetres = 0;
+  private readonly surfaceMaterials = new Map<string, { request: TileRequest; material: MeshStandardMaterial; base: CanvasTexture }>();
+  private readonly detailTextures = new Map<string, CanvasTexture>();
+  private readonly detailFailures = new Map<string, number>();
+  private detailJob: AbortController | null = null;
+  private generation = 0;
+  public detailPatchesLoaded = 0;
 
   public constructor() {
     this.group.name = 'Hong Kong elevation terrain';
@@ -93,7 +100,76 @@ export class AerialImageryGround {
     return this.groundMetrics;
   }
 
+  public updateDetailNear(worldX: number, worldZ: number, mobile: boolean): void {
+    if (!this.activeSurfaceCenter || this.detailJob) return;
+    const x = Math.floor(this.activeSurfaceCenter.x + worldX / this.activeTileWidthMetres);
+    const y = Math.floor(this.activeSurfaceCenter.y + worldZ / this.activeTileWidthMetres);
+    const key = `${x}/${y}`;
+    const surface = this.surfaceMaterials.get(key);
+    if (!surface) return;
+    const cached = this.detailTextures.get(key);
+    if (cached) {
+      this.detailTextures.delete(key);
+      this.detailTextures.set(key, cached);
+      return;
+    }
+    if (Date.now() - (this.detailFailures.get(key) ?? 0) < 60_000) return;
+    const controller = new AbortController();
+    this.detailJob = controller;
+    const generation = this.generation;
+    void this.loadDetailTexture(surface.request, mobile ? 16 : 17, controller.signal).then(texture => {
+      if (generation !== this.generation) { texture?.dispose(); return; }
+      if (!texture) { this.detailFailures.set(key, Date.now()); return; }
+      surface.material.map = texture;
+      surface.material.needsUpdate = true;
+      this.detailTextures.set(key, texture);
+      this.detailPatchesLoaded++;
+      // Keep at most two high-resolution patches, reverting evicted patches to their base.
+      while (this.detailTextures.size > 2) {
+        const oldest = this.detailTextures.keys().next().value!;
+        const entry = this.surfaceMaterials.get(oldest);
+        if (entry) { entry.material.map = entry.base; entry.material.needsUpdate = true; }
+        this.detailTextures.get(oldest)!.dispose();
+        this.detailTextures.delete(oldest);
+      }
+    }).catch(() => {
+      if (generation === this.generation) this.detailFailures.set(key, Date.now());
+    }).finally(() => { if (this.detailJob === controller) this.detailJob = null; });
+  }
+
+  private async loadDetailTexture(request: TileRequest, zoom: number, signal: AbortSignal): Promise<CanvasTexture | null> {
+    const scale = 2 ** (zoom - SURFACE_ZOOM);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = TERRAIN_TILE_SIZE * scale;
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    const complete = await loadDetailTiles(request.x, request.y, scale, async (x, y, dx, dy) => {
+      if (signal.aborted) return false;
+      const response = await fetch(`/landsd-map/basemap/${zoom}/${x}/${y}.png`, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
+      });
+      if (!response.ok) return false;
+      const bitmap = await createImageBitmap(await response.blob());
+      try { context.drawImage(bitmap, dx * TERRAIN_TILE_SIZE, dy * TERRAIN_TILE_SIZE, TERRAIN_TILE_SIZE, TERRAIN_TILE_SIZE); }
+      finally { bitmap.close(); }
+      return !signal.aborted;
+    });
+    if (!complete || signal.aborted) return null;
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    texture.anisotropy = 4;
+    return texture;
+  }
+
   private clearTiles(): void {
+    this.generation++;
+    this.detailJob?.abort();
+    this.detailJob = null;
+    for (const texture of this.detailTextures.values()) texture.dispose();
+    this.detailTextures.clear();
+    this.surfaceMaterials.clear();
+    this.detailFailures.clear();
+    this.detailPatchesLoaded = 0;
     this.group.clear();
     for (const resource of this.resources) resource.dispose();
     this.resources.clear();
@@ -140,6 +216,7 @@ export class AerialImageryGround {
         metalness: 0,
       }));
       const tile = new Mesh(geometry, material);
+      this.surfaceMaterials.set(`${request.x}/${request.y}`, { request, material, base: basemapTextures[index]! });
       tile.position.set(request.worldX, 0.16, request.worldZ);
       tile.receiveShadow = true;
       this.group.add(tile);

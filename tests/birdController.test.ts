@@ -9,6 +9,30 @@ afterEach(() => {
 });
 
 describe('bird collision and perching', () => {
+  it.each([
+    ['yawLeft', 'NW', -1],
+    ['yawRight', 'NE', 1],
+  ] as const)('reports compass heading consistent with %s world movement', (control, heading, xSign) => {
+    const bird = new BirdController();
+    bird.setEnabled(true);
+    bird.setControl(control, true);
+    for (let index = 0; index < 12; index++) bird.update(0.05, null);
+    expect(Math.sign(bird.object.position.x)).toBe(xSign);
+    expect(bird.object.position.z).toBeLessThan(320);
+    expect(bird.getTelemetry().heading).toBe(heading);
+  });
+  it('restores a saved session location and perched state without held flight input', () => {
+    const bird = new BirdController();
+    bird.setControl('yawLeft', true);
+    bird.restoreSessionPose({
+      id: 'returning', name: '同伴', position: [120, 80, -50], quaternion: [0, 0, 0, 1], perched: true,
+    });
+    expect(bird.object.position.toArray()).toEqual([120, 80, -50]);
+    bird.setEnabled(true);
+    bird.update(0.05, null);
+    expect(bird.getTelemetry().state).toBe('PERCHED');
+    expect(bird.getTelemetry().heading).toBe('N');
+  });
   it('stops before a building surface at maximum flight speed', () => {
     const bird = new BirdController();
     const wall = createWall(316.5);

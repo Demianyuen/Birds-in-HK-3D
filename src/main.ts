@@ -1,4 +1,6 @@
 import './styles.css';
+import { WorldPanel } from './multiplayer/WorldPanel';
+import { TouchFlightControls } from './game/TouchFlightControls';
 import { transitionFlow, type ScreenName } from './app/flow';
 import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
 import { BirdsInHkGame, type GameTelemetry } from './game/BirdsInHkGame';
@@ -33,9 +35,12 @@ const speedValue = requireElement<HTMLElement>('speed-value');
 const headingValue = requireElement<HTMLElement>('heading-value');
 const flightState = requireElement<HTMLElement>('flight-state');
 const fpsValue = requireElement<HTMLElement>('fps-value');
+const groundDetail = requireElement<HTMLElement>('ground-detail');
 const gameHud = requireElement<HTMLElement>('game-hud');
 const controlsHint = requireElement<HTMLElement>('controls-hint');
 const mapStateValue = requireElement<HTMLElement>('map-state-value');
+const buildingPresentation = requireElement<HTMLSelectElement>('building-presentation');
+const buildingPresentationNote = requireElement<HTMLElement>('building-presentation-note');
 const screens: Record<Exclude<ScreenName, 'game'>, HTMLElement> = {
   boot: requireElement<HTMLElement>('boot-screen'),
   menu: requireElement<HTMLElement>('menu-screen'),
@@ -56,6 +61,23 @@ let lastPerformanceReport = 0;
 let googleMapsOverlay: GoogleMapsCsdiOverlay | null = null;
 const googleMapsConfigured = configuredGoogleMaps() !== null;
 const game = new BirdsInHkGame(canvas, updateTelemetry);
+const worldEndpoint = import.meta.env.VITE_WORLD_SERVER_URL
+  || (import.meta.env.DEV ? 'ws://127.0.0.1:8787/world' : undefined);
+const worldPanel = new WorldPanel(game, worldEndpoint);
+app.append(worldPanel.element);
+const touchControls = new TouchFlightControls(game);
+app.append(touchControls.element);
+worldPanel.element.addEventListener('toggle', () => {
+  touchControls.setVisible(currentScreen === 'game' && !worldPanel.element.open);
+});
+buildingPresentation.addEventListener('change', () => {
+  const mode = buildingPresentation.value === 'reference' ? 'reference' : 'preservation';
+  game.setBuildingPresentation(mode);
+  buildingPresentationNote.textContent = mode === 'reference'
+    ? 'CSDI 來源材質；不代表初建成或今日現況。地形、光照與碰撞保持相同。'
+    : '現為 CSDI 幾何的美術預覽，尚非初建成外觀還原。配色與窗格屬藝術補足。';
+  game.clearControls();
+});
 
 continueButton.addEventListener('click', () => showScreen(transitionFlow(currentScreen, 'continue')));
 startButton.addEventListener('click', () => void beginFlight());
@@ -76,11 +98,13 @@ document.addEventListener('mousemove', event => {
 });
 
 window.addEventListener('wheel', event => {
-  if (currentScreen === 'game') game.adjustSpeed(event.deltaY < 0 ? 1 : -1);
+  if (currentScreen === 'game' && event.target === canvas) game.adjustSpeed(event.deltaY < 0 ? 1 : -1);
 }, { passive: true });
 
 window.addEventListener('keydown', event => {
   if (currentScreen !== 'game') return;
+  if (event.target instanceof HTMLElement && (event.target.closest('.world-panel') || event.target.isContentEditable
+    || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(event.target.tagName))) return;
   if (event.code === 'Space') {
     event.preventDefault();
     game.flap();
@@ -99,9 +123,11 @@ window.addEventListener('keyup', event => {
 });
 
 window.addEventListener('beforeunload', () => {
+  worldPanel.dispose();
   closeGoogleMapsContext();
   game.dispose();
 });
+window.addEventListener('blur', () => { game.clearControls(); touchControls.releaseAll(); });
 showScreen('boot');
 
 async function beginFlight(): Promise<void> {
@@ -167,11 +193,13 @@ function updateLoading(progress: MapLoadProgress): void {
 }
 
 function updateTelemetry(telemetry: GameTelemetry): void {
+  worldPanel.update();
   altitudeValue.textContent = `${Math.max(0, Math.round(telemetry.altitude))} m`;
   speedValue.textContent = `${Math.round(telemetry.speedKmh)} km/h`;
   headingValue.textContent = telemetry.heading;
   flightState.textContent = telemetry.state;
   fpsValue.textContent = `${Math.round(telemetry.fps)}`;
+  groundDetail.textContent = telemetry.detailPatchesLoaded > 0 ? '附近高清底圖已載入' : '完整底圖 · 正在補充附近細節';
   if (telemetry.state !== lastReportedFlightState) {
     lastReportedFlightState = telemetry.state;
     reportRuntimeEvent('flight.state', {
@@ -224,6 +252,8 @@ function showScreen(screen: ScreenName): void {
   const inGame = screen === 'game';
   gameHud.hidden = !inGame;
   controlsHint.hidden = !inGame;
+  worldPanel.element.hidden = !inGame;
+  touchControls.setVisible(inGame && !worldPanel.element.open);
   reportRuntimeEvent(`screen.${screen}`);
 }
 

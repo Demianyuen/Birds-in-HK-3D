@@ -1,6 +1,6 @@
 export type CityStyleCategory = 'building' | 'environment' | 'street';
 export type ModelScaleAxis = 'height' | 'horizontal' | 'longest';
-export type ModelAnimation = 'cloud' | 'fire' | 'water';
+export type ModelAnimation = 'cloud' | 'water';
 
 export interface CityStyleModel {
   id: string;
@@ -241,21 +241,6 @@ export const CITY_STYLE_MODELS = [
     scaleAxis: 'height',
     position: [0, 0, 18],
     rotationY: 0.08,
-    ...license,
-  },
-  {
-    id: 'fire-brazier',
-    label: 'Fire Brazier',
-    category: 'street',
-    role: '夜間暖光焦點',
-    featured: false,
-    modelPath: '/models/city-style/street/fire-brazier.glb',
-    sourceUrl: 'https://threejsassets.com/assets/fire-brazier',
-    targetSizeMetres: 1.5,
-    scaleAxis: 'height',
-    position: [-14, 0, 18],
-    rotationY: 0,
-    animation: 'fire',
     ...license,
   },
 ] as const satisfies readonly CityStyleModel[];

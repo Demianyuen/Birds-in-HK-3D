@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "world:server": "tsx server/main.ts",
+    "world:build": "tsc --noEmit && node scripts/build-world-server.mjs",
+    "world:start": "node dist-server/world.mjs",
+    "qa:world-bundle": "node scripts/verify-world-bundle.mjs",
+    "qa:multiplayer": "vitest run tests/multiplayerServer.test.ts",
+    "qa:world-load": "tsx server/load-test.ts",
     "postinstall": "node scripts/copy-basis.mjs",
     "asset:pigeon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-pigeon.ps1",
     "dev": "vite",
@@ -21,11 +27,16 @@
     "@mapbox/vector-tile": "^2.0.5",
     "3d-tiles-renderer": "0.4.28",
     "pbf": "^4.0.2",
-    "three": "0.170.0"
+    "three": "0.170.0",
+    "ws": "8.21.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "22.10.5",
     "@types/three": "0.170.0",
+    "@types/ws": "8.18.1",
+    "esbuild": "0.25.12",
+    "tsx": "4.23.13",
     "typescript": "5.6.3",
     "vite": "6.2.2",
     "vitest": "2.1.9"

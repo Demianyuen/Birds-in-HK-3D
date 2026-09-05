@@ -11,11 +11,10 @@ export type ModelLoadState =
 export type ModelStatusHandler = (model: CityStyleModel, result: ModelLoadState) => void;
 
 interface AnimatedModel {
-  kind: 'cloud' | 'fire' | 'water';
+  kind: 'cloud' | 'water';
   group: THREE.Group;
   home: THREE.Vector3;
   homeRotationY: number;
-  light?: THREE.PointLight;
 }
 
 export class CityStyleWorld {
@@ -237,13 +236,6 @@ export class CityStyleWorld {
       home: group.position.clone(),
       homeRotationY: group.rotation.y,
     };
-    if (model.animation === 'fire') {
-      const light = new THREE.PointLight(0xff8b45, 5.5, 18, 1.8);
-      light.position.set(0, 2.3, 0);
-      light.castShadow = true;
-      group.add(light);
-      animated.light = light;
-    }
     this.animatedModels.push(animated);
   }
 
@@ -271,8 +263,6 @@ export class CityStyleWorld {
         animated.group.position.y = animated.home.y + Math.sin(elapsed * 0.16) * 1.2;
       } else if (animated.kind === 'water') {
         animated.group.rotation.y = animated.homeRotationY + Math.sin(elapsed * 0.18) * 0.025;
-      } else if (animated.light) {
-        animated.light.intensity = 5.2 + Math.sin(elapsed * 5.3) * 0.8 + Math.sin(elapsed * 8.7) * 0.35;
       }
     }
     this.controls.update();

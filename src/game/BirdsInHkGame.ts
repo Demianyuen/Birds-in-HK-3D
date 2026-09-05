@@ -28,6 +28,9 @@ import { getFlightRegion, type FlightRegionId } from './regions';
 import { RoadNetwork, type RoadNetworkMetrics } from './RoadNetwork';
 import { getBirdProfile, type BirdProfileId } from './birdProfiles';
 import { evaluateWorldReadiness } from './worldReadiness';
+import type { BuildingPresentation } from './BuildingMaterial';
+import { RemoteBirds } from '../multiplayer/RemoteBirds';
+import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 
 type GameMode = 'attract' | 'loading' | 'playing';
 export interface GameTelemetry extends FlightTelemetry {
@@ -40,6 +43,7 @@ export interface GameTelemetry extends FlightTelemetry {
   };
   roads: Readonly<RoadNetworkMetrics>;
   ground: Readonly<OfficialGroundMetrics>;
+  detailPatchesLoaded: number;
 }
 
 export class BirdsInHkGame {
@@ -48,6 +52,7 @@ export class BirdsInHkGame {
   private readonly renderer: WebGLRenderer;
   private readonly clock = new Clock();
   private readonly bird = new BirdController();
+  private readonly remoteBirds = new RemoteBirds();
   private readonly city = new CsdiTiles('building');
   private readonly infrastructure = new CsdiTiles('infrastructure');
   private readonly officialWorldRoot = new Group();
@@ -94,6 +99,7 @@ export class BirdsInHkGame {
     this.scene.add(this.sun);
     this.configureSky();
     this.scene.add(this.bird.object);
+    this.scene.add(this.remoteBirds.group);
     this.scene.add(this.aerialGround.group);
     this.scene.add(this.roads.group);
     this.officialWorldRoot.name = 'Official CSDI 3D world';
@@ -208,6 +214,38 @@ export class BirdsInHkGame {
     this.bird.setBirdProfile(profileId);
   }
 
+  public syncPlayers(players: readonly WorldPlayer[]): void {
+    this.remoteBirds.sync(players);
+  }
+
+  public setBuildingPresentation(mode: BuildingPresentation): void {
+    this.city.setPresentation(mode);
+  }
+
+  public getNetworkPose(): { position: Position; quaternion: Rotation; perched: boolean } {
+    return {
+      position: this.bird.object.position.toArray() as Position,
+      quaternion: this.bird.object.quaternion.toArray() as Rotation,
+      perched: this.bird.getTelemetry().state === 'PERCHED',
+    };
+  }
+
+  public resetFlight(): void {
+    this.bird.reset();
+    this.bird.updateCamera(this.camera, 1);
+  }
+
+  public restoreSessionPose(player: WorldPlayer): void {
+    this.bird.restoreSessionPose(player);
+    this.bird.updateCamera(this.camera, 1);
+  }
+
+  public clearControls(): void {
+    for (const control of ['yawLeft', 'yawRight', 'pitchUp', 'pitchDown', 'accelerate', 'decelerate'] as const) {
+      this.bird.setControl(control, false);
+    }
+  }
+
   public steer(deltaX: number, deltaY: number): void {
     this.bird.steer(deltaX, deltaY);
   }
@@ -231,6 +269,7 @@ export class BirdsInHkGame {
     this.infrastructure.dispose();
     this.aerialGround.dispose();
     this.roads.dispose();
+    this.remoteBirds.dispose();
     this.renderer.dispose();
   }
 
@@ -288,6 +327,8 @@ export class BirdsInHkGame {
     if (this.mode === 'playing') {
       this.bird.update(deltaSeconds, [this.aerialGround.group, this.officialWorldRoot]);
       this.bird.updateCamera(this.camera, deltaSeconds);
+      this.remoteBirds.update(deltaSeconds);
+      this.aerialGround.updateDetailNear(this.bird.object.position.x, this.bird.object.position.z, window.innerWidth < 720);
     } else {
       this.bird.pigeon.animate(deltaSeconds, 18, false);
       this.bird.object.position.set(
@@ -312,6 +353,7 @@ export class BirdsInHkGame {
         buildingMaterials: this.city.materials,
         roads: this.roads.metrics,
         ground: this.aerialGround.metrics,
+        detailPatchesLoaded: this.aerialGround.detailPatchesLoaded,
       });
     }
   };

@@ -1,6 +1,6 @@
 # Three.js Assets Free Collection
 
-All 16 models were downloaded through the authenticated Free download flow on 2026-07-22. Every asset page returned HTTP 200 and explicitly displayed `Free Commercial License` and `GLB` at verification time.
+Originally 16 models were downloaded through the authenticated Free download flow on 2026-07-22. The active collection now contains 15 models under the user-required no-fire policy. The retired asset's provenance remains below for audit only; it is no longer in the public directory or runtime catalogue. Every asset page returned HTTP 200 and explicitly displayed `Free Commercial License` and `GLB` at the original verification time.
 
 Licence: [Three.js Assets Free Commercial License](https://threejsassets.com/license#free-asset-license). The licence permits use and modification in personal, open-source, educational, client, commercial, game, app, website, video, and shipped-product work. Attribution is not required. Resale, sublicensing, mirroring, sharing, repackaging, or redistribution as standalone asset files or packs is prohibited. The GLBs are therefore ignored by Git and must be obtained through an authorized account.
 
@@ -21,6 +21,6 @@ Licence: [Three.js Assets Free Commercial License](https://threejsassets.com/lic
 | Street | `street/road-cobble-straight-01.glb` | [Road Cobble Straight 01](https://threejsassets.com/assets/road-cobble-straight-01) | 7,840 | `E8962000911C83080EEED300724173C4F81EDE0410B2BBF824CFF2B22D6043C5` | Main district street |
 | Street | `street/bench-01.glb` | [Bench 01](https://threejsassets.com/assets/bench-01) | 3,320 | `33CDC9258296465F72AB2B625C9F357CE5A8C9F6ABD9C454733A9E2593B6B1B9` | Public resting point |
 | Street | `street/trash-bin-01.glb` | [Trash Bin 01](https://threejsassets.com/assets/trash-bin-01) | 4,036 | `8D2EC16A7E157AE200D1E470C0F7776A1A2407171A0AB3C3F176EFB6B6A43E40` | Street sanitation detail |
-| Street | `street/fire-brazier.glb` | [Fire Brazier](https://threejsassets.com/assets/fire-brazier) | 5,836 | `0C85FBE84FEFC9207F0BF95B155A9BA722F60FD2D0DF88015BF3F0065279A560` | Pulsing warm-light focal point |
+| Retired (not public) | `runtime-evidence/retired-assets/fire-brazier.glb` | [Fire Brazier](https://threejsassets.com/assets/fire-brazier) | 5,836 | `0C85FBE84FEFC9207F0BF95B155A9BA722F60FD2D0DF88015BF3F0065279A560` | Archived only; never load or deploy |
 
 Runtime paths are relative to `public/models/city-style/`. `npm run qa:city-assets` validates every GLB header, declared binary length, and exact SHA-256.

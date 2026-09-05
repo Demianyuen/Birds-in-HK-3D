@@ -8,7 +8,7 @@ import {
 import { Box3, Frustum, MathUtils, Matrix4, Material, Mesh, Plane, Sphere, Vector3 } from 'three';
 import type { Object3D, PerspectiveCamera, WebGLRenderer } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
-import { createRenderedBuildingMaterial } from './BuildingMaterial';
+import { setBuildingPresentation, type BuildingPresentation } from './BuildingMaterial';
 import { geodeticToEcef } from './geo';
 import type { FlightRegion } from './regions';
 
@@ -44,6 +44,7 @@ export class CsdiTiles {
   private lastVisibilityCheck = 0;
   private materialMetrics: CsdiMaterialMetrics = { meshes: 0, materials: 0, texturedMaterials: 0 };
   private readonly renderedMaterials = new WeakSet<Material>();
+  private presentation: BuildingPresentation = 'preservation';
 
   public constructor(private readonly layerName: CsdiLayerName = 'building') {}
 
@@ -146,9 +147,10 @@ export class CsdiTiles {
             }
             if (this.layerName === 'building' && !this.renderedMaterials.has(material)) {
               this.renderedMaterials.add(material);
-              createRenderedBuildingMaterial(
+              setBuildingPresentation(
                 material,
                 `${event.url}/${object.name}/${materialIndex}`,
+                this.presentation,
               );
             }
             applyRegionClipping(material, regionClippingPlanes);
@@ -217,6 +219,22 @@ export class CsdiTiles {
         detail: this.tiles.rootTileset ? 'Matching tile detail to the current camera.' : 'Waiting for the official tileset index.',
         percent: Math.max(20, 35 + networkPercent),
         modelsLoaded: this.modelsLoaded,
+      });
+    }
+  }
+
+  public setPresentation(mode: BuildingPresentation): void {
+    this.presentation = mode;
+    if (this.layerName !== 'building') return;
+    const visited = new Set<Material>();
+    for (const model of this.loadedModels) {
+      model.traverse(object => {
+        if (!(object instanceof Mesh)) return;
+        for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+          if (visited.has(material)) continue;
+          visited.add(material);
+          setBuildingPresentation(material, object.name, mode);
+        }
       });
     }
   }

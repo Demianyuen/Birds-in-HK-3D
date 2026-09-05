@@ -1,0 +1,52 @@
+{
+  "purpose": "Initial-occupation preservation reconstruction, separate from official CSDI reference rendering",
+  "retrievedLocalDate": "2026-09-06",
+  "retrievedTimezone": "Asia/Hong_Kong",
+  "source": {
+    "publisher": "Hong Kong Housing Authority",
+    "page": "https://www.housingauthority.gov.hk/tc/global-elements/estate-locator/detail.html?dist=2&id=1321347387475&propId=2",
+    "data": "https://www.housingauthority.gov.hk/json/property-location/detail/HOS/2.json",
+    "discoveryScript": "https://www.housingauthority.gov.hk/js/load-estate-locator-detail.js",
+    "recordId": 3085,
+    "aplySysId": "1321347387475",
+    "revisionAsPublished": "8-12-2025"
+  },
+  "verifiedRecordFields": {
+    "name": "宏福苑",
+    "englishName": "Wang Fuk Court",
+    "intakeYear": "1983",
+    "blockCount": 8,
+    "blockType": "彈性十字二型",
+    "englishBlockType": "Flexi 2",
+    "estateMarker": {
+      "latitude": 22.44662,
+      "longitude": 114.17543,
+      "meaning": "Publisher's estate locator marker, not a surveyed block corner or a replacement game origin"
+    },
+    "blocksInPublishedOrder": [
+      { "name": "宏仁閣", "englishName": "Wang Yan House" },
+      { "name": "宏道閣", "englishName": "Wang Tao House" },
+      { "name": "宏新閣", "englishName": "Wang Sun House" },
+      { "name": "宏建閣", "englishName": "Wang Kin House" },
+      { "name": "宏泰閣", "englishName": "Wang Tai House" },
+      { "name": "宏昌閣", "englishName": "Wang Cheong House" },
+      { "name": "宏盛閣", "englishName": "Wang Shing House" },
+      { "name": "宏志閣", "englishName": "Wang Chi House" }
+    ]
+  },
+  "missingEvidence": [
+    "Original exterior colours and materials at first occupation",
+    "Original windows, entrances, roof details and landscape",
+    "Surveyed footprint, orientation and height for each named block",
+    "Dated original site/floor plans and permitted reproduction terms",
+    "Stable mapping from each block to the runtime CSDI feature or mesh",
+    "Confirmed imagery acquisition date for the CSDI surfaces"
+  ],
+  "conflicts": [
+    "intakeYear means intake/occupation year; do not silently relabel it as a verified construction completion date",
+    "Current record image is empty and furtherInfo is '-'; this retrieval does not substantiate earlier claims that the page supplies floor/site plans",
+    "Published block order does not prove spatial ordering or block-letter assignments",
+    "Modern source revision does not date the historical appearance being reconstructed"
+  ],
+  "useBoundary": "Use verified metadata to identify the estate. Do not invent building dimensions, original finishes, or landmark placements. Preserve the existing CSDI world until block-specific evidence supports a separately labelled reconstruction."
+}

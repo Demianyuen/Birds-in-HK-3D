@@ -128,6 +128,7 @@ export class Pigeon {
   private async loadGlbModel(modelPath: string): Promise<boolean> {
     try {
       const gltf = await new GLTFLoader().loadAsync(modelPath);
+      if (this.profileId === 'pigeon') prepareProjectPigeonModel(gltf.scene);
       const { leftWing, rightWing } = findBirdWingPivots(gltf.scene);
 
       this.disposeCurrentVisual();
@@ -159,6 +160,24 @@ export class Pigeon {
       for (const material of materials) material.dispose();
     });
   }
+}
+
+/** The project Blender export faces +Z after Y-up conversion; flight faces -Z. */
+export function prepareProjectPigeonModel(root: Object3D): void {
+  root.rotation.y = Math.PI;
+  const plumage = new Set([
+    'Warm white plumage', 'Silver breast', 'Charcoal flight feathers',
+    'Slate flight feathers', 'Iridescent green neck', 'Iridescent violet neck',
+  ]);
+  root.traverse(object => {
+    if (!(object instanceof Mesh)) return;
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      if (!(material instanceof MeshStandardMaterial) || !plumage.has(material.name)) continue;
+      material.color.set(material.name.includes('flight feathers') ? '#dfe6e1' : '#f4f5ee');
+      material.metalness = 0;
+      material.roughness = 0.8;
+    }
+  });
 }
 
 export function findPigeonWingPivots(root: Object3D): {

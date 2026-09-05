@@ -13,19 +13,53 @@ const BUILDING_TINTS = [
   new Color('#d1d0c4'),
 ];
 
-export function createRenderedBuildingMaterial(source: Material, identity: string): Material {
-  const material = source;
-  if (!(material instanceof MeshStandardMaterial)) return material;
+export type BuildingPresentation = 'preservation' | 'reference';
+interface SourceAppearance {
+  color: Color;
+  roughness: number;
+  metalness: number;
+  envMapIntensity: number;
+  onBeforeCompile: Material['onBeforeCompile'];
+  customProgramCacheKey: Material['customProgramCacheKey'];
+  identity: string;
+}
+const sourceAppearances = new WeakMap<MeshStandardMaterial, SourceAppearance>();
 
-  const tint = BUILDING_TINTS[stableHash(identity) % BUILDING_TINTS.length];
-  material.color.multiply(tint);
-  material.roughness = Math.min(material.roughness, 0.78);
-  material.metalness = Math.max(material.metalness, 0.02);
-  material.envMapIntensity = 0.72;
-  material.onBeforeCompile = shader => applyFacadeShader(shader);
-  material.customProgramCacheKey = () => 'csdi-rendered-building-v1';
-  material.needsUpdate = true;
-  return material;
+export function setBuildingPresentation(source: Material, identity: string, mode: BuildingPresentation): Material {
+  if (!(source instanceof MeshStandardMaterial)) return source;
+  let original = sourceAppearances.get(source);
+  if (!original) {
+    original = {
+      color: source.color.clone(), roughness: source.roughness, metalness: source.metalness,
+      envMapIntensity: source.envMapIntensity, onBeforeCompile: source.onBeforeCompile,
+      customProgramCacheKey: source.customProgramCacheKey, identity,
+    };
+    sourceAppearances.set(source, original);
+  }
+  source.color.copy(original.color);
+  source.roughness = original.roughness;
+  source.metalness = original.metalness;
+  source.envMapIntensity = original.envMapIntensity;
+  source.onBeforeCompile = original.onBeforeCompile;
+  source.customProgramCacheKey = original.customProgramCacheKey;
+  if (mode === 'preservation') {
+    const tint = BUILDING_TINTS[stableHash(original.identity) % BUILDING_TINTS.length];
+    source.color.multiply(tint);
+    source.roughness = Math.min(source.roughness, 0.78);
+    source.metalness = Math.max(source.metalness, 0.02);
+    source.envMapIntensity = 0.72;
+    source.onBeforeCompile = (shader, renderer) => {
+      original.onBeforeCompile.call(source, shader, renderer);
+      applyFacadeShader(shader);
+    };
+    source.customProgramCacheKey = () => `csdi-rendered-building-v2:${original.customProgramCacheKey.call(source)}`;
+  }
+  source.needsUpdate = true;
+  return source;
+}
+
+export function createRenderedBuildingMaterial(source: Material, identity: string): Material {
+  return setBuildingPresentation(source, identity, 'preservation');
 }
 
 function applyFacadeShader(shader: WebGLProgramParametersWithUniforms): void {

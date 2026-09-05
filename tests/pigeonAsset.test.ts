@@ -1,13 +1,31 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { Group } from 'three';
-import { findPigeonWingPivots } from '../src/game/Pigeon';
+import { Group, Vector3, Mesh, MeshStandardMaterial } from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { findPigeonWingPivots, prepareProjectPigeonModel } from '../src/game/Pigeon';
 
 const assetPath = resolve(process.cwd(), 'public', 'models', 'pigeon.glb');
 
 describe('Blender pigeon asset', () => {
   const data = readFileSync(assetPath);
+
+  it('aligns the actual exported white pigeon with negative-Z flight, not the trailing camera', async () => {
+    const bytes = Uint8Array.from(data);
+    const gltf = await new GLTFLoader().parseAsync(bytes.buffer, '');
+    prepareProjectPigeonModel(gltf.scene);
+    gltf.scene.updateMatrixWorld(true);
+    const beak = gltf.scene.getObjectByName('Beak')!.getWorldPosition(new Vector3());
+    const tail = gltf.scene.getObjectByName('TailFeather03')!.getWorldPosition(new Vector3());
+    expect(beak.z).toBeLessThan(tail.z);
+    const head = gltf.scene.getObjectByName('Head') as Mesh;
+    const material = head.material as MeshStandardMaterial;
+    expect(material.color.r).toBeGreaterThan(0.8);
+    expect(material.color.b).toBeGreaterThan(0.8);
+    prepareProjectPigeonModel(gltf.scene);
+    gltf.scene.updateMatrixWorld(true);
+    expect(gltf.scene.getObjectByName('Beak')!.getWorldPosition(new Vector3()).distanceTo(beak)).toBeLessThan(0.0001);
+  });
 
   it('is a compact binary glTF asset', () => {
     expect(data.subarray(0, 4).toString('ascii')).toBe('glTF');

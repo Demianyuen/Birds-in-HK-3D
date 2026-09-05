@@ -67,7 +67,7 @@ Confirm final Terrarium public-release attribution and redistribution requiremen
 
 ## Three.js Assets City Style Study
 
-The separate `/city-style.html` scene loads 16 authenticated Free GLBs as a composed village-and-city study. They do not replace or supplement LandsD CSDI buildings in the flight world.
+The separate `/city-style.html` scene loads 15 approved Free GLBs as a composed village-and-city study, excluding the retired fire asset. They do not replace or supplement LandsD CSDI buildings in the flight world.
 
 See [Three.js Assets Free Collection](threejs-assets.md) for every official asset URL, category, local runtime path, intended use, byte size, SHA-256, and the Free Commercial License restrictions. The standalone GLBs are ignored by Git and `npm run qa:city-assets` verifies the complete local collection.
 

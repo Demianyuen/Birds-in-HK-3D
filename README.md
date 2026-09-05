@@ -66,7 +66,7 @@ See `docs/studio-roadmap.md` for the public state schema and Hermes bridge bound
 
 ## City Style Lab
 
-Open `/city-style.html` to inspect 16 authenticated Free assets from Three.js Assets as a composed village-and-city scene. Buildings, environment pieces, and street furniture share consistent metre-based sizing, ground placement, shadows, and lighting; cloud, water, and fire elements add restrained motion. The page is a visual-language study only: official LandsD CSDI remains the sole building source in the flight world.
+Open `/city-style.html` to inspect 15 approved Free assets from Three.js Assets as a composed village-and-city scene. Buildings, environment pieces, and street furniture share consistent metre-based sizing, ground placement, shadows, and lighting; cloud and water elements add restrained motion. No fire assets or effects are included. The page is a visual-language study only: official LandsD CSDI remains the sole building source in the flight world.
 
 The locally downloaded GLBs are ignored by Git because the Free Commercial License permits use in a shipped website but prohibits redistributing the standalone asset files. After downloading them through your Three.js Assets account, verify their binary headers, declared lengths, and SHA-256 values with:
 

@@ -18,7 +18,6 @@ const assets = [
   ['Road Cobble Straight 01', 'public/models/city-style/street/road-cobble-straight-01.glb', 'E8962000911C83080EEED300724173C4F81EDE0410B2BBF824CFF2B22D6043C5'],
   ['Bench 01', 'public/models/city-style/street/bench-01.glb', '33CDC9258296465F72AB2B625C9F357CE5A8C9F6ABD9C454733A9E2593B6B1B9'],
   ['Trash Bin 01', 'public/models/city-style/street/trash-bin-01.glb', '8D2EC16A7E157AE200D1E470C0F7776A1A2407171A0AB3C3F176EFB6B6A43E40'],
-  ['Fire Brazier', 'public/models/city-style/street/fire-brazier.glb', '0C85FBE84FEFC9207F0BF95B155A9BA722F60FD2D0DF88015BF3F0065279A560'],
 ];
 
 let totalBytes = 0;

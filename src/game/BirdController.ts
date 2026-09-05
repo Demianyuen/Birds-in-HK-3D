@@ -9,6 +9,7 @@ import {
 } from 'three';
 import { Pigeon } from './Pigeon';
 import { getBirdProfile, type BirdProfile, type BirdProfileId } from './birdProfiles';
+import type { WorldPlayer } from '../multiplayer/protocol';
 
 const FORWARD = new Vector3(0, 0, -1);
 const UP = new Vector3(0, 1, 0);
@@ -79,6 +80,18 @@ export class BirdController {
 
   public setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+  }
+
+  public restoreSessionPose(player: WorldPlayer): void {
+    this.reset();
+    this.object.position.fromArray(player.position);
+    this.orientation.fromArray(player.quaternion).normalize();
+    this.euler.setFromQuaternion(this.orientation, 'YXZ');
+    this.yaw = this.euler.y;
+    this.pitch = this.euler.x;
+    this.roll = this.euler.z;
+    this.perched = player.perched;
+    this.applyOrientation();
   }
 
   public setFlightRadius(radiusMetres: number): void {
@@ -189,7 +202,8 @@ export class BirdController {
   }
 
   public getTelemetry(): FlightTelemetry {
-    const degrees = (MathUtils.radToDeg(this.yaw) % 360 + 360) % 360;
+    // Local +Y rotation turns -Z north towards -X west; compass bearings increase eastwards.
+    const degrees = (-MathUtils.radToDeg(this.yaw) % 360 + 360) % 360;
     return {
       altitude: this.object.position.y,
       speedKmh: this.perched ? 0 : this.speed * 3.6,

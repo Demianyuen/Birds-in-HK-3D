@@ -17,11 +17,10 @@ const EXPECTED_IDS = [
   'road-cobble-straight-01',
   'bench-01',
   'trash-bin-01',
-  'fire-brazier',
 ];
 
 describe('city style model catalogue', () => {
-  it('contains the complete authenticated Three.js Assets Free collection', () => {
+  it('contains the approved no-fire Free collection', () => {
     expect(CITY_STYLE_MODELS.map(model => model.id)).toEqual(EXPECTED_IDS);
     for (const model of CITY_STYLE_MODELS) {
       expect(model.modelPath).toMatch(/^\/models\/city-style\/(?:buildings|environment|street)\/[a-z0-9-]+\.glb$/);

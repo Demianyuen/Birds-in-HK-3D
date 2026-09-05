@@ -87,6 +87,7 @@ export async function mountGoogleMapsCsdiOverlay(
   const camera = new PerspectiveCamera();
   let city = new CsdiTiles('building');
   let infrastructure = new CsdiTiles('infrastructure');
+  city.setPresentation('reference');
   let renderer: WebGLRenderer | null = null;
   let disposed = false;
   let layersStarted = false;
@@ -150,6 +151,7 @@ export async function mountGoogleMapsCsdiOverlay(
     infrastructure.dispose();
     csdiRoot.clear();
     city = new CsdiTiles('building');
+    city.setPresentation('reference');
     infrastructure = new CsdiTiles('infrastructure');
     layersStarted = false;
   };

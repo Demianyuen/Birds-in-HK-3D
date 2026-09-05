@@ -13,8 +13,8 @@ describe('city style entry document', () => {
     expect(html).toContain('Apartment Block 01');
     expect(html).toContain('Glass Skyscraper 01');
     expect(html).toContain('Convenience Store 01');
-    expect(html).toContain('正在載入 16 個 Free GLB');
-    expect(html).toContain('13 ITEMS');
+    expect(html).toContain('正在載入 15 個 Free GLB');
+    expect(html).toContain('12 ITEMS');
   });
 
   it('records the Free licence links and keeps credentials out of the page', () => {
