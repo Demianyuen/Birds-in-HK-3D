@@ -16,6 +16,12 @@ dependency installed from the locked repository dependencies.
 Keep the release's package files and production node_modules with the bundle.
 The output contains no game assets or CSDI credential.
 
+`Dockerfile.world` packages the same bundle for a generic container host.
+Docker is not installed on the development machine, so image build is not
+claimed here; `npm run world:build` and `npm run qa:world-bundle` validate the
+same compiled entry and its shutdown behavior. The image listens on `0.0.0.0`
+inside the container and still requires the host's TLS/WSS termination.
+
 The bundle verification script starts an isolated loopback child process, checks
 HTTP health, joins two actual sockets, sends a chat between them, then stops the
 child and verifies the listener has gone. It does not touch the live dev server.

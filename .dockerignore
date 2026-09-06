@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-server
+.git
+.env
+.env.*
+runtime-evidence
+public/models/city-style
+*.blend
+*.blend1
