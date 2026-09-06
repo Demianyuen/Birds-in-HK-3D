@@ -1,6 +1,7 @@
 import './styles.css';
 import { WorldPanel } from './multiplayer/WorldPanel';
 import { TouchFlightControls } from './game/TouchFlightControls';
+import { createHeritageDiagram } from './game/heritageDiagram';
 import { transitionFlow, type ScreenName } from './app/flow';
 import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
 import { BirdsInHkGame, type GameTelemetry } from './game/BirdsInHkGame';
@@ -67,6 +68,7 @@ const worldPanel = new WorldPanel(game, worldEndpoint);
 app.append(worldPanel.element);
 const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
+document.querySelector('.heritage-evidence')?.append(createHeritageDiagram());
 worldPanel.element.addEventListener('toggle', () => {
   touchControls.setVisible(currentScreen === 'game' && !worldPanel.element.open);
 });
