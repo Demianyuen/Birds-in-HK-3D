@@ -52,6 +52,32 @@ npm run qa:csdi
 npm run qa:runtime
 ```
 
+## Multiplayer status
+
+The repository now includes a standalone Node/WebSocket world server:
+
+```powershell
+npm run world:server
+```
+
+The local development frontend connects to `ws://127.0.0.1:8787/world`.
+The tested world admission target is 100 participants in one room; protocol 2
+uses compact motion frames, room/nearby text chat, instanced remote birds,
+short-lived guest resume, and validated bounds. Local loopback evidence includes
+a 120-second run with 100 guests and a real browser rendering the CSDI world.
+
+Production currently deploys the HTTP game and map proxy only. It does not
+claim a public multiplayer WSS endpoint because no multiplayer host has been
+selected. Set `VITE_WORLD_SERVER_URL` only after deploying the standalone Node
+server behind TLS/WSS and restricting `WORLD_ORIGINS` to the production
+frontend origin. See [the world-server runbook](docs/world-server-runbook.md).
+
+The preservation layer is an evidence-labelled CSDI art preview. Verified
+Wang Fuk Court metadata, address markers, and named building footprints are
+kept separately; the original 1983 exterior colours, windows and landscape are
+not yet presented as historical fact. See
+[the preservation status](docs/preservation-reference-status.md).
+
 ## Art Studio
 
 Open `/studio.html` while the Vite server is running to inspect the interactive Three.js art village. It groups the CFO/CEO roles, map and QA subagents, and model workshop around an open-field work surface. Select a character in the scene or role rail to inspect current work, this week's milestones, deliverables, and next steps.
