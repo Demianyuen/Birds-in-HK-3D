@@ -61,7 +61,7 @@ npm run world:server
 ```
 
 The local development frontend connects to `ws://127.0.0.1:8787/world`.
-The tested world admission target is 100 participants in one room; protocol 2
+The initial world admission target is 30 participants in one room; protocol 2
 uses compact motion frames, room/nearby text chat, instanced remote birds,
 short-lived guest resume, and validated bounds. Local loopback evidence includes
 a 120-second run with 100 guests and a real browser rendering the CSDI world.

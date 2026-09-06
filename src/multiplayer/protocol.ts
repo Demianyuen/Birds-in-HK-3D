@@ -1,6 +1,6 @@
 export type Position = [number, number, number];
 // Product target and admission boundary; not a claim of tested WAN/render capacity.
-export const WORLD_PLAYER_LIMIT = 100;
+export const WORLD_PLAYER_LIMIT = 30;
 export type Rotation = [number, number, number, number];
 export interface WorldPlayer {
   id: string;

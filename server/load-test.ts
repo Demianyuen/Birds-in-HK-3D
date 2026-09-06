@@ -8,7 +8,8 @@ import type { WorldPlayer } from '../src/multiplayer/protocol';
 import { decodeMotion } from '../src/multiplayer/motionCodec';
 
 // Deliberately creates a loopback-only server; this script cannot target a public deployment.
-const count = 100;
+const count = Number(process.env.WORLD_LOAD_PLAYERS ?? 30);
+if (!Number.isInteger(count) || count < 2 || count > 100) throw new Error('WORLD_LOAD_PLAYERS must be between 2 and 100.');
 const durationSeconds = Number(process.env.WORLD_LOAD_SECONDS ?? 30);
 if (!Number.isInteger(durationSeconds) || durationSeconds < 10 || durationSeconds > 300) {
   throw new Error('WORLD_LOAD_SECONDS must be between 10 and 300.');

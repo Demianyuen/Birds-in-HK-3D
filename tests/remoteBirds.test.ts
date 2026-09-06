@@ -26,9 +26,9 @@ describe('remote players in the Three.js scene', () => {
     world.dispose();
   });
 
-  it('represents all 99 remote players in a bounded set of shared draw batches', () => {
+  it('represents all 29 remote players in a bounded set of shared draw batches', () => {
     const world = new RemoteBirds();
-    const players: WorldPlayer[] = Array.from({ length: 99 }, (_, index) => ({
+    const players: WorldPlayer[] = Array.from({ length: 29 }, (_, index) => ({
       id: `${index}`, name: `同伴 ${index}`, position: [index * 3, 220, 320],
       quaternion: [0, 0, 0, 1], perched: false,
     }));
@@ -37,11 +37,11 @@ describe('remote players in the Three.js scene', () => {
     const batches = world.group.children.filter((node): node is InstancedMesh => node instanceof InstancedMesh);
     expect(batches.length).toBeGreaterThan(0);
     expect(batches.length).toBeLessThanOrEqual(10);
-    for (const batch of batches) expect(batch.count).toBe(99);
+    for (const batch of batches) expect(batch.count).toBe(29);
     const body = world.group.getObjectByName('remote-body') as InstancedMesh;
     const matrix = new Matrix4();
-    body.getMatrixAt(98, matrix);
-    expect(new Vector3().setFromMatrixPosition(matrix).x).toBe(294);
+    body.getMatrixAt(28, matrix);
+    expect(new Vector3().setFromMatrixPosition(matrix).x).toBe(84);
     world.dispose();
   });
 });

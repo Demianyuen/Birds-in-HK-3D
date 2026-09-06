@@ -6,7 +6,7 @@
 - `ws://127.0.0.1:8787/world`, with HTTP `/health`.
 - Server-assigned guest identity, rooms, 10 Hz snapshots, validated pose updates.
 - Room and 150 metre nearby text chat; 280 characters maximum and one accepted message per second.
-- Same-world target and admission limit: 100 participants; connection limit 128. These are protective configuration limits, **not measured production capacity claims**.
+- Initial same-world target and admission limit: 30 participants; connection limit 128. The protocol remains extensible to the earlier 100-participant test. These are protective configuration limits, **not measured production capacity claims**.
 - Disconnect cleanup, ping/pong heartbeat, bounded payload and output backpressure.
 - Explicit browser origin allowlist; default only local development origins.
 - Real socket tests: `npm run qa:multiplayer`.
