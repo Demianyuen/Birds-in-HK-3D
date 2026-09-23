@@ -42,18 +42,22 @@ The development frontend defaults to the loopback WebSocket address.
 Set `VITE_WORLD_SERVER_URL` to an explicit WSS endpoint for production.
 Without it, production shows that multiplayer is unconfigured; it does not connect to a player's localhost.
 
-## Required final acceptance
+## Long-term acceptance target (after the 30-player foundation)
 
-100 simultaneous users must be supported in the same open world, not split into two-player rooms.
+The long-term target is 100 simultaneous users in the same open world, not
+split into two-player rooms. The current product admission boundary remains
+30 participants while this foundation is hardened.
 Two independent browsers are only the functional smoke test: enter the same world, see each other's birds
 move, exchange room/nearby messages, and recover from disconnection.
 Cross-room isolation, capacity under measured load, input focus while chatting,
 mobile layout, building collision and layer switching must be verified.
 Keep all public scenes free of fire assets/effects.
 
-The capacity test uses 100 real loopback sockets to exercise simultaneous admission
-and full-world snapshots, with guest 101 rejected. Sustained moving/chatting load,
-WAN latency, authenticated login and rendering 99 peers remain separate required gates.
+The historical capacity test used 100 real loopback sockets to exercise
+simultaneous admission and full-world snapshots, with guest 101 rejected at
+that time. The current 30-player check rejects guest 31. Sustained
+moving/chatting load, WAN latency, authenticated login and rendering 99 peers
+remain separate required gates.
 
 ## 100-player sustained loopback benchmark (local date 2026-09-06)
 

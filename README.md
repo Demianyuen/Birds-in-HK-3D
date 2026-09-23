@@ -61,10 +61,12 @@ npm run world:server
 ```
 
 The local development frontend connects to `ws://127.0.0.1:8787/world`.
-The initial world admission target is 30 participants in one room; protocol 2
+The initial world admission target is 30 participants in one room; the long-term
+acceptance target is 100. Protocol 2
 uses compact motion frames, room/nearby text chat, instanced remote birds,
 short-lived guest resume, and validated bounds. Local loopback evidence includes
-a 120-second run with 100 guests and a real browser rendering the CSDI world.
+a historical 120-second run with 100 guests and a real browser rendering the
+CSDI world; it is not a current 30-player production-capacity claim.
 
 Production currently deploys the HTTP game and map proxy only. It does not
 claim a public multiplayer WSS endpoint because no multiplayer host has been
