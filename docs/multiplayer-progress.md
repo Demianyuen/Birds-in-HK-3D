@@ -88,7 +88,9 @@ Full rosters are sent on membership changes and approximately once per second.
 Other 10 Hz ticks carry ordered numeric absolute poses without repeated names,
 IDs or object field names. Each frame has a roster revision; clients reject
 frames for a different roster or malformed/truncated pose arrays atomically.
-All 100 participants remain represented; there is no two-player-room split.
+The historical 100-participant pressure run represented every connected
+participant; the current admission boundary is 30 and there is no
+two-player-room split.
 Frontend and world server must be updated together to protocol 2.
 
 Evidence: `runtime-evidence/world-load-2026-09-05T17-09-48-613Z.json`
@@ -163,6 +165,16 @@ The game now exposes the verified estate metadata and missing historical evidenc
 in a collapsible heritage panel. Browser checks opened it and confirmed the eight
 published names, then completed the existing real-map/multiplayer smoke flow.
 83 tests and build passed.
+
+## Current 30-participant admission baseline
+
+Evidence: `runtime-evidence/world-load-2026-09-23T19-13-01-056Z.json`
+(UTC timestamp; local date September 24).
+The current configured admission boundary was exercised with 30 loopback guests
+for 30.31 seconds: 8,100 poses, 270 room chats, zero disconnects and zero
+protocol errors. Minimum decoded snapshots per client were 272; snapshot-age
+p95 was 11 ms and event-loop p95 was 21.5 ms. This is a same-process loopback
+baseline, not a public WAN, GPU, account-login or production-capacity claim.
 
 ## Guest transport recovery
 

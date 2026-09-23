@@ -53,7 +53,9 @@ No public multiplayer host has been selected or provisioned. Before public use:
 2. Configure a supervised Node process and TLS/WSS termination.
 3. Allow only the intended frontend origins.
 4. Verify `/health`, upgrade handling and two external-device guest connections.
-5. Rerun the 100-participant test against an explicitly approved test environment.
+5. Run the current 30-participant admission/load check; only rerun the
+   historical 100-participant pressure test against an explicitly approved
+   test environment.
 6. Verify authenticated account login separately; guest nicknames are not accounts.
 
 Current room state and resume sessions are memory-only. Restarts lose them.
