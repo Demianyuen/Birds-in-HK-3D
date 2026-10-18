@@ -63,6 +63,10 @@ export class BirdController {
   private rhythmClock = 0;
   private frameIndex = 0;
   private cameraPerch = 0;
+  /** Fraction (0–1) of the full camera boom currently free of buildings. */
+  private cameraReach = 1;
+  private cameraRoots: Object3D[] = [];
+  private readonly cameraRay = new Raycaster();
   private clockSeconds = 0;
   private lastMouseSteer = -10;
   /** Seconds since the last wall bump; drives camera shake. */
@@ -168,6 +172,7 @@ export class BirdController {
     this.clockSeconds += deltaSeconds;
     this.bumpAge += deltaSeconds;
     this.frameIndex += 1;
+    this.cameraRoots = !collisionRoot ? [] : Array.isArray(collisionRoot) ? [...collisionRoot] : [collisionRoot as Object3D];
     if (this.enabled) {
       const yawDirection = Number(this.controls.yawLeft) - Number(this.controls.yawRight);
       const pitchDirection = Number(this.controls.pitchUp) - Number(this.controls.pitchDown);
@@ -327,13 +332,32 @@ export class BirdController {
   public updateCamera(camera: PerspectiveCamera, deltaSeconds: number): void {
     this.cameraPerch += ((this.perched ? 1 : 0) - this.cameraPerch) * (1 - Math.exp(-2.5 * deltaSeconds));
     const offset = new Vector3(0, 5.2 - this.cameraPerch * 2.4, 15.5 - this.cameraPerch * 6).applyQuaternion(this.orientation);
-    const desiredPosition = this.object.position.clone().add(offset);
+    const pivot = this.object.position.clone();
+    pivot.y += 1.2;
+    const boom = this.object.position.clone().add(offset).sub(pivot);
+    const boomLength = boom.length();
+    // Keep the camera out of buildings: shorten the boom to just short of the first surface behind the bird.
+    let reach = 1;
+    if (this.cameraRoots.length > 0 && boomLength > 0.01) {
+      this.cameraRay.set(pivot, boom.clone().divideScalar(boomLength));
+      this.cameraRay.near = 0;
+      this.cameraRay.far = boomLength + 1;
+      const hit = this.cameraRay.intersectObjects(this.cameraRoots, true)[0];
+      if (hit) reach = MathUtils.clamp((hit.distance - 1) / boomLength, 0.12, 1);
+    }
+    // Pull in at once when blocked, ease back out when clear.
+    this.cameraReach = reach < this.cameraReach
+      ? reach
+      : this.cameraReach + (reach - this.cameraReach) * (1 - Math.exp(-2 * deltaSeconds));
+    const desiredPosition = pivot.addScaledVector(boom, this.cameraReach);
     if (this.bumpAge < 0.35) {
       const shake = (0.35 - this.bumpAge) * 2.2;
       desiredPosition.x += Math.sin(this.clockSeconds * 71) * shake;
       desiredPosition.y += Math.cos(this.clockSeconds * 53) * shake;
     }
-    camera.position.lerp(desiredPosition, 1 - Math.exp(-7 * deltaSeconds));
+    // Never lerp through a wall: snap while the boom is shortened.
+    if (this.cameraReach < 0.999) camera.position.copy(desiredPosition);
+    else camera.position.lerp(desiredPosition, 1 - Math.exp(-7 * deltaSeconds));
     const lookTarget = this.object.position.clone().add(
       FORWARD.clone().applyQuaternion(this.orientation).multiplyScalar(18),
     );

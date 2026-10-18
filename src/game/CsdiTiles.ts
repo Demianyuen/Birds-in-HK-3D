@@ -10,6 +10,7 @@ import type { Object3D, PerspectiveCamera, WebGLRenderer } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { createInfrastructureMaterial, setBuildingPresentation, type BuildingPresentation } from './BuildingMaterial';
 import { geodeticToEcef } from './geo';
+import { createVisibleTimeout } from './visibleTimeout';
 import type { FlightRegion } from './regions';
 
 const STREAMING_EDGE_BUFFER_METRES = 650;
@@ -113,11 +114,12 @@ export class CsdiTiles {
     camera.updateMatrixWorld(true);
 
     await new Promise<void>((resolve, reject) => {
-      const timeout = window.setTimeout(() => {
+      // Counts visible time only: tile streaming pauses with the page in a background tab.
+      const cancelTimeout = createVisibleTimeout(60_000, () => {
         if (this.loadSettled) return;
         this.loadSettled = true;
         reject(new Error(`CSDI connected, but no playable ${this.layerName} model arrived within 60 seconds.`));
-      }, 60_000);
+      });
 
       tiles.addEventListener('load-root-tileset', () => {
         onProgress({
@@ -171,7 +173,7 @@ export class CsdiTiles {
         });
         if (this.modelsLoaded >= 1 && !this.loadSettled) {
           this.loadSettled = true;
-          window.clearTimeout(timeout);
+          cancelTimeout();
           window.setTimeout(resolve, 650);
         }
       });
@@ -192,7 +194,7 @@ export class CsdiTiles {
         });
         if (event.tile === null) {
           this.loadSettled = true;
-          window.clearTimeout(timeout);
+          cancelTimeout();
           reject(new Error(`The CSDI service rejected or could not deliver the Hong Kong ${this.layerName} tiles.`));
         }
       });
