@@ -1,3 +1,7 @@
+/**
+ * Legacy GLB bird visual. The player bird is now the articulated BirdRig; this
+ * module is kept for the Blender pigeon asset helpers and their tests.
+ */
 import {
   Color,
   ConeGeometry,

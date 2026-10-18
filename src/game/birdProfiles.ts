@@ -21,7 +21,7 @@ export const BIRD_PROFILES: Readonly<Record<BirdProfileId, BirdProfile>> = Objec
     cruiseSpeed: 24, minimumSpeed: 8, maximumSpeed: 62, turnRate: 1.2, flapLift: 9.2,
   },
   eagle: {
-    id: 'eagle', modelPath: '/models/eagle.glb', loadingLabel: 'Eagle',
+    id: 'eagle', modelPath: '/models/eagle.glb', loadingLabel: 'Black kite',
     cruiseSpeed: 34, minimumSpeed: 13, maximumSpeed: 84, turnRate: 0.82, flapLift: 7.6,
   },
 });

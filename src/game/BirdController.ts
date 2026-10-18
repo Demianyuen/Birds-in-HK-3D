@@ -7,7 +7,7 @@ import {
   Raycaster,
   Vector3,
 } from 'three';
-import { Pigeon } from './Pigeon';
+import { BirdRig, type BirdMotion } from './BirdRig';
 import { getBirdProfile, type BirdProfile, type BirdProfileId } from './birdProfiles';
 import type { WorldPlayer } from '../multiplayer/protocol';
 
@@ -20,6 +20,8 @@ const GLIDE_SINK = -1.4;
 const ENERGY_EXCHANGE = 0.55;
 /** Surfaces flatter than this (normal.y) are landing spots; steeper ones are walls. */
 const LANDING_NORMAL_Y = 0.62;
+/** Seconds of look-ahead used to start a landing flare before touchdown. */
+const FLARE_LOOKAHEAD_SECONDS = 1.0;
 
 interface Collision {
   point: Vector3;
@@ -37,7 +39,7 @@ export interface FlightTelemetry {
 export type FlightControl = 'yawLeft' | 'yawRight' | 'pitchUp' | 'pitchDown' | 'accelerate' | 'decelerate';
 
 export class BirdController {
-  public readonly pigeon = new Pigeon();
+  public readonly rig = new BirdRig();
   public readonly object = new Object3D();
   private readonly raycaster = new Raycaster();
   private readonly velocity = new Vector3();
@@ -53,7 +55,14 @@ export class BirdController {
   private flapQueued = false;
   private perched = false;
   private enabled = false;
-  private held = false;
+  /** Seconds left in the current landing flare (refreshed while a landing spot is ahead). */
+  private flareTimer = 0;
+  /** Seconds of strong flapping after leaving a perch. */
+  private takeoffTimer = 0;
+  /** Drives the pigeon-style flap-glide rhythm in level flight. */
+  private rhythmClock = 0;
+  private frameIndex = 0;
+  private cameraPerch = 0;
   private clockSeconds = 0;
   private lastMouseSteer = -10;
   /** Seconds since the last wall bump; drives camera shake. */
@@ -70,7 +79,7 @@ export class BirdController {
   };
 
   public constructor() {
-    this.object.add(this.pigeon.root);
+    this.object.add(this.rig.root);
     this.reset();
   }
 
@@ -82,8 +91,9 @@ export class BirdController {
     this.speed = this.flightProfile.cruiseSpeed;
     this.verticalVelocity = 0;
     this.perched = false;
-    this.held = false;
     this.flapQueued = false;
+    this.flareTimer = 0;
+    this.takeoffTimer = 0;
     for (const control of Object.keys(this.controls) as FlightControl[]) {
       this.controls[control] = false;
     }
@@ -92,15 +102,6 @@ export class BirdController {
 
   public setEnabled(enabled: boolean): void {
     this.enabled = enabled;
-  }
-
-  /** Hold the bird in place (race countdown). Wings keep beating; no movement. */
-  public setHeld(held: boolean): void {
-    this.held = held;
-    if (held) {
-      this.verticalVelocity = 0;
-      this.perched = false;
-    }
   }
 
   public restoreSessionPose(player: WorldPlayer): void {
@@ -112,6 +113,7 @@ export class BirdController {
     this.pitch = this.euler.x;
     this.roll = this.euler.z;
     this.perched = player.perched;
+    if (this.perched) this.standUpright();
     this.applyOrientation();
   }
 
@@ -121,7 +123,7 @@ export class BirdController {
 
   public setBirdProfile(profileId: BirdProfileId): void {
     this.flightProfile = getBirdProfile(profileId);
-    this.pigeon.setProfile(this.flightProfile.id);
+    this.rig.setProfile(this.flightProfile.id);
     this.speed = this.flightProfile.cruiseSpeed;
   }
 
@@ -145,11 +147,17 @@ export class BirdController {
   public flap(): void {
     if (!this.enabled) return;
     this.flapQueued = true;
-    this.pigeon.triggerFlap();
+    this.rig.triggerFlap();
   }
 
+  /** The bird is procedural (BirdRig), so it is always ready; kept async for the loading flow. */
   public loadVisual(): Promise<boolean> {
-    return this.pigeon.loadModel();
+    return Promise.resolve(true);
+  }
+
+  /** True while the bird is flaring to land. */
+  public get landing(): boolean {
+    return this.flareTimer > 0 && !this.perched;
   }
 
   public setControl(control: FlightControl, pressed: boolean): void {
@@ -159,53 +167,69 @@ export class BirdController {
   public update(deltaSeconds: number, collisionRoot: Object3D | readonly Object3D[] | null): void {
     this.clockSeconds += deltaSeconds;
     this.bumpAge += deltaSeconds;
-    if (this.held) {
-      this.flapQueued = false;
-      this.pigeon.animate(deltaSeconds, this.flightProfile.cruiseSpeed * 0.6, false);
-      return;
-    }
+    this.frameIndex += 1;
     if (this.enabled) {
       const yawDirection = Number(this.controls.yawLeft) - Number(this.controls.yawRight);
       const pitchDirection = Number(this.controls.pitchUp) - Number(this.controls.pitchDown);
       const speedDirection = Number(this.controls.accelerate) - Number(this.controls.decelerate);
-      this.yaw += yawDirection * this.flightProfile.turnRate * deltaSeconds;
-      this.pitch = MathUtils.clamp(this.pitch + pitchDirection * 0.72 * deltaSeconds, -0.65, 0.58);
-      this.targetRoll = MathUtils.clamp(this.targetRoll + yawDirection * 0.85, -0.62, 0.62);
-      this.speed += speedDirection * 24 * deltaSeconds;
-      if (speedDirection === 0) {
-        // Ease back towards cruise speed when the player is not throttling.
-        this.speed += (this.flightProfile.cruiseSpeed - this.speed) * (1 - Math.exp(-0.3 * deltaSeconds));
-      }
-      if (pitchDirection === 0 && this.clockSeconds - this.lastMouseSteer > 0.8) {
-        // Gentle auto-level so keyboard flight is forgiving.
-        this.pitch *= Math.exp(-0.9 * deltaSeconds);
+      // Perched birds shuffle round on the spot more slowly than they bank in the air.
+      this.yaw += yawDirection * this.flightProfile.turnRate * (this.perched ? 0.8 : 1) * deltaSeconds;
+      if (!this.perched) {
+        this.pitch = MathUtils.clamp(this.pitch + pitchDirection * 0.72 * deltaSeconds, -0.65, 0.58);
+        this.targetRoll = MathUtils.clamp(this.targetRoll + yawDirection * 0.85, -0.62, 0.62);
+        this.speed += speedDirection * 24 * deltaSeconds;
+        if (speedDirection === 0 && this.flareTimer <= 0) {
+          // Ease back towards cruise speed when the player is not throttling.
+          this.speed += (this.flightProfile.cruiseSpeed - this.speed) * (1 - Math.exp(-0.3 * deltaSeconds));
+        }
+        if (pitchDirection === 0 && this.clockSeconds - this.lastMouseSteer > 0.8) {
+          // Gentle auto-level so keyboard flight is forgiving.
+          this.pitch *= Math.exp(-0.9 * deltaSeconds);
+        }
+        // Throttling up aborts a landing.
+        if (this.controls.accelerate) this.flareTimer = 0;
       }
     }
+    if (this.perched) this.standUpright();
     this.roll += (this.targetRoll - this.roll) * (1 - Math.exp(-5 * deltaSeconds));
     this.targetRoll *= Math.exp(-4 * deltaSeconds);
     this.applyOrientation();
 
     if (this.perched && this.flapQueued) {
+      // Take-off: spring up and away with strong strokes, starting slow.
       this.perched = false;
-      this.object.position.addScaledVector(this.perchNormal, BIRD_CLEARANCE * 1.8);
-      this.verticalVelocity = Math.max(10, this.perchNormal.y * 8);
+      this.object.position.addScaledVector(this.perchNormal, BIRD_CLEARANCE * 0.9);
+      this.verticalVelocity = Math.max(7.5, this.perchNormal.y * 7.5);
+      this.speed = this.flightProfile.minimumSpeed + 3;
+      this.takeoffTimer = 1.1;
+      this.flareTimer = 0;
     }
 
     if (this.perched) {
       this.flapQueued = false;
       this.velocity.set(0, 0, 0);
-      this.pigeon.animate(deltaSeconds, 0, true);
+      this.rig.update(deltaSeconds, { mode: 'perched', flapDemand: 0 });
       return;
     }
 
+    this.takeoffTimer = Math.max(0, this.takeoffTimer - deltaSeconds);
     const forward = FORWARD.clone().applyQuaternion(this.orientation).normalize();
     // Arcade glide: climbing trades speed for height, diving trades height for speed.
     this.speed -= forward.y * 9.8 * ENERGY_EXCHANGE * deltaSeconds;
-    this.speed = MathUtils.clamp(this.speed, this.flightProfile.minimumSpeed, this.flightProfile.maximumSpeed);
-    this.verticalVelocity += (GLIDE_SINK - this.verticalVelocity) * (1 - Math.exp(-1.6 * deltaSeconds));
+    const flaring = this.flareTimer > 0;
+    if (flaring) {
+      // Air-brake towards a slow, controlled touchdown.
+      this.flareTimer = Math.max(0, this.flareTimer - deltaSeconds);
+      this.speed += (this.flightProfile.minimumSpeed * 0.65 - this.speed) * (1 - Math.exp(-2.6 * deltaSeconds));
+    }
+    const minimumSpeed = flaring ? this.flightProfile.minimumSpeed * 0.6 : this.flightProfile.minimumSpeed;
+    this.speed = MathUtils.clamp(this.speed, minimumSpeed, this.flightProfile.maximumSpeed);
+    const sink = flaring ? GLIDE_SINK * 0.8 : GLIDE_SINK;
+    this.verticalVelocity += (sink - this.verticalVelocity) * (1 - Math.exp(-1.6 * deltaSeconds));
     if (this.flapQueued) {
       this.verticalVelocity += this.flightProfile.flapLift;
       this.speed = Math.min(this.flightProfile.maximumSpeed, this.speed + 2.2);
+      this.flareTimer = 0;
     }
     this.flapQueued = false;
     this.velocity.copy(forward).multiplyScalar(this.speed);
@@ -214,12 +238,9 @@ export class BirdController {
     const collision = this.findCollision(displacement, collisionRoot);
 
     if (collision && collision.normal.y >= LANDING_NORMAL_Y) {
-      // Roofs and ground: land and perch.
+      // Roofs and ground: settle upright on the perch.
       this.object.position.copy(collision.point).addScaledVector(collision.normal, BIRD_CLEARANCE);
-      this.perchNormal.copy(collision.normal);
-      this.verticalVelocity = 0;
-      this.velocity.set(0, 0, 0);
-      this.perched = true;
+      this.perch(collision.normal);
     } else if (collision) {
       // Walls: glance off and lose speed instead of stopping dead.
       const wall = new Vector3(collision.normal.x, 0, collision.normal.z);
@@ -234,23 +255,78 @@ export class BirdController {
       this.verticalVelocity = Math.max(this.verticalVelocity, 1.5);
       this.targetRoll = MathUtils.clamp(-along * 0.8, -0.62, 0.62);
       this.bumpAge = 0;
+      this.flareTimer = 0;
       this.applyOrientation();
     } else {
       this.object.position.add(displacement);
       this.keepInsideFlightRegion();
       if (this.object.position.y <= BIRD_CLEARANCE) {
         this.object.position.y = BIRD_CLEARANCE;
-        this.perchNormal.copy(UP);
-        this.verticalVelocity = 0;
-        this.perched = true;
+        this.perch(UP);
+      } else if (this.frameIndex % 2 === 0) {
+        this.lookForLandingSpot(collisionRoot);
       }
     }
 
-    this.pigeon.animate(deltaSeconds, this.speed, this.perched);
+    this.rig.update(deltaSeconds, this.motion(forward, deltaSeconds));
+  }
+
+  /** Animation intent: pigeons alternate bursts of flapping with glides; climbing, slow flight and take-off flap hard. */
+  private motion(forward: Vector3, deltaSeconds: number): BirdMotion {
+    if (this.perched) return { mode: 'perched', flapDemand: 0 };
+    if (this.flareTimer > 0) return { mode: 'flare', flapDemand: 0 };
+    const soaring = this.flightProfile.id === 'eagle';
+    this.rhythmClock += deltaSeconds;
+    let demand = 0;
+    if (this.takeoffTimer > 0) demand = 1;
+    else if (forward.y < -0.12 || this.controls.decelerate) demand = 0;
+    else {
+      if (forward.y > 0.08) demand = Math.max(demand, 0.45 + forward.y);
+      if (this.speed < this.flightProfile.cruiseSpeed * 0.85) demand = Math.max(demand, 0.6);
+      if (this.controls.accelerate) demand = Math.max(demand, 0.8);
+      // Intermittent flight: a short burst of strokes every few seconds, then a glide.
+      const period = soaring ? 7.5 : 3.8;
+      const burst = soaring ? 0.9 : 1.4;
+      if (this.rhythmClock % period < burst) demand = Math.max(demand, 0.45);
+    }
+    return { mode: 'flight', flapDemand: soaring ? demand * 0.7 : demand };
+  }
+
+  private perch(normal: Vector3): void {
+    this.perchNormal.copy(normal);
+    this.verticalVelocity = 0;
+    this.velocity.set(0, 0, 0);
+    this.perched = true;
+    this.flareTimer = 0;
+    this.takeoffTimer = 0;
+    this.standUpright();
+    this.applyOrientation();
+  }
+
+  /** Perched birds stand level whatever attitude they landed in. */
+  private standUpright(): void {
+    this.pitch = 0;
+    this.roll = 0;
+    this.targetRoll = 0;
+  }
+
+  /** Starts a landing flare when the flight path will meet a roof or the ground within about a second. */
+  private lookForLandingSpot(collisionRoot: Object3D | readonly Object3D[] | null): void {
+    if (!collisionRoot || this.velocity.y > 0.5 || this.speed < 1) return;
+    const roots = Array.isArray(collisionRoot) ? collisionRoot : [collisionRoot];
+    const direction = this.velocity.clone().normalize();
+    this.raycaster.set(this.object.position, direction);
+    this.raycaster.near = 0;
+    this.raycaster.far = Math.max(10, this.velocity.length() * FLARE_LOOKAHEAD_SECONDS) + BIRD_CLEARANCE;
+    const hit = this.raycaster.intersectObjects(roots, true)[0];
+    if (!hit?.face) return;
+    const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    if (normal.y >= LANDING_NORMAL_Y) this.flareTimer = 0.6;
   }
 
   public updateCamera(camera: PerspectiveCamera, deltaSeconds: number): void {
-    const offset = new Vector3(0, 5.2, 15.5).applyQuaternion(this.orientation);
+    this.cameraPerch += ((this.perched ? 1 : 0) - this.cameraPerch) * (1 - Math.exp(-2.5 * deltaSeconds));
+    const offset = new Vector3(0, 5.2 - this.cameraPerch * 2.4, 15.5 - this.cameraPerch * 6).applyQuaternion(this.orientation);
     const desiredPosition = this.object.position.clone().add(offset);
     if (this.bumpAge < 0.35) {
       const shake = (0.35 - this.bumpAge) * 2.2;

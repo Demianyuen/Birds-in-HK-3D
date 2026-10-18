@@ -175,10 +175,10 @@ export class BirdsInHkGame {
     const birdVisualPromise = this.bird.loadVisual().then(loaded => {
       const birdProfile = getBirdProfile(this.bird.profileId);
       onProgress({
-        stage: loaded ? `${birdProfile.loadingLabel} GLB ready` : `Using reserve ${birdProfile.loadingLabel} model`,
+        stage: loaded ? `${birdProfile.loadingLabel} ready` : `Using reserve ${birdProfile.loadingLabel} model`,
         detail: loaded
-          ? 'The selected GLB bird visual is active.'
-          : 'The selected GLB could not be loaded; the built-in bird remains available.',
+          ? 'The articulated bird is ready.'
+          : 'The selected bird could not be prepared; the built-in bird remains available.',
         percent: 40,
         modelsLoaded: loaded ? 1 : 0,
       });
@@ -415,7 +415,7 @@ export class BirdsInHkGame {
       this.remoteBirds.update(deltaSeconds);
       this.aerialGround.updateDetailNear(this.bird.object.position.x, this.bird.object.position.z, window.innerWidth < 720);
     } else {
-      this.bird.pigeon.animate(deltaSeconds, 18, false);
+      this.bird.rig.update(deltaSeconds, { mode: 'flight', flapDemand: 0.5 });
       this.bird.object.position.set(
         Math.sin(this.elapsed * 0.18) * 28,
         112 + Math.sin(this.elapsed * 0.7) * 3,

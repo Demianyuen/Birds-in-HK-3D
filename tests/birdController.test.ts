@@ -1,4 +1,4 @@
-import { BoxGeometry, Mesh, MeshBasicMaterial } from 'three';
+import { BoxGeometry, Mesh, MeshBasicMaterial, Vector3 } from 'three';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BirdController } from '../src/game/BirdController';
 
@@ -76,13 +76,47 @@ describe('bird collision and perching', () => {
     expect(sinkRate).toBeLessThan(3);
   });
 
-  it('holds position during a race countdown', () => {
+  it('flares before touching down and then stands level on the roof', () => {
     const bird = new BirdController();
+    const roof = createRoof(212);
     bird.setEnabled(true);
-    bird.setHeld(true);
-    const start = bird.object.position.clone();
+    let flared = false;
+    for (let index = 0; index < 80 && bird.getTelemetry().state === 'FLYING'; index += 1) {
+      bird.setControl('pitchDown', true);
+      bird.update(0.05, roof);
+      if (bird.landing) flared = true;
+    }
+    bird.setControl('pitchDown', false);
+    expect(flared).toBe(true);
+    expect(bird.getTelemetry().state).toBe('PERCHED');
+    const forward = new Vector3(0, 0, -1).applyQuaternion(bird.object.quaternion);
+    expect(Math.abs(forward.y)).toBeLessThan(1e-6);
+  });
+
+  it('turns on the spot while perched without tipping over', () => {
+    const bird = new BirdController();
+    bird.restoreSessionPose({ id: 'p', name: 'p', position: [0, 50, 0], quaternion: [0, 0, 0, 1], perched: true });
+    bird.setEnabled(true);
+    bird.setControl('yawLeft', true);
+    bird.steer(0, -400);
     for (let index = 0; index < 20; index += 1) bird.update(0.05, null);
-    expect(bird.object.position.distanceTo(start)).toBe(0);
+    expect(bird.getTelemetry().state).toBe('PERCHED');
+    expect(bird.object.position.toArray()).toEqual([0, 50, 0]);
+    expect(bird.getTelemetry().heading).not.toBe('N');
+    const forward = new Vector3(0, 0, -1).applyQuaternion(bird.object.quaternion);
+    expect(Math.abs(forward.y)).toBeLessThan(1e-6);
+  });
+
+  it('takes off slowly and climbs with strong strokes', () => {
+    const bird = new BirdController();
+    bird.restoreSessionPose({ id: 'p', name: 'p', position: [0, 50, 0], quaternion: [0, 0, 0, 1], perched: true });
+    bird.setEnabled(true);
+    bird.flap();
+    bird.update(0.05, null);
+    expect(bird.getTelemetry().state).toBe('FLYING');
+    expect(bird.getTelemetry().speedKmh).toBeLessThan(60);
+    for (let index = 0; index < 10; index += 1) bird.update(0.05, null);
+    expect(bird.object.position.y).toBeGreaterThan(50);
   });
 
   it('clears held controls when a new flight starts', () => {
