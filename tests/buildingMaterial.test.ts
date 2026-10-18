@@ -70,3 +70,30 @@ describe('official building rendering material', () => {
     second.dispose();
   });
 });
+
+describe('Wang Fuk Court memorial treatment', () => {
+  it('marks all eight blocks, close to the Tai Po origin, as memorial sites', async () => {
+    const { buildingUniforms, setMemorialSites } = await import('../src/game/BuildingMaterial');
+    const { wangFukLocalMarkers } = await import('../src/game/wangFukLocations');
+    const markers = wangFukLocalMarkers(22.44705, 114.17544);
+    setMemorialSites(markers.map(marker => ({ x: marker.position.x, z: marker.position.z, radius: 28 })));
+    const active = buildingUniforms.uCsdiMemorial.value.filter(site => site.w === 1);
+    expect(active).toHaveLength(8);
+    for (const site of active) expect(Math.hypot(site.x, site.y)).toBeLessThan(150);
+    setMemorialSites([]);
+    expect(buildingUniforms.uCsdiMemorial.value.every(site => site.w === 0)).toBe(true);
+  });
+
+  it('never paints invented shopfronts or random tones on memorial sites', () => {
+    const material = createRenderedBuildingMaterial(new MeshStandardMaterial(), 'tile-a');
+    const shader = {
+      uniforms: {},
+      vertexShader: '#include <common>\n#include <beginnormal_vertex>\n#include <begin_vertex>',
+      fragmentShader: '#include <common>\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>',
+    };
+    material.onBeforeCompile(shader as never, undefined as never);
+    expect(shader.fragmentShader).toContain('* (1.0 - csdiMemorial)');
+    expect(shader.uniforms).toHaveProperty('uCsdiMemorial');
+    material.dispose();
+  });
+});

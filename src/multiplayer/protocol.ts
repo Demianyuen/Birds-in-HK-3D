@@ -1,4 +1,3 @@
-import type { RaceState } from '../race/course';
 export type Position = [number, number, number];
 // Product target and admission boundary; not a claim of tested WAN/render capacity.
 export const WORLD_PLAYER_LIMIT = 30;
@@ -11,7 +10,6 @@ export interface WorldPlayer {
   perched: boolean;
 }
 export type ServerMessage =
-  | RaceState
   | { type: 'welcome'; id: string; room: string; protocol: 2; resumeToken?: string; resumed?: boolean; player?: WorldPlayer }
   | { type: 'snapshot'; players: WorldPlayer[]; time: number; revision: number }
   | { type: 'motion'; poses: number[][]; time: number; revision: number }

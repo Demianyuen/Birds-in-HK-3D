@@ -2,7 +2,6 @@ import { createServer } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import { encodeMotion } from '../src/multiplayer/motionCodec';
-import { RaceRoom } from './raceRoom';
 import { WORLD_PLAYER_LIMIT, cleanText, finiteTuple, isRecord, type Position, type Rotation, type ServerMessage, type WorldPlayer } from '../src/multiplayer/protocol';
 
 interface Peer {
@@ -16,7 +15,6 @@ interface Peer {
   messages: number;
   alive: boolean;
   sessionToken?: string;
-  teleportGraceUntil: number;
 }
 
 export async function startWorldServer(options: { port: number; host: string; origins: string[] }) {
@@ -24,8 +22,6 @@ export async function startWorldServer(options: { port: number; host: string; or
   const rooms = new Map<string, Set<Peer>>();
   const sessions = new Map<string, { player: WorldPlayer; room: string; active: boolean; expires: number; lastChat: number }>();
   const broadcasts = new Map<string, { signature: string; revision: number; lastFull: number }>();
-  const races = new Map<string, RaceRoom>();
-  let raceBroadcastTick = 0;
   let nextRevision = 0;
   const http = createServer((request, response) => {
     response.setHeader('Cache-Control', 'no-store');
@@ -55,7 +51,7 @@ export async function startWorldServer(options: { port: number; host: string; or
   };
   const error = (peer: Peer, code: string) => send(peer, { type: 'error', code });
   wss.on('connection', socket => {
-    const peer: Peer = { socket, player: null, room: '', lastPose: Date.now(), sequence: -1, lastChat: 0, windowStart: Date.now(), messages: 0, alive: true, teleportGraceUntil: 0 };
+    const peer: Peer = { socket, player: null, room: '', lastPose: Date.now(), sequence: -1, lastChat: 0, windowStart: Date.now(), messages: 0, alive: true };
     peers.set(socket, peer);
     const joinDeadline = setTimeout(() => { if (!peer.player) socket.close(1008, 'Join required'); }, 10_000);
     socket.on('pong', () => { peer.alive = true; });
@@ -67,7 +63,7 @@ export async function startWorldServer(options: { port: number; host: string; or
       if (session) { session.active = false; session.expires = Date.now() + 120_000; }
       const room = rooms.get(peer.room);
       room?.delete(peer);
-      if (room?.size === 0) { rooms.delete(peer.room); broadcasts.delete(peer.room); races.delete(peer.room); }
+      if (room?.size === 0) { rooms.delete(peer.room); broadcasts.delete(peer.room); }
     });
     socket.on('message', (data, binary) => {
       const now = Date.now();
@@ -99,10 +95,8 @@ export async function startWorldServer(options: { port: number; host: string; or
         peer.lastPose = now;
         room.add(peer);
         rooms.set(peer.room, room);
-        if (!races.has(peer.room)) races.set(peer.room, new RaceRoom(undefined, now));
         clearTimeout(joinDeadline);
-        send(peer, { type: 'welcome', id: peer.player.id, room: peer.room, protocol: 2, resumeToken: peer.sessionToken, resumed: !!saved, player: peer.player });
-        return send(peer, races.get(peer.room)!.state(now));
+        return send(peer, { type: 'welcome', id: peer.player.id, room: peer.room, protocol: 2, resumeToken: peer.sessionToken, resumed: !!saved, player: peer.player });
       }
       if (!peer.player) return error(peer, 'join_required');
       if (message.type === 'leave') {
@@ -117,26 +111,14 @@ export async function startWorldServer(options: { port: number; host: string; or
           || typeof perched !== 'boolean' || position[1] < 0 || position[1] > 2000
           || Math.hypot(position[0], position[2]) > 3080
           || Math.abs(Math.hypot(...quaternion) - 1) > 0.02) return error(peer, 'invalid_pose');
-        const race = races.get(peer.room);
-        if (race?.isHeld(peer.player.id)) {
-          // Racers wait on the start line during the countdown.
-          peer.sequence = sequence;
-          peer.lastPose = now;
-          return;
-        }
         const distance = Math.hypot(...position.map((value, i) => value - peer.player!.position[i]));
         const allowance = Math.min(2, (now - peer.lastPose) / 1000) * 100 + 5;
-        if (distance > allowance) {
-          // Poses already in flight when the server moved this player to the start line.
-          if (now < peer.teleportGraceUntil) { peer.sequence = sequence; return; }
-          return error(peer, 'invalid_pose');
-        }
+        if (distance > allowance) return error(peer, 'invalid_pose');
         peer.player.position = [...position] as Position;
         peer.player.quaternion = [...quaternion] as Rotation;
         peer.player.perched = perched;
         peer.sequence = sequence;
         peer.lastPose = now;
-        race?.observe(peer.player.id, peer.player.position, now);
         return;
       }
       if (message.type === 'chat') {
@@ -158,27 +140,6 @@ export async function startWorldServer(options: { port: number; host: string; or
     });
   });
   const snapshots = setInterval(() => {
-    const raceNow = Date.now();
-    const periodicRace = ++raceBroadcastTick % 5 === 0;
-    for (const [roomId, room] of rooms) {
-      const race = races.get(roomId);
-      if (!race) continue;
-      const roster = [...room].flatMap(peer => peer.player ? [peer.player] : []);
-      const { changed, teleported } = race.tick(roster, raceNow);
-      for (const peer of room) {
-        const slot = peer.player ? teleported.get(peer.player.id) : undefined;
-        if (!slot || !peer.player) continue;
-        peer.player.position = [...slot];
-        peer.player.quaternion = [0, 0, 0, 1];
-        peer.player.perched = false;
-        peer.lastPose = raceNow;
-        peer.teleportGraceUntil = raceNow + 2_000;
-      }
-      if (changed || periodicRace) {
-        const packet = JSON.stringify(race.state(raceNow));
-        for (const peer of room) send(peer, packet);
-      }
-    }
     for (const [roomId, room] of rooms) {
       const players = [...room].flatMap(peer => peer.player ? [peer.player] : []);
       const signature = players.map(player => player.id).join(',');

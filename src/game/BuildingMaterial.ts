@@ -17,11 +17,28 @@ import {
  * facade shader knows how far each fragment is above the street. That drives
  * ground-floor shopfronts, signage bands and contact shading.
  */
+const MEMORIAL_SITE_LIMIT = 8;
+
 export const buildingUniforms = {
   uCsdiHeight: { value: createHeightTexture(new Float32Array([0]), 1) },
   uCsdiHeightBounds: { value: new Vector4(0, 0, 1, 1) },
   uCsdiHeightReady: { value: 0 },
+  /** Memorial sites (x, z, radius, active) in the local frame: the eight Wang Fuk Court blocks. */
+  uCsdiMemorial: { value: Array.from({ length: MEMORIAL_SITE_LIMIT }, () => new Vector4(0, 0, 0, 0)) },
 };
+
+/**
+ * Wang Fuk Court is shown with a calm, neutral stone tone and no invented
+ * shopfronts or signage: the stylised palette is art, and the memorial site
+ * should not carry made-up detail. Sites are circles around each block.
+ */
+export function setMemorialSites(sites: readonly { x: number; z: number; radius: number }[]): void {
+  buildingUniforms.uCsdiMemorial.value.forEach((target, index) => {
+    const site = sites[index];
+    if (site) target.set(site.x, site.z, site.radius, 1);
+    else target.set(0, 0, 0, 0);
+  });
+}
 
 export interface HeightField {
   heights: Float32Array;
@@ -97,7 +114,7 @@ export function setBuildingPresentation(source: Material, identity: string, mode
       Object.assign(shader.uniforms, buildingUniforms);
       applyFacadeShader(shader);
     };
-    source.customProgramCacheKey = () => `csdi-stylized-building-v5:${original.customProgramCacheKey.call(source)}`;
+    source.customProgramCacheKey = () => `csdi-stylized-building-v6:${original.customProgramCacheKey.call(source)}`;
   }
   source.needsUpdate = true;
   return source;
@@ -135,6 +152,7 @@ varying vec3 vCsdiWorldNormal;
 uniform sampler2D uCsdiHeight;
 uniform vec4 uCsdiHeightBounds;
 uniform float uCsdiHeightReady;
+uniform vec4 uCsdiMemorial[8];
 float csdiHash(vec2 p) {
   p = fract(p * vec2(234.34, 435.345));
   p += dot(p, p + 34.23);
@@ -164,7 +182,12 @@ vec2 csdiCell = floor(csdiP.xz / 42.0);
 float csdiId = csdiHash(csdiCell);
 float csdiTex = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
 float csdiDetail = clamp(0.86 + (sqrt(csdiTex) - 0.42) * 0.55, 0.68, 1.08);
-vec3 csdiWallColor = csdiPalette(csdiId) * csdiDetail;
+float csdiMemorial = 0.0;
+for (int i = 0; i < 8; i++) {
+  vec4 site = uCsdiMemorial[i];
+  csdiMemorial = max(csdiMemorial, site.w * (1.0 - smoothstep(site.z, site.z + 6.0, distance(vCsdiWorldPosition.xz, site.xy))));
+}
+vec3 csdiWallColor = mix(csdiPalette(csdiId), pow(vec3(0.84, 0.82, 0.77), vec3(2.2)), csdiMemorial) * csdiDetail;
 
 float csdiAlong = abs(csdiN.x) > abs(csdiN.z) ? csdiP.z : csdiP.x;
 vec2 csdiUv = vec2(csdiAlong / 2.6, (csdiP.y + 0.4) / 2.95);
@@ -196,7 +219,7 @@ vec2 csdiHeightUv = (csdiP.xz - uCsdiHeightBounds.xy) / uCsdiHeightBounds.zw;
 float csdiAbove = mix(40.0, csdiP.y - texture2D(uCsdiHeight, csdiHeightUv).r, uCsdiHeightReady);
 float csdiStreet = csdiWall * step(-2.0, csdiAbove) * (1.0 - smoothstep(4.3, 4.5, csdiAbove));
 // About half of the estates/streets get Hong Kong shopfronts with signage bands.
-float csdiShops = step(0.45, csdiHash(csdiCell + 3.17)) * csdiStreet;
+float csdiShops = step(0.45, csdiHash(csdiCell + 3.17)) * csdiStreet * (1.0 - csdiMemorial);
 float csdiSeg = floor(csdiAlong / 5.5);
 float csdiSegId = csdiHash(vec2(csdiSeg, csdiCell.x * 3.1 + csdiCell.y));
 vec3 csdiSign = vec3(0.62, 0.10, 0.08);

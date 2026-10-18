@@ -36,7 +36,8 @@ import { stylizedGroundUniforms } from './StylizedGround';
 import { DynamicResolution } from './DynamicResolution';
 import { StylizedClouds } from './StylizedClouds';
 import { StylizedTrees } from './StylizedTrees';
-import { setBuildingGroundHeight, type BuildingPresentation } from './BuildingMaterial';
+import { setBuildingGroundHeight, setMemorialSites, type BuildingPresentation } from './BuildingMaterial';
+import { wangFukLocalMarkers } from './wangFukLocations';
 import { RemoteBirds } from '../multiplayer/RemoteBirds';
 import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 
@@ -198,6 +199,11 @@ export class BirdsInHkGame {
       // Bridges and flyovers are scenery; a slow infrastructure layer must not block flight.
       console.warn('CSDI infrastructure layer unavailable; continuing without it.', error);
     });
+    setMemorialSites(region.id === 'tai-po'
+      ? wangFukLocalMarkers(region.latitude, region.longitude).map(marker => ({
+        x: marker.position.x, z: marker.position.z, radius: 28,
+      }))
+      : []);
     const scenery = terrainPromise.then(() => {
       setBuildingGroundHeight(this.aerialGround.heightField());
       this.trees.build(this.aerialGround, {
