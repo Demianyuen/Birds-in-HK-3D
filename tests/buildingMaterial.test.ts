@@ -43,19 +43,28 @@ describe('official building rendering material', () => {
     expect(rendered).toBe(source);
     expect((rendered as MeshStandardMaterial).map).toBe(texture);
     expect((rendered as MeshStandardMaterial).roughness).toBeLessThan(1);
-    expect(rendered.customProgramCacheKey()).toContain('csdi-rendered-building');
+    expect(rendered.customProgramCacheKey()).toContain('csdi-stylized-building');
 
     source.dispose();
     texture.dispose();
   });
 
-  it('uses stable but varied facade tones between official tiles', () => {
+  it('varies facade tones by world position in the shader, not by per-tile tint', () => {
     const firstSource = new MeshStandardMaterial({ color: '#ffffff' });
     const secondSource = new MeshStandardMaterial({ color: '#ffffff' });
     const first = createRenderedBuildingMaterial(firstSource, 'tile-a') as MeshStandardMaterial;
     const second = createRenderedBuildingMaterial(secondSource, 'tile-b') as MeshStandardMaterial;
 
-    expect(first.color.getHex()).not.toBe(second.color.getHex());
+    // Same program for every tile, so adjacent tiles of one estate never change colour at a seam.
+    expect(first.customProgramCacheKey()).toBe(second.customProgramCacheKey());
+    const shader = {
+      uniforms: {},
+      vertexShader: '#include <common>\n#include <beginnormal_vertex>\n#include <begin_vertex>',
+      fragmentShader: '#include <common>\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>',
+    };
+    first.onBeforeCompile(shader as never, undefined as never);
+    expect(shader.fragmentShader).toContain('csdiPalette(csdiId)');
+    expect(shader.fragmentShader).toContain('floor(csdiP.xz / 42.0)');
 
     first.dispose();
     second.dispose();

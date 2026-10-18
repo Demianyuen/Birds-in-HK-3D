@@ -2,6 +2,7 @@ import { VectorTile } from '@mapbox/vector-tile';
 import Pbf from 'pbf';
 import { Group } from 'three';
 import { geographicToTileFraction } from './AerialImageryGround';
+import { fetchVectorTile } from './LandUseMask';
 import type { FlightRegion } from './regions';
 
 const EARTH_CIRCUMFERENCE_METRES = 40_075_016.686;
@@ -71,10 +72,10 @@ export class RoadNetwork {
 
     const tiles = await Promise.all(requests.map(async request => {
       try {
-        const response = await fetch(`/road-data/${ROAD_ZOOM}/${request.x}/${request.y}.pbf`);
-        if (!response.ok) return null;
-        successful += 1;
-        return await response.arrayBuffer();
+        // Shared with the ground land-use mask, so each tile is downloaded once.
+        const data = await fetchVectorTile(ROAD_ZOOM, request.x, request.y);
+        if (data) successful += 1;
+        return data;
       } catch {
         return null;
       } finally {

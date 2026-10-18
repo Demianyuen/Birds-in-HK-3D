@@ -33,30 +33,56 @@ describe('bird collision and perching', () => {
     expect(bird.getTelemetry().state).toBe('PERCHED');
     expect(bird.getTelemetry().heading).toBe('N');
   });
-  it('stops before a building surface at maximum flight speed', () => {
+  it('glances off a building wall at maximum speed without passing through it', () => {
     const bird = new BirdController();
     const wall = createWall(316.5);
     bird.setEnabled(true);
     for (let index = 0; index < 20; index += 1) bird.adjustSpeed(1);
+    const before = bird.getTelemetry().speedKmh;
 
-    bird.update(0.05, wall);
-
-    expect(bird.getTelemetry().state).toBe('PERCHED');
-    expect(bird.object.position.z).toBeGreaterThan(317);
-  });
-
-  it('takes off from a collision surface after a flap', () => {
-    const bird = new BirdController();
-    const wall = createWall(318);
-    bird.setEnabled(true);
-    bird.update(0.05, wall);
-    expect(bird.getTelemetry().state).toBe('PERCHED');
-
-    bird.flap();
     bird.update(0.05, wall);
 
     expect(bird.getTelemetry().state).toBe('FLYING');
+    expect(bird.object.position.z).toBeGreaterThan(317);
+    expect(bird.getTelemetry().speedKmh).toBeLessThan(before);
+    expect(bird.bumpAge).toBe(0);
+  });
+
+  it('lands on a roof and takes off again after a flap', () => {
+    const bird = new BirdController();
+    const roof = createRoof(219);
+    bird.setEnabled(true);
+    for (let index = 0; index < 40 && bird.getTelemetry().state === 'FLYING'; index += 1) {
+      bird.setControl('pitchDown', true);
+      bird.update(0.05, roof);
+    }
+    bird.setControl('pitchDown', false);
+    expect(bird.getTelemetry().state).toBe('PERCHED');
+
+    bird.flap();
+    bird.update(0.05, roof);
+
+    expect(bird.getTelemetry().state).toBe('FLYING');
     expect(bird.getTelemetry().speedKmh).toBeGreaterThan(0);
+  });
+
+  it('glides with a gentle sink instead of accelerating downwards', () => {
+    const bird = new BirdController();
+    bird.setEnabled(true);
+    const start = bird.object.position.y;
+    for (let index = 0; index < 200; index += 1) bird.update(0.05, null);
+    const sinkRate = (start - bird.object.position.y) / 10;
+    expect(sinkRate).toBeGreaterThan(0);
+    expect(sinkRate).toBeLessThan(3);
+  });
+
+  it('holds position during a race countdown', () => {
+    const bird = new BirdController();
+    bird.setEnabled(true);
+    bird.setHeld(true);
+    const start = bird.object.position.clone();
+    for (let index = 0; index < 20; index += 1) bird.update(0.05, null);
+    expect(bird.object.position.distanceTo(start)).toBe(0);
   });
 
   it('clears held controls when a new flight starts', () => {
@@ -81,6 +107,16 @@ describe('bird collision and perching', () => {
     expect(bird.getTelemetry().state).toBe('FLYING');
   });
 });
+
+function createRoof(y: number): Mesh {
+  const geometry = new BoxGeometry(400, 1, 400);
+  const material = new MeshBasicMaterial();
+  resources.push(geometry, material);
+  const roof = new Mesh(geometry, material);
+  roof.position.set(0, y, 250);
+  roof.updateMatrixWorld(true);
+  return roof;
+}
 
 function createWall(z: number): Mesh {
   const geometry = new BoxGeometry(20, 20, 1);

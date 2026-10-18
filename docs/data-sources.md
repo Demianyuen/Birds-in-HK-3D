@@ -26,17 +26,17 @@ No satellite or aerial imagery is used as the default terrain material. Terrariu
 - Regional budget: 64 PNG tiles on 16 terrain meshes for Tai Po
 - Access: same-origin `/landsd-map/basemap` proxy with server-side credential injection
 
-The game rejects an incomplete basemap instead of exposing fallback road geometry. The optional LandsD `imagery` endpoint is verified but is not requested by the default world.
+Since ADR 0011 the basemap is requested only for surface tiles whose vector land-use mask could not be built. The game rejects an incomplete surface instead of exposing fallback road geometry. The optional LandsD `imagery` endpoint is verified but is not requested by the default world.
 
 ## OpenStreetMap Vector Data
 
 - Delivery: OpenFreeMap vector-tile service and OpenMapTiles schema
-- Runtime layers: `transportation`, `water`
-- Usage: non-rendered navigation classification and future AI routing only
-- Access: same-origin `/road-data` middleware with server-side TileJSON discovery and memory caching
-- Attribution: OpenFreeMap, OpenMapTiles, and OpenStreetMap contributors
+- Runtime layers: `transportation`, `water`, `waterway`, `landcover`, `landuse`, `park`, `building`
+- Usage: (1) non-rendered navigation classification; (2) the stylised ground land-use mask (ADR 0011)
+- Access: same-origin `/road-data` middleware with server-side TileJSON discovery and memory caching; each zoom-14 tile is fetched once in the browser and shared by both uses
+- Attribution: OpenFreeMap, OpenMapTiles, and OpenStreetMap contributors (shown in the in-game credit line as "Land cover & navigation")
 
-Motorway, primary, secondary, tertiary, minor, and service features are retained as data. Paths, tracks, railways, and tunnels are excluded. No OSM road or water mesh is added to the Three.js scene.
+The ground mask rasterises land cover, water, roads and paths into a texture painted onto the DEM terrain; no OSM road or water *mesh* is added to the scene, so road ribbons cannot crack. Tunnels and ferries are excluded.
 
 OpenStreetMap data is not a building fallback. Lands Department CSDI remains the sole source for buildings and infrastructure. Confirm the current OpenFreeMap, OpenMapTiles, and OpenStreetMap attribution and redistribution terms before public deployment.
 

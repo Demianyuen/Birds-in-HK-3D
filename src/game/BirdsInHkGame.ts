@@ -12,12 +12,16 @@ import {
   PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
+  PMREMGenerator,
   Scene,
+  ShaderMaterial,
   SRGBColorSpace,
   Vector3,
   WebGLRenderer,
+  Quaternion,
+  Euler,
 } from 'three';
-import { Sky } from 'three/addons/objects/Sky.js';
+import { createGradientSky, DAY_SKY } from './GradientSky';
 import {
   AerialImageryGround,
   type OfficialGroundMetrics,
@@ -28,7 +32,11 @@ import { getFlightRegion, type FlightRegionId } from './regions';
 import { RoadNetwork, type RoadNetworkMetrics } from './RoadNetwork';
 import { getBirdProfile, type BirdProfileId } from './birdProfiles';
 import { evaluateWorldReadiness } from './worldReadiness';
-import type { BuildingPresentation } from './BuildingMaterial';
+import { stylizedGroundUniforms } from './StylizedGround';
+import { DynamicResolution } from './DynamicResolution';
+import { StylizedClouds } from './StylizedClouds';
+import { StylizedTrees } from './StylizedTrees';
+import { setBuildingGroundHeight, type BuildingPresentation } from './BuildingMaterial';
 import { RemoteBirds } from '../multiplayer/RemoteBirds';
 import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 
@@ -58,34 +66,46 @@ export class BirdsInHkGame {
   private readonly officialWorldRoot = new Group();
   private readonly aerialGround = new AerialImageryGround();
   private readonly roads = new RoadNetwork();
-  private readonly sun = new DirectionalLight('#fff1d4', 2.45);
-  private readonly sky = new Sky();
+  private readonly trees = new StylizedTrees();
+  private readonly clouds = new StylizedClouds();
+  private readonly sun = new DirectionalLight('#ffe7c2', 3.1);
+  private sky: Mesh | null = null;
   private readonly telemetryCallback: (telemetry: GameTelemetry) => void;
   private mode: GameMode = 'attract';
   private animationFrame = 0;
   private elapsed = 0;
   private smoothedFrameMilliseconds = 16.7;
   private renderVerified = false;
+  private paused = false;
+  private readonly sunDirection = new Vector3();
+  private readonly resolution = new DynamicResolution({
+    maximum: Math.min(window.devicePixelRatio || 1, 1.5),
+    minimum: 0.65,
+  });
+  private frameIndex = 0;
 
   public constructor(canvas: HTMLCanvasElement, onTelemetry: (telemetry: GameTelemetry) => void) {
     this.telemetryCallback = onTelemetry;
     this.scene.background = new Color('#a7c9d7');
-    this.scene.fog = new Fog('#afc4c8', 1_150, 8_500);
+    this.scene.fog = new Fog(DAY_SKY.horizon, 1_600, 9_500);
     this.camera = new PerspectiveCamera(61, window.innerWidth / window.innerHeight, 0.1, 70_000);
     this.camera.position.set(0, 145, 430);
     this.camera.lookAt(0, 100, 0);
 
     this.renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(this.resolution.current);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
+    this.renderer.toneMappingExposure = 0.92;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
+    // The sun follows the player; refreshing its shadow map every other frame
+    // halves the shadow pass with no visible lag at flight speeds.
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.localClippingEnabled = true;
 
-    this.scene.add(new HemisphereLight('#d6edf4', '#50654e', 1.35));
+    this.scene.add(new HemisphereLight('#cfe6f2', '#5d6b4a', 0.85));
     this.sun.position.set(-450, 850, 420);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2_048, 2_048);
@@ -97,17 +117,22 @@ export class BirdsInHkGame {
     this.sun.shadow.camera.far = 2_600;
     this.sun.shadow.bias = -0.00016;
     this.scene.add(this.sun);
+    this.scene.add(this.sun.target);
     this.configureSky();
+    this.configureEnvironment();
     this.scene.add(this.bird.object);
     this.scene.add(this.remoteBirds.group);
     this.scene.add(this.aerialGround.group);
     this.scene.add(this.roads.group);
+    this.scene.add(this.trees.group);
+    this.scene.add(this.clouds.group);
+    this.clouds.build();
     this.officialWorldRoot.name = 'Official CSDI 3D world';
     this.scene.add(this.officialWorldRoot);
 
     const harbour = new Mesh(
       new PlaneGeometry(9_000, 9_000),
-      new MeshStandardMaterial({ color: '#2d6877', roughness: 0.3, metalness: 0.12 }),
+      new MeshStandardMaterial({ color: '#1d6a86', roughness: 0.1, metalness: 0 }),
     );
     harbour.rotation.x = -Math.PI / 2;
     harbour.position.y = -2.5;
@@ -126,18 +151,23 @@ export class BirdsInHkGame {
     this.camera.position.set(0, 185, 500);
     this.camera.lookAt(0, 72, 0);
     const terrainPromise = this.aerialGround.load(region, progress => {
+      const maskRatio = progress.maskTotal > 0 ? progress.maskCompleted / progress.maskTotal : 0;
       const basemapRatio = progress.basemapTotal > 0
         ? progress.basemapCompleted / progress.basemapTotal
-        : 0;
+        : 1;
       const meshRatio = progress.total > 0 ? progress.completed / progress.total : 0;
+      const painting = progress.maskCompleted < progress.maskTotal;
+      const fallback = progress.basemapCompleted < progress.basemapTotal;
       onProgress({
-        stage: progress.basemapCompleted < progress.basemapTotal
-          ? 'Loading LandsD official streets'
-          : 'Building Hong Kong terrain',
-        detail: progress.basemapCompleted < progress.basemapTotal
-          ? `${progress.basemapSuccessful} of ${progress.basemapTotal} official basemap tiles ready.`
-          : `${progress.successful} of ${progress.total} textured elevation meshes ready.`,
-        percent: 10 + basemapRatio * 22 + meshRatio * 6,
+        stage: painting
+          ? 'Painting Hong Kong land cover'
+          : fallback ? 'Loading LandsD official streets' : 'Building Hong Kong terrain',
+        detail: painting
+          ? `${progress.maskSuccessful} of ${progress.maskTotal} land-cover tiles painted.`
+          : fallback
+            ? `${progress.basemapSuccessful} of ${progress.basemapTotal} official basemap tiles ready.`
+            : `${progress.successful} of ${progress.total} textured elevation meshes ready.`,
+        percent: 10 + maskRatio * 16 + basemapRatio * 6 + meshRatio * 6,
         modelsLoaded: progress.successful,
       });
     });
@@ -164,9 +194,20 @@ export class BirdsInHkGame {
           percent: 42 + progress.percent * 0.22,
         });
       },
-    );
+    ).catch(error => {
+      // Bridges and flyovers are scenery; a slow infrastructure layer must not block flight.
+      console.warn('CSDI infrastructure layer unavailable; continuing without it.', error);
+    });
+    const scenery = terrainPromise.then(() => {
+      setBuildingGroundHeight(this.aerialGround.heightField());
+      this.trees.build(this.aerialGround, {
+        radiusMetres: region.flightRadiusMetres + 300,
+        maximumTrees: window.innerWidth < 720 ? 9_000 : 28_000,
+      });
+      this.aerialGround.releaseLandUseCache();
+    });
     await Promise.all([
-      terrainPromise,
+      scenery,
       birdVisualPromise,
       this.city.load(this.officialWorldRoot, this.camera, this.renderer, region, progress => {
         onProgress({
@@ -269,6 +310,8 @@ export class BirdsInHkGame {
     this.infrastructure.dispose();
     this.aerialGround.dispose();
     this.roads.dispose();
+    this.trees.dispose();
+    this.clouds.dispose();
     this.remoteBirds.dispose();
     this.renderer.dispose();
   }
@@ -280,19 +323,53 @@ export class BirdsInHkGame {
   };
 
   private configureSky(): void {
-    this.sky.scale.setScalar(45_000);
-    const uniforms = this.sky.material.uniforms;
-    uniforms.turbidity.value = 7.2;
-    uniforms.rayleigh.value = 1.75;
-    uniforms.mieCoefficient.value = 0.008;
-    uniforms.mieDirectionalG.value = 0.82;
-    const sunDirection = new Vector3().setFromSphericalCoords(
+    this.sunDirection.setFromSphericalCoords(
       1,
-      MathUtils.degToRad(58),
+      MathUtils.degToRad(56),
       MathUtils.degToRad(218),
     );
-    uniforms.sunPosition.value.copy(sunDirection);
+    this.sky = createGradientSky(this.sunDirection);
     this.scene.add(this.sky);
+    this.scene.background = new Color(DAY_SKY.horizon);
+  }
+
+  /** Image-based lighting from the same sky, so glass and water reflect it. */
+  private configureEnvironment(): void {
+    const pmrem = new PMREMGenerator(this.renderer);
+    const skyScene = new Scene();
+    const skyCopy = createGradientSky(this.sunDirection, DAY_SKY, 1_000);
+    skyScene.add(skyCopy);
+    this.scene.environment = pmrem.fromScene(skyScene, 0, 0.1, 2_000).texture;
+    this.scene.environmentIntensity = 0.6;
+    skyCopy.geometry.dispose();
+    (skyCopy.material as ShaderMaterial).dispose();
+    pmrem.dispose();
+  }
+
+  /** Development aids for repeatable screenshots; not used by gameplay. */
+  /** Current adaptive pixel ratio (QA/telemetry). */
+  public get pixelRatio(): number {
+    return this.renderer.getPixelRatio();
+  }
+
+  public debugSetPaused(paused: boolean): void {
+    this.paused = paused;
+  }
+
+  public debugSetPose(x: number, y: number, z: number, yawDegrees: number, pitchDegrees: number): void {
+    const quaternion = new Quaternion().setFromEuler(new Euler(
+      MathUtils.degToRad(pitchDegrees), MathUtils.degToRad(yawDegrees), 0, 'YXZ',
+    ));
+    this.bird.restoreSessionPose({
+      id: 'debug', name: 'debug', position: [x, y, z],
+      quaternion: quaternion.toArray() as Rotation, perched: false,
+    });
+    this.bird.updateCamera(this.camera, 1);
+  }
+
+  public debugCapture(): Promise<Blob | null> {
+    this.renderer.render(this.scene, this.camera);
+    return new Promise(resolve => this.renderer.domElement.toBlob(resolve, 'image/png'));
   }
 
   private async waitForVisibleWorld(): Promise<void> {
@@ -324,7 +401,9 @@ export class BirdsInHkGame {
     this.city.update(this.camera, this.renderer);
     this.infrastructure.update(this.camera, this.renderer);
 
-    if (this.mode === 'playing') {
+    if (this.mode === 'playing' && this.paused) {
+      this.bird.updateCamera(this.camera, 1);
+    } else if (this.mode === 'playing') {
       this.bird.update(deltaSeconds, [this.aerialGround.group, this.officialWorldRoot]);
       this.bird.updateCamera(this.camera, deltaSeconds);
       this.remoteBirds.update(deltaSeconds);
@@ -342,7 +421,22 @@ export class BirdsInHkGame {
       this.camera.lookAt(0, 78, 0);
     }
 
-    this.sun.position.set(this.camera.position.x - 450, 850, this.camera.position.z + 420);
+    this.frameIndex += 1;
+    if (this.frameIndex % 2 === 0 || this.mode !== 'playing') {
+      const focus = this.mode === 'playing' ? this.bird.object.position : this.camera.position;
+      // Snap the shadow camera to whole shadow texels so static shadows do not shimmer.
+      const texel = (this.sun.shadow.camera.right - this.sun.shadow.camera.left) / this.sun.shadow.mapSize.x;
+      this.sun.target.position.set(Math.round(focus.x / texel) * texel, 0, Math.round(focus.z / texel) * texel);
+      this.sun.position.copy(this.sun.target.position).addScaledVector(this.sunDirection, 1_400);
+      this.sun.target.updateMatrixWorld();
+      this.renderer.shadowMap.needsUpdate = true;
+    }
+    if (this.mode === 'playing' && !this.paused) {
+      const ratio = this.resolution.update(deltaSeconds * 1_000, performance.now());
+      if (ratio !== null) this.renderer.setPixelRatio(ratio);
+    }
+    stylizedGroundUniforms.uSgTime.value = this.elapsed;
+    this.clouds.update(this.elapsed);
     this.renderer.render(this.scene, this.camera);
     if (this.mode === 'playing') {
       if (!this.renderVerified) this.renderVerified = this.hasNonBlankFramebuffer();

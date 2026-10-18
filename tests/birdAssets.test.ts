@@ -6,8 +6,8 @@ const modelsRoot = resolve(process.cwd(), 'public/models');
 
 describe('runtime bird assets', () => {
   it.each([
-    ['dove.glb', 6_797_052],
-    ['eagle.glb', 9_107_208],
+    ['dove.glb', 770_224],
+    ['eagle.glb', 864_308],
   ])('contains a validated %s GLB', (filename, expectedBytes) => {
     const path = resolve(modelsRoot, filename);
     const data = readFileSync(path);

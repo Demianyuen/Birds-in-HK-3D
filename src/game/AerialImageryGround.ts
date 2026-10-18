@@ -1,6 +1,7 @@
 import {
   CanvasTexture,
   Color,
+  DataTexture,
   Group,
   Mesh,
   MeshStandardMaterial,
@@ -8,7 +9,19 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { FlightRegion } from './regions';
+import type { HeightField } from './BuildingMaterial';
 import { loadDetailTiles } from './detailTiles';
+import { applyStylizedGround } from './StylizedGround';
+import {
+  createLandUseTexture,
+  fetchVectorTile,
+  LAND_USE_DETAIL_SIZE,
+  LAND_USE_MASK_SIZE,
+  LAND_USE_ZOOM,
+  rasterizeLandUseMask,
+  type LandUseClass,
+  type LandUseMask,
+} from './LandUseMask';
 
 const EARTH_CIRCUMFERENCE_METRES = 40_075_016.686;
 const SURFACE_ZOOM = 14;
@@ -27,6 +40,9 @@ export interface ImageryLoadProgress {
   basemapCompleted: number;
   basemapTotal: number;
   basemapSuccessful: number;
+  maskCompleted: number;
+  maskTotal: number;
+  maskSuccessful: number;
 }
 
 export interface OfficialGroundMetrics {
@@ -34,6 +50,17 @@ export interface OfficialGroundMetrics {
   texturedMeshes: number;
   basemapTilesLoaded: number;
   basemapTilesTotal: number;
+  /** Surface tiles painted from the vector land-use mask (the rest use the LandsD basemap). */
+  vectorMaskTiles: number;
+}
+
+type SurfaceTexture = CanvasTexture | DataTexture;
+
+interface SurfaceEntry {
+  request: TileRequest;
+  material: MeshStandardMaterial;
+  base: SurfaceTexture;
+  mask: LandUseMask | null;
 }
 
 interface TileRequest {
@@ -55,8 +82,9 @@ export class AerialImageryGround {
   private activeElevationTiles = new Map<string, Uint8ClampedArray>();
   private activeSurfaceCenter: { x: number; y: number } | null = null;
   private activeTileWidthMetres = 0;
-  private readonly surfaceMaterials = new Map<string, { request: TileRequest; material: MeshStandardMaterial; base: CanvasTexture }>();
-  private readonly detailTextures = new Map<string, CanvasTexture>();
+  private readonly surfaceMaterials = new Map<string, SurfaceEntry>();
+  private readonly detailTextures = new Map<string, SurfaceTexture>();
+  private readonly landUsePixels = new Map<string, { data: Uint8ClampedArray; size: number }>();
   private readonly detailFailures = new Map<string, number>();
   private detailJob: AbortController | null = null;
   private generation = 0;
@@ -96,6 +124,66 @@ export class AerialImageryGround {
     return this.sampleElevation(this.activeElevationTiles, surfaceX, surfaceY);
   }
 
+  /**
+   * Land-use class of the official basemap at a world position, using the same
+   * colour classes as the stylised ground shader. Used to place scenery.
+   */
+  public landUseAt(worldX: number, worldZ: number): LandUse | null {
+    if (!this.activeSurfaceCenter) return null;
+    const surfaceX = this.activeSurfaceCenter.x + worldX / this.activeTileWidthMetres;
+    const surfaceY = this.activeSurfaceCenter.y + worldZ / this.activeTileWidthMetres;
+    const tileX = Math.floor(surfaceX);
+    const tileY = Math.floor(surfaceY);
+    const key = `${tileX}/${tileY}`;
+    const mask = this.surfaceMaterials.get(key)?.mask;
+    if (mask) return mask.classAt(surfaceX - tileX, surfaceY - tileY);
+    let pixels = this.landUsePixels.get(key);
+    if (!pixels) {
+      const canvas = this.surfaceMaterials.get(key)?.base.image as HTMLCanvasElement | undefined;
+      const context = canvas?.getContext('2d', { willReadFrequently: true });
+      if (!canvas || !context) return null;
+      pixels = { data: context.getImageData(0, 0, canvas.width, canvas.height).data, size: canvas.width };
+      this.landUsePixels.set(key, pixels);
+    }
+    const px = Math.min(pixels.size - 1, Math.floor((surfaceX - tileX) * pixels.size));
+    const py = Math.min(pixels.size - 1, Math.floor((surfaceY - tileY) * pixels.size));
+    const index = (py * pixels.size + px) * 4;
+    return classifyBasemapColour(pixels.data[index], pixels.data[index + 1], pixels.data[index + 2]);
+  }
+
+  /**
+   * Terrain heights on a regular grid over the loaded surface (row 0 = minimum z),
+   * for shaders that need street level (building shopfronts and contact shading).
+   */
+  public heightField(resolution = 512): HeightField | null {
+    if (!this.activeSurfaceCenter || this.surfaceMaterials.size === 0) return null;
+    let minX = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxZ = -Infinity;
+    const half = this.activeTileWidthMetres / 2;
+    for (const { request } of this.surfaceMaterials.values()) {
+      minX = Math.min(minX, request.worldX - half);
+      maxX = Math.max(maxX, request.worldX + half);
+      minZ = Math.min(minZ, request.worldZ - half);
+      maxZ = Math.max(maxZ, request.worldZ + half);
+    }
+    const size = Math.max(maxX - minX, maxZ - minZ);
+    const heights = new Float32Array(resolution * resolution);
+    for (let row = 0; row < resolution; row += 1) {
+      const z = minZ + ((row + 0.5) / resolution) * size;
+      for (let column = 0; column < resolution; column += 1) {
+        const x = minX + ((column + 0.5) / resolution) * size;
+        heights[row * resolution + column] = this.getElevationAtWorld(x, z) + 0.16;
+      }
+    }
+    return { heights, resolution, minX, minZ, size };
+  }
+
+  public releaseLandUseCache(): void {
+    this.landUsePixels.clear();
+  }
+
   public get metrics(): Readonly<OfficialGroundMetrics> {
     return this.groundMetrics;
   }
@@ -117,7 +205,10 @@ export class AerialImageryGround {
     const controller = new AbortController();
     this.detailJob = controller;
     const generation = this.generation;
-    void this.loadDetailTexture(surface.request, mobile ? 16 : 17, controller.signal).then(texture => {
+    const detail = surface.mask
+      ? this.loadDetailMask(surface.request, mobile ? LAND_USE_MASK_SIZE * 1.5 : LAND_USE_DETAIL_SIZE)
+      : this.loadDetailTexture(surface.request, mobile ? 16 : 17, controller.signal);
+    void detail.then(texture => {
       if (generation !== this.generation) { texture?.dispose(); return; }
       if (!texture) { this.detailFailures.set(key, Date.now()); return; }
       surface.material.map = texture;
@@ -135,6 +226,14 @@ export class AerialImageryGround {
     }).catch(() => {
       if (generation === this.generation) this.detailFailures.set(key, Date.now());
     }).finally(() => { if (this.detailJob === controller) this.detailJob = null; });
+  }
+
+  /** Higher-resolution land-use mask for the tile under the player, from the cached vector tile. */
+  private async loadDetailMask(request: TileRequest, size: number): Promise<DataTexture | null> {
+    const data = await fetchVectorTile(LAND_USE_ZOOM, request.x, request.y);
+    if (!data || !this.activeTileWidthMetres) return null;
+    const mask = rasterizeLandUseMask(data, Math.round(size), this.activeTileWidthMetres);
+    return mask ? createLandUseTexture(mask, 8) : null;
   }
 
   private async loadDetailTexture(request: TileRequest, zoom: number, signal: AbortSignal): Promise<CanvasTexture | null> {
@@ -168,6 +267,7 @@ export class AerialImageryGround {
     for (const texture of this.detailTextures.values()) texture.dispose();
     this.detailTextures.clear();
     this.surfaceMaterials.clear();
+    this.landUsePixels.clear();
     this.detailFailures.clear();
     this.detailPatchesLoaded = 0;
     this.group.clear();
@@ -189,8 +289,11 @@ export class AerialImageryGround {
       total: requests.length,
       successful: 0,
       basemapCompleted: 0,
-      basemapTotal: requests.length * BASEMAP_SCALE ** 2,
+      basemapTotal: 0,
       basemapSuccessful: 0,
+      maskCompleted: 0,
+      maskTotal: requests.length,
+      maskSuccessful: 0,
     };
     this.notifyProgress();
     const elevationTiles = await this.loadElevationCoverage(requests);
@@ -200,40 +303,63 @@ export class AerialImageryGround {
     this.activeSurfaceCenter = center;
     this.activeTileWidthMetres = tileWidthMetres(region.latitude);
     this.originElevation = this.sampleElevation(elevationTiles, center.x, center.y);
-    const basemapTextures = await Promise.all(
-      requests.map(request => this.loadOfficialBasemapTexture(request)),
-    );
-    if (basemapTextures.some(texture => texture === null)) {
-      throw new Error('The LandsD basemap could not deliver the complete Tai Po street surface.');
+
+    // Vector land-use masks first; any tile without one falls back to the LandsD basemap.
+    const masks = await Promise.all(requests.map(request => this.loadLandUseMask(request)));
+    const fallbackCount = masks.filter(mask => mask === null).length;
+    this.progress.basemapTotal = fallbackCount * BASEMAP_SCALE ** 2;
+    this.notifyProgress();
+    const surfaces = await Promise.all(requests.map(async (request, index) => {
+      const mask = masks[index];
+      if (mask) return { texture: this.track(createLandUseTexture(mask, 8)) as SurfaceTexture, mask };
+      const texture = await this.loadOfficialBasemapTexture(request);
+      return texture ? { texture: texture as SurfaceTexture, mask: null } : null;
+    }));
+    if (surfaces.some(surface => surface === null)) {
+      throw new Error('Neither the vector land cover nor the LandsD basemap could deliver the complete Tai Po surface.');
     }
     for (let index = 0; index < requests.length; index += 1) {
       const request = requests[index];
+      const surface = surfaces[index]!;
       const geometry = this.createGroundGeometry(request, elevationTiles, region.latitude);
-      const material = this.track(new MeshStandardMaterial({
-        map: basemapTextures[index],
+      const material = this.track(applyStylizedGround(new MeshStandardMaterial({
+        map: surface.texture,
         color: '#ffffff',
         roughness: 0.94,
         metalness: 0,
-      }));
+      }), { vectorMask: surface.mask !== null }));
       const tile = new Mesh(geometry, material);
-      this.surfaceMaterials.set(`${request.x}/${request.y}`, { request, material, base: basemapTextures[index]! });
+      this.surfaceMaterials.set(`${request.x}/${request.y}`, { request, material, base: surface.texture, mask: surface.mask });
       tile.position.set(request.worldX, 0.16, request.worldZ);
       tile.receiveShadow = true;
       this.group.add(tile);
       this.progress = {
+        ...this.progress,
         completed: index + 1,
         total: requests.length,
         successful: index + 1,
-        basemapCompleted: this.progress.basemapCompleted,
-        basemapTotal: this.progress.basemapTotal,
-        basemapSuccessful: this.progress.basemapSuccessful,
       };
       this.groundMetrics = {
         terrainMeshes: index + 1,
         texturedMeshes: index + 1,
         basemapTilesLoaded: this.progress.basemapSuccessful,
         basemapTilesTotal: this.progress.basemapTotal,
+        vectorMaskTiles: this.progress.maskSuccessful,
       };
+      this.notifyProgress();
+    }
+  }
+
+  private async loadLandUseMask(request: TileRequest): Promise<LandUseMask | null> {
+    try {
+      const data = await fetchVectorTile(LAND_USE_ZOOM, request.x, request.y);
+      const mask = data ? rasterizeLandUseMask(data, LAND_USE_MASK_SIZE, this.activeTileWidthMetres) : null;
+      if (mask) this.progress.maskSuccessful += 1;
+      return mask;
+    } catch {
+      return null;
+    } finally {
+      this.progress.maskCompleted += 1;
       this.notifyProgress();
     }
   }
@@ -373,6 +499,24 @@ export class AerialImageryGround {
   private notifyProgress(): void {
     for (const listener of this.progressListeners) listener(this.progress);
   }
+}
+
+export type LandUse = LandUseClass;
+
+/** Mirrors the colour classes in StylizedGround.ts (sRGB 0–255 input). */
+export function classifyBasemapColour(red: number, green: number, blue: number): LandUse {
+  const r = red / 255;
+  const g = green / 255;
+  const b = blue / 255;
+  if (g - r > 0.075 && b - g > 0.03) return 'water';
+  if (g - r > 0.04 && g - b > 0.05) return 'green';
+  if (r - b > 0.22) return 'road';
+  const minimum = Math.min(r, g, b);
+  const maximum = Math.max(r, g, b);
+  if (minimum > 0.948) return 'road';
+  const luminance = r * 0.299 + g * 0.587 + b * 0.114;
+  if (luminance < 0.8 && maximum - minimum < 0.045) return 'footprint';
+  return 'land';
 }
 
 function createTileRequests(region: FlightRegion): TileRequest[] {
@@ -516,6 +660,9 @@ function emptyProgress(): ImageryLoadProgress {
     basemapCompleted: 0,
     basemapTotal: 0,
     basemapSuccessful: 0,
+    maskCompleted: 0,
+    maskTotal: 0,
+    maskSuccessful: 0,
   };
 }
 
@@ -525,5 +672,6 @@ function emptyGroundMetrics(): OfficialGroundMetrics {
     texturedMeshes: 0,
     basemapTilesLoaded: 0,
     basemapTilesTotal: 0,
+    vectorMaskTiles: 0,
   };
 }

@@ -14,6 +14,12 @@ import type { WorldPlayer } from '../multiplayer/protocol';
 const FORWARD = new Vector3(0, 0, -1);
 const UP = new Vector3(0, 1, 0);
 const BIRD_CLEARANCE = 1.15;
+/** Equilibrium sink rate while gliding (m/s); flaps push above it. */
+const GLIDE_SINK = -1.4;
+/** Fraction of gravity converted between height and speed when climbing or diving. */
+const ENERGY_EXCHANGE = 0.55;
+/** Surfaces flatter than this (normal.y) are landing spots; steeper ones are walls. */
+const LANDING_NORMAL_Y = 0.62;
 
 interface Collision {
   point: Vector3;
@@ -47,6 +53,11 @@ export class BirdController {
   private flapQueued = false;
   private perched = false;
   private enabled = false;
+  private held = false;
+  private clockSeconds = 0;
+  private lastMouseSteer = -10;
+  /** Seconds since the last wall bump; drives camera shake. */
+  public bumpAge = 10;
   private flightRadiusMetres = Number.POSITIVE_INFINITY;
   private flightProfile: BirdProfile = getBirdProfile('pigeon');
   private readonly controls: Record<FlightControl, boolean> = {
@@ -71,6 +82,7 @@ export class BirdController {
     this.speed = this.flightProfile.cruiseSpeed;
     this.verticalVelocity = 0;
     this.perched = false;
+    this.held = false;
     this.flapQueued = false;
     for (const control of Object.keys(this.controls) as FlightControl[]) {
       this.controls[control] = false;
@@ -80,6 +92,15 @@ export class BirdController {
 
   public setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+  }
+
+  /** Hold the bird in place (race countdown). Wings keep beating; no movement. */
+  public setHeld(held: boolean): void {
+    this.held = held;
+    if (held) {
+      this.verticalVelocity = 0;
+      this.perched = false;
+    }
   }
 
   public restoreSessionPose(player: WorldPlayer): void {
@@ -112,6 +133,7 @@ export class BirdController {
     if (!this.enabled) return;
     this.yaw -= deltaX * 0.0022;
     this.pitch = MathUtils.clamp(this.pitch - deltaY * 0.0018, -0.65, 0.58);
+    this.lastMouseSteer = this.clockSeconds;
     this.targetRoll = MathUtils.clamp(-deltaX * 0.012, -0.62, 0.62);
   }
 
@@ -135,6 +157,13 @@ export class BirdController {
   }
 
   public update(deltaSeconds: number, collisionRoot: Object3D | readonly Object3D[] | null): void {
+    this.clockSeconds += deltaSeconds;
+    this.bumpAge += deltaSeconds;
+    if (this.held) {
+      this.flapQueued = false;
+      this.pigeon.animate(deltaSeconds, this.flightProfile.cruiseSpeed * 0.6, false);
+      return;
+    }
     if (this.enabled) {
       const yawDirection = Number(this.controls.yawLeft) - Number(this.controls.yawRight);
       const pitchDirection = Number(this.controls.pitchUp) - Number(this.controls.pitchDown);
@@ -142,7 +171,15 @@ export class BirdController {
       this.yaw += yawDirection * this.flightProfile.turnRate * deltaSeconds;
       this.pitch = MathUtils.clamp(this.pitch + pitchDirection * 0.72 * deltaSeconds, -0.65, 0.58);
       this.targetRoll = MathUtils.clamp(this.targetRoll + yawDirection * 0.85, -0.62, 0.62);
-      this.speed = MathUtils.clamp(this.speed + speedDirection * 24 * deltaSeconds, this.flightProfile.minimumSpeed, this.flightProfile.maximumSpeed);
+      this.speed += speedDirection * 24 * deltaSeconds;
+      if (speedDirection === 0) {
+        // Ease back towards cruise speed when the player is not throttling.
+        this.speed += (this.flightProfile.cruiseSpeed - this.speed) * (1 - Math.exp(-0.3 * deltaSeconds));
+      }
+      if (pitchDirection === 0 && this.clockSeconds - this.lastMouseSteer > 0.8) {
+        // Gentle auto-level so keyboard flight is forgiving.
+        this.pitch *= Math.exp(-0.9 * deltaSeconds);
+      }
     }
     this.roll += (this.targetRoll - this.roll) * (1 - Math.exp(-5 * deltaSeconds));
     this.targetRoll *= Math.exp(-4 * deltaSeconds);
@@ -162,20 +199,42 @@ export class BirdController {
     }
 
     const forward = FORWARD.clone().applyQuaternion(this.orientation).normalize();
-    this.verticalVelocity -= 4.3 * deltaSeconds;
-    if (this.flapQueued) this.verticalVelocity += this.flightProfile.flapLift;
+    // Arcade glide: climbing trades speed for height, diving trades height for speed.
+    this.speed -= forward.y * 9.8 * ENERGY_EXCHANGE * deltaSeconds;
+    this.speed = MathUtils.clamp(this.speed, this.flightProfile.minimumSpeed, this.flightProfile.maximumSpeed);
+    this.verticalVelocity += (GLIDE_SINK - this.verticalVelocity) * (1 - Math.exp(-1.6 * deltaSeconds));
+    if (this.flapQueued) {
+      this.verticalVelocity += this.flightProfile.flapLift;
+      this.speed = Math.min(this.flightProfile.maximumSpeed, this.speed + 2.2);
+    }
     this.flapQueued = false;
     this.velocity.copy(forward).multiplyScalar(this.speed);
     this.velocity.y += this.verticalVelocity;
     const displacement = this.velocity.clone().multiplyScalar(deltaSeconds);
     const collision = this.findCollision(displacement, collisionRoot);
 
-    if (collision) {
+    if (collision && collision.normal.y >= LANDING_NORMAL_Y) {
+      // Roofs and ground: land and perch.
       this.object.position.copy(collision.point).addScaledVector(collision.normal, BIRD_CLEARANCE);
       this.perchNormal.copy(collision.normal);
       this.verticalVelocity = 0;
       this.velocity.set(0, 0, 0);
       this.perched = true;
+    } else if (collision) {
+      // Walls: glance off and lose speed instead of stopping dead.
+      const wall = new Vector3(collision.normal.x, 0, collision.normal.z);
+      if (wall.lengthSq() < 1e-6) wall.copy(forward).setY(0).negate();
+      wall.normalize();
+      this.object.position.copy(collision.point).addScaledVector(wall, BIRD_CLEARANCE + 0.6);
+      const heading = new Vector3(forward.x, 0, forward.z).normalize();
+      const along = heading.dot(wall);
+      if (along < 0) heading.addScaledVector(wall, -2 * along).normalize();
+      this.yaw = Math.atan2(-heading.x, -heading.z);
+      this.speed = Math.max(this.flightProfile.minimumSpeed, this.speed * 0.55);
+      this.verticalVelocity = Math.max(this.verticalVelocity, 1.5);
+      this.targetRoll = MathUtils.clamp(-along * 0.8, -0.62, 0.62);
+      this.bumpAge = 0;
+      this.applyOrientation();
     } else {
       this.object.position.add(displacement);
       this.keepInsideFlightRegion();
@@ -193,6 +252,11 @@ export class BirdController {
   public updateCamera(camera: PerspectiveCamera, deltaSeconds: number): void {
     const offset = new Vector3(0, 5.2, 15.5).applyQuaternion(this.orientation);
     const desiredPosition = this.object.position.clone().add(offset);
+    if (this.bumpAge < 0.35) {
+      const shake = (0.35 - this.bumpAge) * 2.2;
+      desiredPosition.x += Math.sin(this.clockSeconds * 71) * shake;
+      desiredPosition.y += Math.cos(this.clockSeconds * 53) * shake;
+    }
     camera.position.lerp(desiredPosition, 1 - Math.exp(-7 * deltaSeconds));
     const lookTarget = this.object.position.clone().add(
       FORWARD.clone().applyQuaternion(this.orientation).multiplyScalar(18),

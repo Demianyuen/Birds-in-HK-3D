@@ -132,6 +132,23 @@ window.addEventListener('beforeunload', () => {
 window.addEventListener('blur', () => { game.clearControls(); touchControls.releaseAll(); });
 showScreen('boot');
 
+if (import.meta.env.DEV) {
+  // Development-only hooks for repeatable QA screenshots (production/qa/evidence).
+  Object.assign(window, {
+    __birds: {
+      game,
+      async capture(label: string): Promise<boolean> {
+        const blob = await game.debugCapture();
+        if (!blob || !/^[a-zA-Z0-9-]{1,80}$/.test(label)) return false;
+        const response = await fetch('/__runtime-frame', {
+          method: 'POST', headers: { 'Content-Type': 'image/png', 'X-Runtime-Session': label }, body: blob,
+        });
+        return response.ok;
+      },
+    },
+  });
+}
+
 async function beginFlight(): Promise<void> {
   if (loading) return;
   loading = true;

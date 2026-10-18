@@ -8,7 +8,7 @@ import {
 import { Box3, Frustum, MathUtils, Matrix4, Material, Mesh, Plane, Sphere, Vector3 } from 'three';
 import type { Object3D, PerspectiveCamera, WebGLRenderer } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
-import { setBuildingPresentation, type BuildingPresentation } from './BuildingMaterial';
+import { createInfrastructureMaterial, setBuildingPresentation, type BuildingPresentation } from './BuildingMaterial';
 import { geodeticToEcef } from './geo';
 import type { FlightRegion } from './regions';
 
@@ -153,6 +153,7 @@ export class CsdiTiles {
                 this.presentation,
               );
             }
+            if (this.layerName === 'infrastructure') createInfrastructureMaterial(material);
             applyRegionClipping(material, regionClippingPlanes);
             return material;
           });

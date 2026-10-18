@@ -35,7 +35,7 @@ npm run qa:csdi
 
 `Boot -> Main menu -> World selection -> Loading -> Flight`
 
-The first playable region streams official Tai Po CSDI Building and Infrastructure over 16 bounded elevation meshes textured by 64 zoom-15 LandsD basemap tiles. OpenStreetMap vector tiles remain non-rendered navigation data, so they cannot create cracked road surfaces. It enters flight only after the complete official ground, a camera-visible official building, and navigation data are ready. There is no procedural-building fallback.
+The first playable region streams official Tai Po CSDI Building and Infrastructure over 16 bounded elevation meshes. The ground is painted in a stylised game look from a land-use mask rasterised from zoom-14 OpenStreetMap vector tiles (woodland, parks, water, roads, paths); no road meshes are added, so road surfaces cannot crack. The LandsD basemap is the per-tile fallback (ADR 0010, ADR 0011). It enters flight only after the complete official ground, a camera-visible official building, and navigation data are ready. There is no procedural-building fallback.
 
 The menu supports pigeon, dove, and eagle flight profiles. The app loads `pigeon.glb`, `dove.glb`, or `eagle.glb` from `public/models` according to the selected bird. A model without named wing pivots still renders safely; it simply keeps the profile's non-destructive idle animation.
 
