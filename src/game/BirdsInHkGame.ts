@@ -39,6 +39,8 @@ import { StylizedTrees } from './StylizedTrees';
 import { setBuildingGroundHeight, setMemorialSites, type BuildingPresentation } from './BuildingMaterial';
 import { wangFukLocalMarkers } from './wangFukLocations';
 import { RemoteBirds } from '../multiplayer/RemoteBirds';
+import { createCarriedFlower, disposeCarriedFlower, MemorialFlowers } from '../openWorld/MemorialFlowers';
+import type { FlowerKind } from '../openWorld/contentRules';
 import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 
 type GameMode = 'attract' | 'loading' | 'playing';
@@ -69,6 +71,9 @@ export class BirdsInHkGame {
   private readonly roads = new RoadNetwork();
   private readonly trees = new StylizedTrees();
   private readonly clouds = new StylizedClouds();
+  /** Flowers laid at Wang Fuk Court by visitors. */
+  public readonly flowers = new MemorialFlowers();
+  private carried: ReturnType<typeof createCarriedFlower> | null = null;
   private readonly sun = new DirectionalLight('#ffe7c2', 3.1);
   private sky: Mesh | null = null;
   private readonly telemetryCallback: (telemetry: GameTelemetry) => void;
@@ -127,6 +132,7 @@ export class BirdsInHkGame {
     this.scene.add(this.roads.group);
     this.scene.add(this.trees.group);
     this.scene.add(this.clouds.group);
+    this.scene.add(this.flowers.group);
     this.clouds.build();
     this.officialWorldRoot.name = 'Official CSDI 3D world';
     this.scene.add(this.officialWorldRoot);
@@ -261,6 +267,31 @@ export class BirdsInHkGame {
     this.bird.setBirdProfile(profileId);
   }
 
+  /** Show (or stop showing) a flower in the bird's beak. */
+  public holdFlower(kind: FlowerKind | null): void {
+    if (this.carried) disposeCarriedFlower(this.carried);
+    this.carried = kind ? createCarriedFlower(kind) : null;
+    this.bird.rig.holdInBeak(this.carried);
+  }
+
+  /** Where the bird's feet are while on the ground, or null in the air. */
+  public get birdGroundPoint(): Vector3 | null {
+    return this.bird.groundPoint;
+  }
+
+  public get birdPosition(): Vector3 {
+    return this.bird.object.position;
+  }
+
+  /** The view camera, for screen-space labels. */
+  public get viewCamera(): PerspectiveCamera {
+    return this.camera;
+  }
+
+  public get remoteBirdLabels(): ReturnType<RemoteBirds['labels']> {
+    return this.remoteBirds.labels();
+  }
+
   public syncPlayers(players: readonly WorldPlayer[]): void {
     this.remoteBirds.sync(players);
   }
@@ -318,6 +349,8 @@ export class BirdsInHkGame {
     this.roads.dispose();
     this.trees.dispose();
     this.clouds.dispose();
+    this.flowers.dispose();
+    this.holdFlower(null);
     this.remoteBirds.dispose();
     this.renderer.dispose();
   }
@@ -443,6 +476,7 @@ export class BirdsInHkGame {
     }
     stylizedGroundUniforms.uSgTime.value = this.elapsed;
     this.clouds.update(this.elapsed);
+    this.flowers.update();
     this.renderer.render(this.scene, this.camera);
     if (this.mode === 'playing') {
       if (!this.renderVerified) this.renderVerified = this.hasNonBlankFramebuffer();

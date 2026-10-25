@@ -88,6 +88,35 @@ interface Middlewares {
   use: (path: string, handler: (request: MiddlewareRequest, response: MiddlewareResponse, next: () => void) => void) => void;
 }
 
+/**
+ * Runs the Vercel functions in api/ (flowers, chat, moderate) inside the Vite
+ * dev and preview servers, with server-only variables from .env.local.
+ */
+function openWorldApiPlugin(env: Record<string, string>): Plugin {
+  const routes = new Set(['flowers', 'chat', 'moderate']);
+  for (const key of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'MODERATOR_TOKEN', 'RATE_LIMIT_SALT', 'VITE_SUPABASE_URL']) {
+    if (env[key] && !process.env[key]) process.env[key] = env[key];
+  }
+  return {
+    name: 'open-world-api',
+    configureServer: server => {
+      server.middlewares.use('/api', (request, response, next) => {
+        const route = (request.url ?? '').split('?')[0].replace(/^\/+/, '');
+        if (!routes.has(route)) {
+          next();
+          return;
+        }
+        void server.ssrLoadModule(`/api/${route}.ts`)
+          .then(module => (module.default as (req: unknown, res: unknown) => Promise<void>)(request, response))
+          .catch(error => {
+            response.statusCode = 500;
+            response.end(error instanceof Error ? error.message : 'API failed.');
+          });
+      });
+    },
+  };
+}
+
 function studioStatePlugin(): Plugin {
   const statePath = resolve(process.cwd(), 'runtime-evidence', 'studio-state.json');
   const agentIds = new Set(['dou-dou', 'nian-nian', 'map-agent', 'qa-agent', 'asset-agent']);
@@ -360,7 +389,7 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    plugins: [studioStatePlugin(), runtimeEvidencePlugin(), roadDataPlugin(), csdiRegionPlugin(apiKey)],
+    plugins: [studioStatePlugin(), runtimeEvidencePlugin(), roadDataPlugin(), csdiRegionPlugin(apiKey), openWorldApiPlugin(env)],
     build: {
       chunkSizeWarningLimit: 750,
       rollupOptions: {
@@ -368,6 +397,7 @@ export default defineConfig(({ mode }) => {
           app: resolve(process.cwd(), 'index.html'),
           studio: resolve(process.cwd(), 'studio.html'),
           cityStyle: resolve(process.cwd(), 'city-style.html'),
+          moderate: resolve(process.cwd(), 'moderate.html'),
         },
       },
     },

@@ -1,5 +1,8 @@
 import './styles.css';
 import { WorldPanel } from './multiplayer/WorldPanel';
+import { OpenWorldPanel } from './openWorld/OpenWorldPanel';
+import { openWorldConfig } from './openWorld/config';
+import { readVisitorForm, rememberedName, type Visitor } from './openWorld/visitor';
 import { TouchFlightControls } from './game/TouchFlightControls';
 import { createHeritageDiagram } from './game/heritageDiagram';
 import { transitionFlow, type ScreenName } from './app/flow';
@@ -17,7 +20,10 @@ import {
 
 const app = requireElement<HTMLElement>('app');
 const canvas = requireElement<HTMLCanvasElement>('game-canvas');
-const continueButton = requireElement<HTMLButtonElement>('continue-button');
+const visitorForm = requireElement<HTMLFormElement>('visitor-form');
+const visitorName = requireElement<HTMLInputElement>('visitor-name');
+const visitorMessage = requireElement<HTMLTextAreaElement>('visitor-message');
+const visitorError = requireElement<HTMLElement>('visitor-error');
 const startButton = requireElement<HTMLButtonElement>('start-button');
 const retryButton = requireElement<HTMLButtonElement>('retry-button');
 const regionButton = requireElement<HTMLButtonElement>('region-button');
@@ -65,7 +71,15 @@ const game = new BirdsInHkGame(canvas, updateTelemetry);
 const worldEndpoint = import.meta.env.VITE_WORLD_SERVER_URL
   || (import.meta.env.DEV ? 'ws://127.0.0.1:8787/world' : undefined);
 const worldPanel = new WorldPanel(game, worldEndpoint);
-app.append(worldPanel.element);
+// With the shared Supabase service configured, the open-world panel replaces the
+// legacy WebSocket world-server panel.
+const openWorldEnabled = openWorldConfig() !== null;
+if (!openWorldEnabled) app.append(worldPanel.element);
+const openWorld = new OpenWorldPanel(game);
+openWorld.mount(app);
+let visitor: Visitor | null = null;
+let lastFrameTime = performance.now();
+visitorName.value = rememberedName();
 const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
 document.querySelector('.heritage-evidence')?.append(createHeritageDiagram());
@@ -81,7 +95,16 @@ buildingPresentation.addEventListener('change', () => {
   game.clearControls();
 });
 
-continueButton.addEventListener('click', () => showScreen(transitionFlow(currentScreen, 'continue')));
+visitorForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const kind = new FormData(visitorForm).get('flower-kind');
+  const result = readVisitorForm(visitorName.value, visitorMessage.value, kind);
+  visitorError.hidden = !result.error;
+  visitorError.textContent = result.error ?? '';
+  if (!result.visitor) return;
+  visitor = result.visitor;
+  showScreen(transitionFlow(currentScreen, 'continue'));
+});
 startButton.addEventListener('click', () => void beginFlight());
 retryButton.addEventListener('click', () => void beginFlight());
 regionButton.addEventListener('click', () => showScreen(transitionFlow(currentScreen, 'change-region')));
@@ -105,11 +128,16 @@ window.addEventListener('wheel', event => {
 
 window.addEventListener('keydown', event => {
   if (currentScreen !== 'game') return;
-  if (event.target instanceof HTMLElement && (event.target.closest('.world-panel') || event.target.isContentEditable
+  if (event.target instanceof HTMLElement && (event.target.closest('.world-panel, .open-world-panel') || event.target.isContentEditable
     || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(event.target.tagName))) return;
   if (event.code === 'Space') {
     event.preventDefault();
     game.flap();
+    return;
+  }
+  if (event.code === 'KeyF') {
+    event.preventDefault();
+    openWorld.tryLayFlower();
     return;
   }
   const control = keyboardControlForCode(event.code);
@@ -126,6 +154,7 @@ window.addEventListener('keyup', event => {
 
 window.addEventListener('beforeunload', () => {
   worldPanel.dispose();
+  openWorld.dispose();
   closeGoogleMapsContext();
   game.dispose();
 });
@@ -180,6 +209,7 @@ async function beginFlight(): Promise<void> {
     });
     await delay(700);
     game.startFlight();
+    openWorld.begin(visitor ?? readVisitorForm('', '', 'white-chrysanthemum').visitor!);
     reportRuntimeEvent('world.ready', { source: 'csdi', region: region.id, birdProfile });
     showScreen(transitionFlow(currentScreen, 'world-ready'));
   } catch (error) {
@@ -212,7 +242,10 @@ function updateLoading(progress: MapLoadProgress): void {
 }
 
 function updateTelemetry(telemetry: GameTelemetry): void {
-  worldPanel.update();
+  const frameTime = performance.now();
+  openWorld.frame(Math.min(0.25, (frameTime - lastFrameTime) / 1_000), window.innerWidth, window.innerHeight);
+  lastFrameTime = frameTime;
+  if (!openWorldEnabled) worldPanel.update();
   altitudeValue.textContent = `${Math.max(0, Math.round(telemetry.altitude))} m`;
   speedValue.textContent = `${Math.round(telemetry.speedKmh)} km/h`;
   headingValue.textContent = telemetry.heading;
@@ -272,6 +305,7 @@ function showScreen(screen: ScreenName): void {
   gameHud.hidden = !inGame;
   controlsHint.hidden = !inGame;
   worldPanel.element.hidden = !inGame;
+  openWorld.setVisible(inGame);
   touchControls.setVisible(inGame && !worldPanel.element.open);
   reportRuntimeEvent(`screen.${screen}`);
 }

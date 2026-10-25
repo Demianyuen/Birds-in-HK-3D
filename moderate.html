@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" href="data:," />
+    <title>留言審核 · Birds in HK</title>
+  </head>
+  <body>
+    <main class="moderation">
+      <h1>留言審核</h1>
+      <p class="moderation-intro">批准後，留言會在花旁邊顯示給所有人。不合適的留言可以拒絕；花本身仍然保留，除非你選擇隱藏。</p>
+      <form id="token-form" class="token-form">
+        <label>管理密碼 <input id="token" type="password" autocomplete="current-password" required /></label>
+        <button type="submit">登入</button>
+      </form>
+      <p id="status" role="status"></p>
+      <nav class="tabs" hidden id="tabs">
+        <button type="button" data-view="pending" aria-pressed="true">待審核留言</button>
+        <button type="button" data-view="chat" aria-pressed="false">最近對話</button>
+      </nav>
+      <ol id="items" class="items"></ol>
+    </main>
+    <script type="module" src="/src/moderation/main.ts"></script>
+  </body>
+</html>

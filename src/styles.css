@@ -357,3 +357,135 @@ h1 {
   .world-panel { right: 10px; top: auto; bottom: 52px; }
   .world-panel-content { max-height: 45dvh; }
 }
+
+/* ── Open-world memorial: landing form ─────────────────────────────── */
+.boot-note { max-width: 560px; margin: 14px 0 0; color: #b8c9c6; font-size: 14px; line-height: 1.55; }
+.visitor-form {
+  display: grid;
+  gap: 14px;
+  width: min(420px, 100%);
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(5, 16, 22, 0.72);
+  backdrop-filter: blur(8px);
+}
+.visitor-field { display: grid; gap: 6px; font-size: 13px; color: #cfdcda; }
+.visitor-field input, .visitor-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f8f6;
+  font: inherit;
+  font-size: 15px;
+  resize: vertical;
+}
+.visitor-field input:focus-visible, .visitor-field textarea:focus-visible { outline: 2px solid #a3e5c1; outline-offset: 1px; }
+.flower-picker { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
+.flower-picker legend { margin-bottom: 6px; padding: 0; color: #cfdcda; font-size: 13px; }
+.flower-picker label { cursor: pointer; }
+.flower-picker input { position: absolute; opacity: 0; pointer-events: none; }
+.flower-picker span {
+  display: inline-block;
+  min-width: 56px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  text-align: center;
+  font-size: 14px;
+}
+.flower-picker input:checked + span { border-color: #f6efd9; background: rgba(246, 239, 217, 0.16); color: #fffaf0; }
+.flower-picker input:focus-visible + span { outline: 2px solid #a3e5c1; outline-offset: 2px; }
+.visitor-error { margin: 0; color: #ffc6b8; font-size: 13px; }
+.visitor-actions { display: flex; gap: 10px; }
+.visitor-privacy { margin: 0; color: #93a7a4; font-size: 12px; line-height: 1.5; }
+
+/* ── Open-world memorial: in game ──────────────────────────────────── */
+.world-labels { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+.world-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: 220px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: rgba(8, 20, 26, 0.66);
+  color: #f5f8f6;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  will-change: transform;
+}
+.world-label strong { display: block; font-weight: 700; }
+.world-label span { display: block; margin-top: 2px; color: #e9e2cf; }
+.world-label-flower { background: rgba(250, 246, 236, 0.9); color: #29302f; }
+.world-label-flower span { color: #4a4a40; }
+.world-label-player { padding: 3px 8px; font-size: 11px; background: rgba(8, 20, 26, 0.55); }
+
+.flower-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  z-index: 6;
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 16px;
+  border-radius: 6px;
+  background: rgba(8, 20, 26, 0.72);
+  color: #f5f8f6;
+  font-size: 14px;
+  text-align: center;
+}
+.flower-place-button { position: absolute; left: 50%; bottom: 40px; z-index: 6; transform: translateX(-50%); }
+.flower-place-button:hover { transform: translateX(-50%) translateY(-1px); }
+
+.open-world-panel {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 7;
+  width: min(320px, calc(100vw - 32px));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(5, 16, 22, 0.78);
+  color: #f5f8f6;
+  font-size: 13px;
+}
+.open-world-panel summary { cursor: pointer; padding: 10px 12px; color: #b4edcb; font-weight: 700; }
+.open-world-panel details > :not(summary) { margin-left: 12px; margin-right: 12px; }
+.open-world-status { margin: 0 0 8px; color: #cfdcda; }
+.open-world-log { max-height: 180px; margin: 0 0 8px; padding: 0; overflow: auto; list-style: none; }
+.open-world-log li { padding: 3px 0; overflow-wrap: anywhere; }
+.open-world-log strong { margin-right: 6px; color: #b4edcb; }
+.open-world-panel form { display: flex; gap: 6px; margin-bottom: 6px; }
+.open-world-panel input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f8f6;
+  font: inherit;
+}
+.open-world-panel form button {
+  padding: 8px 12px;
+  border: 1px solid #a3e5c1;
+  border-radius: 4px;
+  background: #80d8a8;
+  color: #05130d;
+  font-weight: 800;
+  cursor: pointer;
+}
+.open-world-note { margin: 0 0 10px; color: #93a7a4; font-size: 11px; }
+
+@media (max-width: 720px) {
+  .visitor-form { padding: 16px; }
+  .open-world-panel { bottom: auto; top: 64px; }
+  .flower-prompt { bottom: 150px; }
+  .flower-place-button { bottom: 96px; }
+}

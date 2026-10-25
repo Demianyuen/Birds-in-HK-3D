@@ -1,5 +1,6 @@
 import { Group, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Vector3, SphereGeometry, ConeGeometry, BufferGeometry, DynamicDrawUsage } from 'three';
 import { WORLD_PLAYER_LIMIT, type WorldPlayer } from './protocol';
+import { WALK_SCALE } from '../game/BirdController';
 
 interface RemoteBird {
   position: Vector3;
@@ -8,6 +9,9 @@ interface RemoteBird {
   targetRotation: Quaternion;
   perched: boolean;
   phase: number;
+  /** 1 in the air, life-size on the ground (matches the local bird). */
+  size: number;
+  name: string;
 }
 
 export class RemoteBirds {
@@ -80,12 +84,15 @@ export class RemoteBirds {
           rotation: new Quaternion().fromArray(player.quaternion),
           targetPosition: new Vector3(), targetRotation: new Quaternion(), perched: false,
           phase: this.birds.size * 0.71,
+          size: player.perched ? WALK_SCALE : 1,
+          name: player.name,
         };
         this.birds.set(player.id, bird);
       }
       bird.targetPosition.fromArray(player.position);
       bird.targetRotation.fromArray(player.quaternion).normalize();
       bird.perched = player.perched;
+      bird.name = player.name;
     }
     this.update(0);
   }
@@ -98,6 +105,8 @@ export class RemoteBirds {
       bird.position.lerp(bird.targetPosition, alpha);
       bird.rotation.slerp(bird.targetRotation, alpha);
       bird.phase += delta * (bird.perched ? 1.3 : 8);
+      bird.size += ((bird.perched ? WALK_SCALE : 1) - bird.size) * (1 - Math.exp(-5 * delta));
+      this.scale.setScalar(bird.size);
       this.transform.compose(bird.position, bird.rotation, this.scale);
       for (const batch of this.batches) {
         this.combined.multiplyMatrices(this.transform, batch.local);
@@ -113,6 +122,11 @@ export class RemoteBirds {
       batch.mesh.count = index;
       batch.mesh.instanceMatrix.needsUpdate = true;
     }
+  }
+
+  /** Where each remote bird is now, for name labels. */
+  labels(): Array<{ id: string; name: string; position: Vector3; size: number }> {
+    return [...this.birds.entries()].map(([id, bird]) => ({ id, name: bird.name, position: bird.position, size: bird.size }));
   }
 
   dispose(): void {

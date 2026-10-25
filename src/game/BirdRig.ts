@@ -139,6 +139,7 @@ export class BirdRig {
   private headTargetPitch = 0;
   private nextGlance = 1.5;
   private flapImpulse = 0;
+  private heldItem: Object3D | null = null;
   private walkWeight = 0;
   private walkPace = 0;
   private walkPhase = 0;
@@ -163,6 +164,17 @@ export class BirdRig {
   public setProfile(profileId: BirdProfileId): void {
     if (profileId === this.profileId && this.wings.length) return;
     this.build(profileId);
+  }
+
+  /** Something carried in the beak (a flower on the way to Wang Fuk Court), or null. */
+  public holdInBeak(item: Object3D | null): void {
+    if (this.heldItem) this.head.remove(this.heldItem);
+    this.heldItem = item;
+    if (!item) return;
+    item.position.set(0, -0.09, -0.46);
+    // Stem across the beak, bloom to one side.
+    item.rotation.set(0, Math.PI / 2, Math.PI / 2 - 0.25);
+    this.head.add(item);
   }
 
   /** A burst of strong strokes (Space / take-off). */
@@ -406,12 +418,15 @@ export class BirdRig {
   }
 
   private clearMeshes(): void {
+    // The held item's geometry belongs to its owner; never dispose it here.
+    if (this.heldItem) this.head.remove(this.heldItem);
     this.body.traverse(object => {
       if (object instanceof Mesh) object.geometry.dispose();
     });
     this.body.clear();
     this.head.clear();
     this.tail.clear();
+    if (this.heldItem) this.head.add(this.heldItem);
   }
 }
 

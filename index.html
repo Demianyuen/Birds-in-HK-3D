@@ -13,12 +13,34 @@
 
       <section id="boot-screen" class="screen boot-screen" aria-labelledby="boot-title">
         <div class="brand-lockup">
-          <p class="place-name">HONG KONG</p>
+          <p class="place-name">大埔 · 宏福苑</p>
           <h1 id="boot-title">Birds in HK</h1>
-          <p class="tagline">化身白鴿，飛越真實香港。</p>
+          <p class="tagline">化身一隻鴿子，飛過大埔，在宏福苑放下一朵花。</p>
+          <p class="boot-note">這是一個紀念宏福苑的互動空間，不計分、不比賽。作品與宏福苑火災有關，但不會重現火災場面。</p>
         </div>
-        <button id="continue-button" class="primary-button" type="button">繼續</button>
-        <p class="source-credit">3D：地政總署 CSDI · 街道：LandsD Map API · 高程：AWS Terrarium</p>
+        <form id="visitor-form" class="visitor-form" novalidate>
+          <label class="visitor-field">
+            <span>你的名字（可以留空）</span>
+            <input id="visitor-name" name="name" maxlength="24" autocomplete="nickname" placeholder="例如：陳太、大埔街坊" />
+          </label>
+          <fieldset class="flower-picker">
+            <legend>帶一朵花</legend>
+            <label><input type="radio" name="flower-kind" value="white-chrysanthemum" checked /><span>白菊</span></label>
+            <label><input type="radio" name="flower-kind" value="yellow-chrysanthemum" /><span>黃菊</span></label>
+            <label><input type="radio" name="flower-kind" value="lily" /><span>白百合</span></label>
+            <label><input type="radio" name="flower-kind" value="lantern" /><span>紙燈</span></label>
+          </fieldset>
+          <label class="visitor-field">
+            <span>想留下的話（可以留空，經審核後公開）</span>
+            <textarea id="visitor-message" name="message" maxlength="200" rows="3" placeholder="寫給宏福苑的一句話"></textarea>
+          </label>
+          <p id="visitor-error" class="visitor-error" role="alert" hidden></p>
+          <div class="visitor-actions">
+            <button id="continue-button" class="primary-button" type="submit">帶著花出發</button>
+          </div>
+          <p class="visitor-privacy">名字和花會即時讓其他人看到；留言要經管理員審核。請不要寫電話、地址或他人私隱。</p>
+        </form>
+        <p class="source-credit">3D：地政總署 CSDI · 地面：OpenStreetMap · 高程：AWS Terrarium</p>
       </section>
 
       <section id="menu-screen" class="screen menu-screen" aria-labelledby="menu-title" hidden>

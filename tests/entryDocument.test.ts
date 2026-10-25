@@ -38,7 +38,7 @@ describe('game entry document', () => {
   });
 
   it('contains valid Traditional Chinese copy without mojibake or broken tags', () => {
-    expect(html).toContain('化身白鴿，飛越真實香港。');
+    expect(html).toContain('化身一隻鴿子，飛過大埔，在宏福苑放下一朵花。');
     expect(html).toContain('大埔 · 宏福苑');
     expect(html).toContain('正在建立飛行世界');
     expect(html).not.toMatch(/[\uE000-\uF8FF]/u);

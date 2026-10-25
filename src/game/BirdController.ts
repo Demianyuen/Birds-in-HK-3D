@@ -186,6 +186,11 @@ export class BirdController {
     return Promise.resolve(true);
   }
 
+  /** Where the feet are while on the ground (null in the air). */
+  public get groundPoint(): Vector3 | null {
+    return this.perched ? new Vector3(this.object.position.x, this.groundY, this.object.position.z) : null;
+  }
+
   /** True while the bird is flaring to land. */
   public get landing(): boolean {
     return this.flareTimer > 0 && !this.perched;
