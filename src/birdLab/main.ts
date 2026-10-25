@@ -35,6 +35,9 @@ const cells: Cell[] = [
   { label: 'flare', motion: { mode: 'flare', flapDemand: 0 }, settle: 1.5 },
   { label: 'perched', motion: { mode: 'perched', flapDemand: 0 }, settle: 2 },
   { label: 'perched (wait)', motion: { mode: 'perched', flapDemand: 0 }, settle: 4 },
+  { label: 'walk', motion: { mode: 'walk', flapDemand: 0, walkPace: 0.4 }, settle: 2.1 },
+  { label: 'walk (stride)', motion: { mode: 'walk', flapDemand: 0, walkPace: 0.4 }, settle: 2.35 },
+  { label: 'run', motion: { mode: 'walk', flapDemand: 0, walkPace: 1 }, settle: 2.2 },
 ];
 
 const columns = 4;
@@ -51,7 +54,7 @@ cells.forEach((cell, index) => {
   }
   const column = index % columns;
   const row = Math.floor(index / columns);
-  rig.root.position.set((column - (columns - 1) / 2) * spacing, -(row - 0.5) * spacing * 0.75, 0);
+  rig.root.position.set((column - (columns - 1) / 2) * spacing, -(row - 1) * spacing * 0.75, 0);
   if (view === 'side') rig.root.rotation.y = -Math.PI / 2;
   if (view === 'front') rig.root.rotation.y = 0;
   if (view === 'rear') rig.root.rotation.y = Math.PI;
@@ -60,7 +63,7 @@ cells.forEach((cell, index) => {
 });
 
 const aspect = window.innerWidth / window.innerHeight;
-const half = 14;
+const half = 15;
 const camera = new OrthographicCamera(-half, half, half / aspect, -half / aspect, 0.1, 200);
 if (view === 'top') { camera.position.set(0, 40, 0.01); } else if (view === 'three') { camera.position.set(0, 9, 40); } else { camera.position.set(0, 2, 40); }
 camera.lookAt(0, 0, 0);

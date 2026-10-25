@@ -273,7 +273,7 @@ export class BirdsInHkGame {
     return {
       position: this.bird.object.position.toArray() as Position,
       quaternion: this.bird.object.quaternion.toArray() as Rotation,
-      perched: this.bird.getTelemetry().state === 'PERCHED',
+      perched: this.bird.getTelemetry().state !== 'FLYING',
     };
   }
 

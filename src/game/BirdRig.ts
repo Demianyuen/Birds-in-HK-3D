@@ -1,4 +1,5 @@
 import {
+  MathUtils,
   BufferGeometry,
   Color,
   ConeGeometry,
@@ -27,9 +28,11 @@ import {
 
 /** What the flight controller asks the rig to show this frame. */
 export interface BirdMotion {
-  mode: 'flight' | 'flare' | 'perched';
+  mode: 'flight' | 'flare' | 'perched' | 'walk';
   /** 0 = glide, 1 = flap hard (take-off, climbing, slow flight). */
   flapDemand: number;
+  /** Walking pace 0–1 (1 = running) when mode is 'walk'. */
+  walkPace?: number;
 }
 
 interface Palette {
@@ -136,6 +139,14 @@ export class BirdRig {
   private headTargetPitch = 0;
   private nextGlance = 1.5;
   private flapImpulse = 0;
+  private walkWeight = 0;
+  private walkPace = 0;
+  private walkPhase = 0;
+  /** Current walk-cycle phase 0–1 (tests). */
+  public get stridePhase(): number {
+    return this.walkPhase;
+  }
+
   /** Latest blended pose, exposed for tests and debugging. */
   public pose: BirdPose = glidePose(0);
 
@@ -166,7 +177,12 @@ export class BirdRig {
     const demand = Math.min(1, Math.max(motion.flapDemand, this.flapImpulse));
 
     const approach = (current: number, target: number, rate: number) => current + (target - current) * (1 - Math.exp(-rate * dt));
-    this.perchWeight = approach(this.perchWeight, motion.mode === 'perched' ? 1 : 0, motion.mode === 'perched' ? 5 : 9);
+    const grounded = motion.mode === 'perched' || motion.mode === 'walk';
+    this.perchWeight = approach(this.perchWeight, grounded ? 1 : 0, grounded ? 5 : 9);
+    this.walkWeight = approach(this.walkWeight, motion.mode === 'walk' ? 1 : 0, 10);
+    this.walkPace = approach(this.walkPace, motion.mode === 'walk' ? Math.min(1, Math.max(0, motion.walkPace ?? 0.4)) : 0, 6);
+    // Pigeons take quick short steps: about 2 strides a second walking, 4 running.
+    this.walkPhase = (this.walkPhase + dt * (1.6 + 2.6 * this.walkPace) * this.walkWeight) % 1;
     this.flareWeight = approach(this.flareWeight, motion.mode === 'flare' ? 1 : 0, 7);
     this.flapWeight = approach(this.flapWeight, demand > 0.05 ? 1 : 0, demand > 0.05 ? 9 : 3.5);
     this.flapIntensity = approach(this.flapIntensity, Math.max(0.35, demand), 4);
@@ -182,7 +198,7 @@ export class BirdRig {
       [flarePose(this.time), this.flareWeight],
       [perchedPose(), this.perchWeight],
     ]);
-    this.applyPose(dt, motion.mode === 'perched');
+    this.applyPose(dt, grounded);
   }
 
   public dispose(): void {
@@ -206,12 +222,19 @@ export class BirdRig {
     const tailSpread = 0.25 + 0.75 * body.tailSpread;
     this.tailFeathers.forEach((feather, index) => { feather.rotation.y = -Math.PI / 2 + this.tailAngles[index] * tailSpread; });
     this.tail.rotation.x = -body.tailPitch;
-    for (const leg of this.legs) {
+    const stride = 0.5 + 0.25 * this.walkPace;
+    this.legs.forEach((leg, index) => {
       // Tucked feet draw up into the belly feathers and trail back under the tail.
-      leg.position.y = LEG_TOP_Y + body.legTuck * 0.16;
-      leg.rotation.x = -body.legTuck * 1.6 + body.legReach * 0.8;
+      const cycle = 2 * Math.PI * (this.walkPhase + index * 0.5);
+      const swing = Math.sin(cycle) * stride * this.walkWeight;
+      // The swinging foot lifts clear; the planted foot carries the body.
+      const lift = Math.max(0, Math.cos(cycle)) * 0.07 * this.walkWeight;
+      leg.position.y = LEG_TOP_Y + body.legTuck * 0.16 + lift;
+      leg.rotation.x = -body.legTuck * 1.6 + body.legReach * 0.8 + swing;
       leg.scale.y = 1 - body.legTuck * 0.45;
-    }
+    });
+    // Waddle: the body rolls a little over the planted foot.
+    this.body.rotation.z = Math.sin(2 * Math.PI * this.walkPhase) * 0.07 * this.walkWeight;
 
     // Head: steadied against body pitch in flight; quick pigeon-like glances when perched.
     if (perched) {
@@ -229,8 +252,12 @@ export class BirdRig {
     this.headYaw += (this.headTargetYaw - this.headYaw) * (1 - Math.exp(-snap * dt));
     this.headPitch += (this.headTargetPitch - this.headPitch) * (1 - Math.exp(-snap * dt));
     // A small forward-back head bob while standing reads unmistakably as a pigeon.
-    const bob = perched ? Math.sin(this.time * 2.2) * 0.025 : 0;
-    this.head.position.z = -0.98 + bob;
+    const idleBob = perched ? Math.sin(this.time * 2.2) * 0.025 : 0;
+    // Walking: the head holds still in the world while the body steps under it
+    // (drifting back relative to the body), then thrusts forward — twice per stride.
+    const beat = (this.walkPhase * 2) % 1;
+    const thrust = beat < 0.72 ? MathUtils.lerp(-0.16, 0.05, beat / 0.72) : MathUtils.lerp(0.05, -0.16, (beat - 0.72) / 0.28);
+    this.head.position.z = -0.98 + MathUtils.lerp(idleBob, thrust, this.walkWeight);
     this.head.rotation.set(this.headPitch - body.pitch * 0.8, this.headYaw, 0, 'YXZ');
   }
 

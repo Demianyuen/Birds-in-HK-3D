@@ -33,7 +33,7 @@ describe('bird collision and perching', () => {
     expect(bird.getTelemetry().state).toBe('PERCHED');
     expect(bird.getTelemetry().heading).toBe('N');
   });
-  it('glances off a building wall at maximum speed without passing through it', () => {
+  it('slides along a building wall at maximum speed instead of bouncing back or passing through', () => {
     const bird = new BirdController();
     const wall = createWall(316.5);
     bird.setEnabled(true);
@@ -43,9 +43,14 @@ describe('bird collision and perching', () => {
     bird.update(0.05, wall);
 
     expect(bird.getTelemetry().state).toBe('FLYING');
+    // Still on the near side of the wall, and not pushed back away from it.
     expect(bird.object.position.z).toBeGreaterThan(317);
+    expect(bird.object.position.z).toBeLessThan(319);
     expect(bird.getTelemetry().speedKmh).toBeLessThan(before);
-    expect(bird.bumpAge).toBe(0);
+    // Now flying along the wall (east or west), not back the way it came (south).
+    expect(['E', 'W']).toContain(bird.getTelemetry().heading);
+    for (let index = 0; index < 10; index += 1) bird.update(0.05, wall);
+    expect(bird.object.position.z).toBeGreaterThan(317);
   });
 
   it('lands on a roof and takes off again after a flap', () => {
@@ -101,7 +106,11 @@ describe('bird collision and perching', () => {
     bird.steer(0, -400);
     for (let index = 0; index < 20; index += 1) bird.update(0.05, null);
     expect(bird.getTelemetry().state).toBe('PERCHED');
-    expect(bird.object.position.toArray()).toEqual([0, 50, 0]);
+    // Turning on the spot: the feet stay put while the bird shrinks to life size.
+    expect(bird.object.position.x).toBe(0);
+    expect(bird.object.position.z).toBe(0);
+    expect(bird.object.position.y).toBeLessThanOrEqual(50);
+    expect(bird.object.position.y).toBeGreaterThan(50 - 1.15);
     expect(bird.getTelemetry().heading).not.toBe('N');
     const forward = new Vector3(0, 0, -1).applyQuaternion(bird.object.quaternion);
     expect(Math.abs(forward.y)).toBeLessThan(1e-6);

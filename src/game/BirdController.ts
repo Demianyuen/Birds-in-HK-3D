@@ -22,6 +22,22 @@ const ENERGY_EXCHANGE = 0.55;
 const LANDING_NORMAL_Y = 0.62;
 /** Seconds of look-ahead used to start a landing flare before touchdown. */
 const FLARE_LOOKAHEAD_SECONDS = 1.0;
+/**
+ * On the ground the bird shrinks to life size: the flight rig is drawn about
+ * 4.5× larger than a real pigeon (≈0.33 m long) so it reads from the chase camera.
+ */
+export const WALK_SCALE = 0.22;
+/** Walking and running speeds on the ground (m/s). */
+const WALK_SPEED = 1.4;
+const RUN_SPEED = 3.2;
+/** Highest kerb or step the bird hops up while walking (m). */
+const STEP_UP = 0.45;
+/** Walking off a drop deeper than this starts flight (m). */
+const WALK_OFF_DROP = 0.9;
+/** Ground steeper than this (normal.y) blocks walking like a wall. */
+const WALKABLE_NORMAL_Y = 0.55;
+/** Body radius kept clear of walls while walking (m). */
+const WALK_RADIUS = 0.16;
 
 interface Collision {
   point: Vector3;
@@ -33,7 +49,7 @@ export interface FlightTelemetry {
   altitude: number;
   speedKmh: number;
   heading: string;
-  state: 'FLYING' | 'PERCHED';
+  state: 'FLYING' | 'PERCHED' | 'WALKING';
 }
 
 export type FlightControl = 'yawLeft' | 'yawRight' | 'pitchUp' | 'pitchDown' | 'accelerate' | 'decelerate';
@@ -63,6 +79,12 @@ export class BirdController {
   private rhythmClock = 0;
   private frameIndex = 0;
   private cameraPerch = 0;
+  /** Current size relative to the flight rig (1 in the air, WALK_SCALE on the ground). */
+  private sizeScale = 1;
+  /** Height of the surface under the feet while on the ground. */
+  private groundY = 0;
+  /** Signed walking speed (m/s); negative walks backwards. */
+  private walkSpeed = 0;
   /** Fraction (0–1) of the full camera boom currently free of buildings. */
   private cameraReach = 1;
   private cameraRoots: Object3D[] = [];
@@ -98,6 +120,8 @@ export class BirdController {
     this.flapQueued = false;
     this.flareTimer = 0;
     this.takeoffTimer = 0;
+    this.walkSpeed = 0;
+    this.setSize(1);
     for (const control of Object.keys(this.controls) as FlightControl[]) {
       this.controls[control] = false;
     }
@@ -117,7 +141,10 @@ export class BirdController {
     this.pitch = this.euler.x;
     this.roll = this.euler.z;
     this.perched = player.perched;
-    if (this.perched) this.standUpright();
+    if (this.perched) {
+      this.standUpright();
+      this.groundY = this.object.position.y - BIRD_CLEARANCE;
+    }
     this.applyOrientation();
   }
 
@@ -203,7 +230,8 @@ export class BirdController {
     if (this.perched && this.flapQueued) {
       // Take-off: spring up and away with strong strokes, starting slow.
       this.perched = false;
-      this.object.position.addScaledVector(this.perchNormal, BIRD_CLEARANCE * 0.9);
+      this.walkSpeed = 0;
+      this.object.position.addScaledVector(this.perchNormal, BIRD_CLEARANCE * this.sizeScale * 0.9);
       this.verticalVelocity = Math.max(7.5, this.perchNormal.y * 7.5);
       this.speed = this.flightProfile.minimumSpeed + 3;
       this.takeoffTimer = 1.1;
@@ -212,11 +240,12 @@ export class BirdController {
 
     if (this.perched) {
       this.flapQueued = false;
-      this.velocity.set(0, 0, 0);
-      this.rig.update(deltaSeconds, { mode: 'perched', flapDemand: 0 });
-      return;
+      this.updateGround(deltaSeconds, collisionRoot);
+      if (this.perched) return;
     }
 
+    // Grow back to flight size after leaving the ground.
+    this.setSize(this.sizeScale + (1 - this.sizeScale) * (1 - Math.exp(-4 * deltaSeconds)));
     this.takeoffTimer = Math.max(0, this.takeoffTimer - deltaSeconds);
     const forward = FORWARD.clone().applyQuaternion(this.orientation).normalize();
     // Arcade glide: climbing trades speed for height, diving trades height for speed.
@@ -245,28 +274,16 @@ export class BirdController {
     if (collision && collision.normal.y >= LANDING_NORMAL_Y) {
       // Roofs and ground: settle upright on the perch.
       this.object.position.copy(collision.point).addScaledVector(collision.normal, BIRD_CLEARANCE);
+      this.groundY = collision.point.y;
       this.perch(collision.normal);
     } else if (collision) {
-      // Walls: glance off and lose speed instead of stopping dead.
-      const wall = new Vector3(collision.normal.x, 0, collision.normal.z);
-      if (wall.lengthSq() < 1e-6) wall.copy(forward).setY(0).negate();
-      wall.normalize();
-      this.object.position.copy(collision.point).addScaledVector(wall, BIRD_CLEARANCE + 0.6);
-      const heading = new Vector3(forward.x, 0, forward.z).normalize();
-      const along = heading.dot(wall);
-      if (along < 0) heading.addScaledVector(wall, -2 * along).normalize();
-      this.yaw = Math.atan2(-heading.x, -heading.z);
-      this.speed = Math.max(this.flightProfile.minimumSpeed, this.speed * 0.55);
-      this.verticalVelocity = Math.max(this.verticalVelocity, 1.5);
-      this.targetRoll = MathUtils.clamp(-along * 0.8, -0.62, 0.62);
-      this.bumpAge = 0;
-      this.flareTimer = 0;
-      this.applyOrientation();
+      this.slideAlongWall(collision, forward, displacement);
     } else {
       this.object.position.add(displacement);
       this.keepInsideFlightRegion();
       if (this.object.position.y <= BIRD_CLEARANCE) {
         this.object.position.y = BIRD_CLEARANCE;
+        this.groundY = 0;
         this.perch(UP);
       } else if (this.frameIndex % 2 === 0) {
         this.lookForLandingSpot(collisionRoot);
@@ -274,6 +291,144 @@ export class BirdController {
     }
 
     this.rig.update(deltaSeconds, this.motion(forward, deltaSeconds));
+  }
+
+  /**
+   * On the ground: shrink to life size, walk with forward/back (W/S), turn with
+   * A/D or the mouse, run with Shift. Kerbs and steps are hopped up, walls are
+   * slid along, and walking off a ledge glides away into flight.
+   */
+  private updateGround(deltaSeconds: number, collisionRoot: Object3D | readonly Object3D[] | null): void {
+    this.setSize(this.sizeScale + (WALK_SCALE - this.sizeScale) * (1 - Math.exp(-5 * deltaSeconds)));
+    const input = this.enabled ? Number(this.controls.pitchUp) - Number(this.controls.pitchDown) : 0;
+    const top = this.controls.accelerate ? RUN_SPEED : WALK_SPEED;
+    const target = input > 0 ? top : input < 0 ? -WALK_SPEED * 0.5 : 0;
+    this.walkSpeed += (target - this.walkSpeed) * (1 - Math.exp(-9 * deltaSeconds));
+    if (Math.abs(this.walkSpeed) < 0.02 && target === 0) this.walkSpeed = 0;
+
+    if (this.walkSpeed !== 0) {
+      const heading = new Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+      this.walk(heading.multiplyScalar(this.walkSpeed * deltaSeconds), collisionRoot);
+    }
+    if (this.perched) {
+      this.object.position.y = this.groundY + BIRD_CLEARANCE * this.sizeScale;
+      this.velocity.set(0, 0, 0);
+      const pace = Math.abs(this.walkSpeed) / RUN_SPEED;
+      this.rig.update(deltaSeconds, pace > 0.015
+        ? { mode: 'walk', flapDemand: 0, walkPace: pace }
+        : { mode: 'perched', flapDemand: 0 });
+    }
+  }
+
+  private walk(step: Vector3, collisionRoot: Object3D | readonly Object3D[] | null): void {
+    const roots: Object3D[] = !collisionRoot ? [] : Array.isArray(collisionRoot) ? [...collisionRoot] : [collisionRoot as Object3D];
+    const feet = new Vector3(this.object.position.x, this.groundY, this.object.position.z);
+    // Walls: remove the part of the step that goes into them, keep the rest (slide).
+    for (let pass = 0; pass < 2 && step.lengthSq() > 1e-10; pass += 1) {
+      const wall = this.findWalkingWall(feet, step, roots);
+      if (!wall) break;
+      step.addScaledVector(wall, -step.dot(wall));
+    }
+    if (step.lengthSq() < 1e-10) return;
+    const next = feet.clone().add(step);
+    if (roots.length === 0) {
+      this.object.position.x = next.x;
+      this.object.position.z = next.z;
+      return;
+    }
+    // Ground under the next foothold: step up kerbs, refuse cliffs, fall off ledges into flight.
+    this.raycaster.set(new Vector3(next.x, this.groundY + STEP_UP + 0.05, next.z), new Vector3(0, -1, 0));
+    this.raycaster.near = 0;
+    this.raycaster.far = STEP_UP + 60;
+    const ground = this.raycaster.intersectObjects(roots, true)[0];
+    const groundNormal = ground?.face?.normal.clone().transformDirection(ground.object.matrixWorld);
+    if (ground && groundNormal && groundNormal.y < WALKABLE_NORMAL_Y && ground.point.y > this.groundY - WALK_OFF_DROP) return;
+    if (!ground || this.groundY - ground.point.y > WALK_OFF_DROP) {
+      this.object.position.x = next.x;
+      this.object.position.z = next.z;
+      this.walkOffLedge();
+      return;
+    }
+    this.groundY = ground.point.y;
+    if (groundNormal) this.perchNormal.copy(groundNormal);
+    this.object.position.set(next.x, this.groundY + BIRD_CLEARANCE * this.sizeScale, next.z);
+  }
+
+  /** Nearest steep surface in the walking direction, as a horizontal wall normal. */
+  private findWalkingWall(feet: Vector3, step: Vector3, roots: Object3D[]): Vector3 | null {
+    if (roots.length === 0) return null;
+    const direction = step.clone().normalize();
+    const reach = step.length() + WALK_RADIUS;
+    let nearest: { distance: number; normal: Vector3 } | null = null;
+    for (const height of [STEP_UP + 0.05, 0.3 + STEP_UP]) {
+      this.raycaster.set(feet.clone().setY(feet.y + height), direction);
+      this.raycaster.near = 0;
+      this.raycaster.far = reach;
+      const hit = this.raycaster.intersectObjects(roots, true)[0];
+      if (!hit?.face) continue;
+      const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+      if (normal.y >= WALKABLE_NORMAL_Y) continue;
+      const horizontal = new Vector3(normal.x, 0, normal.z);
+      if (horizontal.lengthSq() < 1e-6) horizontal.copy(direction).negate();
+      if (!nearest || hit.distance < nearest.distance) nearest = { distance: hit.distance, normal: horizontal.normalize() };
+    }
+    return nearest?.normal ?? null;
+  }
+
+  private walkOffLedge(): void {
+    this.perched = false;
+    this.walkSpeed = 0;
+    this.verticalVelocity = 0;
+    this.speed = this.flightProfile.minimumSpeed;
+    this.pitch = -0.12;
+    this.takeoffTimer = 0.7;
+    this.flareTimer = 0;
+    this.applyOrientation();
+    this.rig.triggerFlap();
+  }
+
+  /**
+   * Walls in flight: keep only the motion along the wall and turn to follow it,
+   * instead of bouncing back. A head-on hit stalls gently against the wall.
+   */
+  private slideAlongWall(collision: Collision, forward: Vector3, displacement: Vector3): void {
+    const wall = new Vector3(collision.normal.x, 0, collision.normal.z);
+    if (wall.lengthSq() < 1e-6) wall.copy(forward).setY(0).negate();
+    wall.normalize();
+    // Rest just off the surface at the point of contact.
+    this.object.position.copy(collision.point).addScaledVector(wall, BIRD_CLEARANCE * this.sizeScale + 0.05);
+    const heading = new Vector3(forward.x, 0, forward.z);
+    if (heading.lengthSq() < 1e-6) heading.copy(wall).negate();
+    heading.normalize();
+    const into = heading.dot(wall);
+    const tangent = heading.clone().addScaledVector(wall, -Math.min(0, into));
+    const along = tangent.length();
+    if (along > 1e-3) tangent.divideScalar(along);
+    else tangent.set(-wall.z, 0, wall.x);
+    // Head-on: pick the side the bird was already leaning towards.
+    if (along < 0.25) {
+      const side = Math.sign(this.roll || this.targetRoll || 1);
+      tangent.set(-wall.z * side, 0, wall.x * side);
+    }
+    this.yaw += shortestAngleDelta(this.yaw, Math.atan2(-tangent.x, -tangent.z));
+    // Lose only the into-wall share of the speed.
+    this.speed = Math.max(this.flightProfile.minimumSpeed, this.speed * (0.35 + 0.65 * Math.min(1, along)));
+    // Carry on along the wall with what is left of this frame's movement.
+    const remaining = displacement.length() - collision.distance;
+    if (remaining > 0) {
+      const slide = tangent.clone().multiplyScalar(remaining * Math.min(1, along));
+      slide.y = displacement.y * Math.max(0, 1 - collision.distance / Math.max(1e-6, displacement.length()));
+      this.object.position.add(slide);
+    }
+    this.targetRoll = MathUtils.clamp(-into * 0.5 * Math.sign(this.roll || 1), -0.45, 0.45);
+    this.bumpAge = along < 0.25 ? 0.2 : 10;
+    this.flareTimer = 0;
+    this.applyOrientation();
+  }
+
+  private setSize(scale: number): void {
+    this.sizeScale = Math.abs(scale - 1) < 1e-3 ? 1 : scale;
+    this.object.scale.setScalar(this.sizeScale);
   }
 
   /** Animation intent: pigeons alternate bursts of flapping with glides; climbing, slow flight and take-off flap hard. */
@@ -331,9 +486,15 @@ export class BirdController {
 
   public updateCamera(camera: PerspectiveCamera, deltaSeconds: number): void {
     this.cameraPerch += ((this.perched ? 1 : 0) - this.cameraPerch) * (1 - Math.exp(-2.5 * deltaSeconds));
-    const offset = new Vector3(0, 5.2 - this.cameraPerch * 2.4, 15.5 - this.cameraPerch * 6).applyQuaternion(this.orientation);
+    // On the ground the bird is life-size, so the camera comes down to a pigeon's-eye view.
+    const ground = MathUtils.clamp((1 - this.sizeScale) / (1 - WALK_SCALE), 0, 1);
+    const offset = new Vector3(
+      0,
+      MathUtils.lerp(5.2 - this.cameraPerch * 2.4, 0.62, ground),
+      MathUtils.lerp(15.5 - this.cameraPerch * 6, 2.1, ground),
+    ).applyQuaternion(this.orientation);
     const pivot = this.object.position.clone();
-    pivot.y += 1.2;
+    pivot.y += MathUtils.lerp(1.2, 0.22, ground);
     const boom = this.object.position.clone().add(offset).sub(pivot);
     const boomLength = boom.length();
     // Keep the camera out of buildings: shorten the boom to just short of the first surface behind the bird.
@@ -343,7 +504,8 @@ export class BirdController {
       this.cameraRay.near = 0;
       this.cameraRay.far = boomLength + 1;
       const hit = this.cameraRay.intersectObjects(this.cameraRoots, true)[0];
-      if (hit) reach = MathUtils.clamp((hit.distance - 1) / boomLength, 0.12, 1);
+      const margin = MathUtils.lerp(1, 0.15, ground);
+      if (hit) reach = MathUtils.clamp((hit.distance - margin) / boomLength, 0.12, 1);
     }
     // Pull in at once when blocked, ease back out when clear.
     this.cameraReach = reach < this.cameraReach
@@ -359,9 +521,9 @@ export class BirdController {
     if (this.cameraReach < 0.999) camera.position.copy(desiredPosition);
     else camera.position.lerp(desiredPosition, 1 - Math.exp(-7 * deltaSeconds));
     const lookTarget = this.object.position.clone().add(
-      FORWARD.clone().applyQuaternion(this.orientation).multiplyScalar(18),
+      FORWARD.clone().applyQuaternion(this.orientation).multiplyScalar(MathUtils.lerp(18, 3.5, ground)),
     );
-    lookTarget.y += 1.1;
+    lookTarget.y += MathUtils.lerp(1.1, 0.18, ground);
     camera.lookAt(lookTarget);
   }
 
@@ -370,9 +532,9 @@ export class BirdController {
     const degrees = (-MathUtils.radToDeg(this.yaw) % 360 + 360) % 360;
     return {
       altitude: this.object.position.y,
-      speedKmh: this.perched ? 0 : this.speed * 3.6,
+      speedKmh: this.perched ? Math.abs(this.walkSpeed) * 3.6 : this.speed * 3.6,
       heading: headingFromDegrees(degrees),
-      state: this.perched ? 'PERCHED' : 'FLYING',
+      state: !this.perched ? 'FLYING' : Math.abs(this.walkSpeed) > 0.05 ? 'WALKING' : 'PERCHED',
     };
   }
 
