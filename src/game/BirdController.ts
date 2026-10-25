@@ -1,6 +1,7 @@
 import {
   Euler,
   MathUtils,
+  Matrix4,
   Object3D,
   PerspectiveCamera,
   Quaternion,
@@ -38,6 +39,13 @@ const WALK_OFF_DROP = 0.9;
 const WALKABLE_NORMAL_Y = 0.55;
 /** Body radius kept clear of walls while walking (m). */
 const WALK_RADIUS = 0.16;
+/** Climbing speeds on a wall (m/s): normal and with Shift. */
+const CLIMB_SPEED = 0.9;
+const CLIMB_FAST = 2.0;
+/** Hitting a wall more head-on than this (cosine) makes the bird cling to it. */
+const CLING_HEAD_ON = 0.5;
+/** Surfaces steeper than this (|normal.y|) count as walls to cling to. */
+const CLING_MAX_NORMAL_Y = 0.45;
 
 interface Collision {
   point: Vector3;
@@ -49,7 +57,7 @@ export interface FlightTelemetry {
   altitude: number;
   speedKmh: number;
   heading: string;
-  state: 'FLYING' | 'PERCHED' | 'WALKING';
+  state: 'FLYING' | 'PERCHED' | 'WALKING' | 'CLINGING';
 }
 
 export type FlightControl = 'yawLeft' | 'yawRight' | 'pitchUp' | 'pitchDown' | 'accelerate' | 'decelerate';
@@ -70,6 +78,12 @@ export class BirdController {
   private verticalVelocity = 0;
   private flapQueued = false;
   private perched = false;
+  /** Holding on to a building wall (climb with W/S, sidestep with A/D, Space to let go). */
+  private clinging = false;
+  private readonly wallNormal = new Vector3(1, 0, 0);
+  /** Point on the wall surface under the bird's feet while clinging. */
+  private readonly wallPoint = new Vector3();
+  private climbPace = 0;
   private enabled = false;
   /** Seconds left in the current landing flare (refreshed while a landing spot is ahead). */
   private flareTimer = 0;
@@ -91,6 +105,8 @@ export class BirdController {
   private readonly cameraRay = new Raycaster();
   private clockSeconds = 0;
   private lastMouseSteer = -10;
+  /** Continuous steering from the cursor's offset from screen centre (−1…1 each). */
+  private readonly steerAxes = { x: 0, y: 0 };
   /** Seconds since the last wall bump; drives camera shake. */
   public bumpAge = 10;
   private flightRadiusMetres = Number.POSITIVE_INFINITY;
@@ -121,6 +137,7 @@ export class BirdController {
     this.flareTimer = 0;
     this.takeoffTimer = 0;
     this.walkSpeed = 0;
+    this.clinging = false;
     this.setSize(1);
     for (const control of Object.keys(this.controls) as FlightControl[]) {
       this.controls[control] = false;
@@ -170,6 +187,15 @@ export class BirdController {
     this.targetRoll = MathUtils.clamp(-deltaX * 0.012, -0.62, 0.62);
   }
 
+  /**
+   * Cursor steering without pointer lock: x right = turn right, y down = nose
+   * down. Values are already shaped (dead zone, curve) by the caller.
+   */
+  public setSteerAxes(x: number, y: number): void {
+    this.steerAxes.x = MathUtils.clamp(x, -1, 1);
+    this.steerAxes.y = MathUtils.clamp(y, -1, 1);
+  }
+
   public adjustSpeed(direction: number): void {
     if (!this.enabled) return;
     this.speed = MathUtils.clamp(this.speed + direction * 3.5, this.flightProfile.minimumSpeed, this.flightProfile.maximumSpeed);
@@ -191,6 +217,11 @@ export class BirdController {
     return this.perched ? new Vector3(this.object.position.x, this.groundY, this.object.position.z) : null;
   }
 
+  /** True while holding on to a wall. */
+  public get isClinging(): boolean {
+    return this.clinging;
+  }
+
   /** True while the bird is flaring to land. */
   public get landing(): boolean {
     return this.flareTimer > 0 && !this.perched;
@@ -205,12 +236,25 @@ export class BirdController {
     this.bumpAge += deltaSeconds;
     this.frameIndex += 1;
     this.cameraRoots = !collisionRoot ? [] : Array.isArray(collisionRoot) ? [...collisionRoot] : [collisionRoot as Object3D];
+    if (this.clinging) {
+      this.updateCling(deltaSeconds, this.cameraRoots);
+      if (this.clinging || this.perched) return;
+    }
     if (this.enabled) {
       const yawDirection = Number(this.controls.yawLeft) - Number(this.controls.yawRight);
       const pitchDirection = Number(this.controls.pitchUp) - Number(this.controls.pitchDown);
       const speedDirection = Number(this.controls.accelerate) - Number(this.controls.decelerate);
       // Perched birds shuffle round on the spot more slowly than they bank in the air.
       this.yaw += yawDirection * this.flightProfile.turnRate * (this.perched ? 0.8 : 1) * deltaSeconds;
+      // Cursor steering: hold the pointer to one side to keep turning.
+      this.yaw -= this.steerAxes.x * this.flightProfile.turnRate * 1.15 * deltaSeconds;
+      if (!this.perched && this.steerAxes.x !== 0) {
+        this.targetRoll = MathUtils.clamp(this.targetRoll - this.steerAxes.x * 0.5, -0.62, 0.62);
+      }
+      if (!this.perched && this.steerAxes.y !== 0) {
+        this.pitch = MathUtils.clamp(this.pitch - this.steerAxes.y * 0.8 * deltaSeconds, -0.65, 0.58);
+        this.lastMouseSteer = this.clockSeconds;
+      }
       if (!this.perched) {
         this.pitch = MathUtils.clamp(this.pitch + pitchDirection * 0.72 * deltaSeconds, -0.65, 0.58);
         this.targetRoll = MathUtils.clamp(this.targetRoll + yawDirection * 0.85, -0.62, 0.62);
@@ -282,6 +326,17 @@ export class BirdController {
       this.groundY = collision.point.y;
       this.perch(collision.normal);
     } else if (collision) {
+      const wall = new Vector3(collision.normal.x, 0, collision.normal.z);
+      const heading = new Vector3(forward.x, 0, forward.z);
+      const headOn = wall.lengthSq() > 1e-6 && heading.lengthSq() > 1e-6
+        ? -heading.normalize().dot(wall.normalize())
+        : 1;
+      if (Math.abs(collision.normal.y) < CLING_MAX_NORMAL_Y && headOn > CLING_HEAD_ON) {
+        // Stop and hold on to the building.
+        this.startCling(collision.point, collision.normal, collisionRoot);
+        this.rig.update(deltaSeconds, { mode: 'perched', flapDemand: 0 });
+        return;
+      }
       this.slideAlongWall(collision, forward, displacement);
     } else {
       this.object.position.add(displacement);
@@ -329,10 +384,15 @@ export class BirdController {
     const roots: Object3D[] = !collisionRoot ? [] : Array.isArray(collisionRoot) ? [...collisionRoot] : [collisionRoot as Object3D];
     const feet = new Vector3(this.object.position.x, this.groundY, this.object.position.z);
     // Walls: remove the part of the step that goes into them, keep the rest (slide).
+    // Walking straight at a wall starts climbing it instead.
     for (let pass = 0; pass < 2 && step.lengthSq() > 1e-10; pass += 1) {
       const wall = this.findWalkingWall(feet, step, roots);
       if (!wall) break;
-      step.addScaledVector(wall, -step.dot(wall));
+      if (pass === 0 && this.walkSpeed > 0 && -step.clone().normalize().dot(wall.normal) > 0.94) {
+        this.startCling(wall.point, wall.normal, roots);
+        return;
+      }
+      step.addScaledVector(wall.normal, -step.dot(wall.normal));
     }
     if (step.lengthSq() < 1e-10) return;
     const next = feet.clone().add(step);
@@ -360,11 +420,11 @@ export class BirdController {
   }
 
   /** Nearest steep surface in the walking direction, as a horizontal wall normal. */
-  private findWalkingWall(feet: Vector3, step: Vector3, roots: Object3D[]): Vector3 | null {
+  private findWalkingWall(feet: Vector3, step: Vector3, roots: Object3D[]): { normal: Vector3; point: Vector3 } | null {
     if (roots.length === 0) return null;
     const direction = step.clone().normalize();
     const reach = step.length() + WALK_RADIUS;
-    let nearest: { distance: number; normal: Vector3 } | null = null;
+    let nearest: { distance: number; normal: Vector3; point: Vector3 } | null = null;
     for (const height of [STEP_UP + 0.05, 0.3 + STEP_UP]) {
       this.raycaster.set(feet.clone().setY(feet.y + height), direction);
       this.raycaster.near = 0;
@@ -375,9 +435,11 @@ export class BirdController {
       if (normal.y >= WALKABLE_NORMAL_Y) continue;
       const horizontal = new Vector3(normal.x, 0, normal.z);
       if (horizontal.lengthSq() < 1e-6) horizontal.copy(direction).negate();
-      if (!nearest || hit.distance < nearest.distance) nearest = { distance: hit.distance, normal: horizontal.normalize() };
+      if (!nearest || hit.distance < nearest.distance) {
+        nearest = { distance: hit.distance, normal: horizontal.normalize(), point: hit.point.clone() };
+      }
     }
-    return nearest?.normal ?? null;
+    return nearest ? { normal: nearest.normal, point: nearest.point } : null;
   }
 
   private walkOffLedge(): void {
@@ -388,6 +450,139 @@ export class BirdController {
     this.pitch = -0.12;
     this.takeoffTimer = 0.7;
     this.flareTimer = 0;
+    this.applyOrientation();
+    this.rig.triggerFlap();
+  }
+
+  /** Hold on to a wall at `point` (approximate), facing it, life-size. */
+  private startCling(point: Vector3, normal: Vector3, collisionRoot: Object3D | readonly Object3D[] | null): void {
+    const wall = new Vector3(normal.x, 0, normal.z);
+    if (wall.lengthSq() < 1e-6) return;
+    wall.normalize();
+    this.wallNormal.copy(wall);
+    this.wallPoint.copy(point);
+    // Find the exact surface behind the contact point.
+    const roots = !collisionRoot ? [] : Array.isArray(collisionRoot) ? [...collisionRoot] : [collisionRoot as Object3D];
+    if (roots.length > 0) {
+      this.raycaster.set(point.clone().addScaledVector(wall, 2), wall.clone().negate());
+      this.raycaster.near = 0;
+      this.raycaster.far = 4;
+      const hit = this.raycaster.intersectObjects(roots, true)[0];
+      if (hit) this.wallPoint.copy(hit.point);
+    }
+    this.clinging = true;
+    this.perched = false;
+    this.walkSpeed = 0;
+    this.climbPace = 0;
+    this.speed = 0;
+    this.verticalVelocity = 0;
+    this.velocity.set(0, 0, 0);
+    this.flareTimer = 0;
+    this.takeoffTimer = 0;
+    this.flapQueued = false;
+    // Facing away from the wall is the heading used when letting go.
+    this.yaw = Math.atan2(-wall.x, -wall.z);
+    this.applyClingOrientation();
+    this.object.position.copy(this.wallPoint).addScaledVector(this.wallNormal, BIRD_CLEARANCE * this.sizeScale);
+  }
+
+  /** Belly to the wall, head up: the rig's feet point into the wall. */
+  private applyClingOrientation(): void {
+    const up = this.wallNormal;
+    const back = new Vector3(0, -1, 0);
+    const right = new Vector3().crossVectors(up, back).normalize();
+    this.orientation.setFromRotationMatrix(new Matrix4().makeBasis(right, up, back));
+    this.object.quaternion.copy(this.orientation);
+  }
+
+  /** W/S climb, A/D sidestep, Shift faster, Space lets go. Over the top onto the roof, down onto the ground. */
+  private updateCling(deltaSeconds: number, roots: Object3D[]): void {
+    this.setSize(this.sizeScale + (WALK_SCALE - this.sizeScale) * (1 - Math.exp(-5 * deltaSeconds)));
+    if (this.flapQueued) {
+      this.letGoOfWall();
+      return;
+    }
+    const vertical = this.enabled ? Number(this.controls.pitchUp) - Number(this.controls.pitchDown) : 0;
+    const side = this.enabled ? Number(this.controls.yawRight) - Number(this.controls.yawLeft) : 0;
+    const speed = this.controls.accelerate ? CLIMB_FAST : CLIMB_SPEED;
+    // Facing the wall, "right" is (n.z, 0, −n.x).
+    const right = new Vector3(this.wallNormal.z, 0, -this.wallNormal.x);
+    const step = new Vector3(0, vertical, 0).addScaledVector(right, side);
+    if (step.lengthSq() > 0) step.normalize().multiplyScalar(speed * deltaSeconds);
+    this.climbPace += ((step.lengthSq() > 0 ? speed / CLIMB_FAST : 0) - this.climbPace) * (1 - Math.exp(-10 * deltaSeconds));
+
+    if (step.lengthSq() > 0 && roots.length > 0) {
+      const target = this.wallPoint.clone().add(step);
+      this.raycaster.set(target.clone().addScaledVector(this.wallNormal, 0.6), this.wallNormal.clone().negate());
+      this.raycaster.near = 0;
+      this.raycaster.far = 1.2;
+      const hit = this.raycaster.intersectObjects(roots, true)[0];
+      const hitNormal = hit?.face?.normal.clone().transformDirection(hit.object.matrixWorld);
+      if (hit && hitNormal && Math.abs(hitNormal.y) < CLING_MAX_NORMAL_Y) {
+        this.wallPoint.copy(hit.point);
+        const horizontal = new Vector3(hitNormal.x, 0, hitNormal.z);
+        if (horizontal.lengthSq() > 1e-6) this.wallNormal.copy(horizontal.normalize());
+        this.yaw = Math.atan2(-this.wallNormal.x, -this.wallNormal.z);
+        this.applyClingOrientation();
+      } else if (vertical > 0 && this.climbOntoRoof(roots)) {
+        return;
+      }
+      // Past a side edge with no wall: stay put.
+      if (vertical < 0 && this.reachGround(roots)) return;
+    }
+    this.object.position.copy(this.wallPoint).addScaledVector(this.wallNormal, BIRD_CLEARANCE * this.sizeScale);
+    this.rig.update(deltaSeconds, this.climbPace > 0.05
+      ? { mode: 'walk', flapDemand: 0, walkPace: this.climbPace * 0.6 }
+      : { mode: 'perched', flapDemand: 0 });
+  }
+
+  /** At the top of a wall: step over the parapet onto the roof. */
+  private climbOntoRoof(roots: Object3D[]): boolean {
+    const over = this.wallPoint.clone().addScaledVector(this.wallNormal, -0.35);
+    over.y += 0.8;
+    this.raycaster.set(over, new Vector3(0, -1, 0));
+    this.raycaster.near = 0;
+    this.raycaster.far = 1.4;
+    const hit = this.raycaster.intersectObjects(roots, true)[0];
+    const normal = hit?.face?.normal.clone().transformDirection(hit.object.matrixWorld);
+    if (!hit || !normal || normal.y < LANDING_NORMAL_Y) return false;
+    this.clinging = false;
+    this.groundY = hit.point.y;
+    // Face into the building, as if just stepped over the edge.
+    this.yaw = Math.atan2(this.wallNormal.x, this.wallNormal.z);
+    this.object.position.set(hit.point.x, this.groundY + BIRD_CLEARANCE * this.sizeScale, hit.point.z);
+    this.perch(normal);
+    return true;
+  }
+
+  /** Climbing down onto the pavement: stand on the ground facing away from the wall. */
+  private reachGround(roots: Object3D[]): boolean {
+    const probe = this.wallPoint.clone().addScaledVector(this.wallNormal, 0.25);
+    probe.y += 0.1;
+    this.raycaster.set(probe, new Vector3(0, -1, 0));
+    this.raycaster.near = 0;
+    this.raycaster.far = 0.35;
+    const hit = this.raycaster.intersectObjects(roots, true)[0];
+    const normal = hit?.face?.normal.clone().transformDirection(hit.object.matrixWorld);
+    if (!hit || !normal || normal.y < LANDING_NORMAL_Y) return false;
+    this.clinging = false;
+    this.groundY = hit.point.y;
+    this.object.position.set(probe.x, this.groundY + BIRD_CLEARANCE * this.sizeScale, probe.z);
+    this.perch(normal);
+    return true;
+  }
+
+  /** Space while clinging: push off the wall and fly away from it. */
+  private letGoOfWall(): void {
+    this.clinging = false;
+    this.flapQueued = false;
+    this.object.position.addScaledVector(this.wallNormal, 1.2);
+    this.yaw = Math.atan2(-this.wallNormal.x, -this.wallNormal.z);
+    this.pitch = 0.18;
+    this.roll = 0;
+    this.speed = this.flightProfile.minimumSpeed + 2;
+    this.verticalVelocity = 4;
+    this.takeoffTimer = 0.9;
     this.applyOrientation();
     this.rig.triggerFlap();
   }
@@ -490,6 +685,14 @@ export class BirdController {
   }
 
   public updateCamera(camera: PerspectiveCamera, deltaSeconds: number): void {
+    if (this.clinging) {
+      // Stand back from the wall, a little above the bird, looking at it on the facade.
+      const desired = this.object.position.clone().addScaledVector(this.wallNormal, 2.4);
+      desired.y += 0.45;
+      camera.position.lerp(desired, 1 - Math.exp(-6 * deltaSeconds));
+      camera.lookAt(this.object.position.x, this.object.position.y + 0.25, this.object.position.z);
+      return;
+    }
     this.cameraPerch += ((this.perched ? 1 : 0) - this.cameraPerch) * (1 - Math.exp(-2.5 * deltaSeconds));
     // On the ground the bird is life-size, so the camera comes down to a pigeon's-eye view.
     const ground = MathUtils.clamp((1 - this.sizeScale) / (1 - WALK_SCALE), 0, 1);
@@ -537,9 +740,9 @@ export class BirdController {
     const degrees = (-MathUtils.radToDeg(this.yaw) % 360 + 360) % 360;
     return {
       altitude: this.object.position.y,
-      speedKmh: this.perched ? Math.abs(this.walkSpeed) * 3.6 : this.speed * 3.6,
+      speedKmh: this.clinging ? this.climbPace * CLIMB_FAST * 3.6 : this.perched ? Math.abs(this.walkSpeed) * 3.6 : this.speed * 3.6,
       heading: headingFromDegrees(degrees),
-      state: !this.perched ? 'FLYING' : Math.abs(this.walkSpeed) > 0.05 ? 'WALKING' : 'PERCHED',
+      state: this.clinging ? 'CLINGING' : !this.perched ? 'FLYING' : Math.abs(this.walkSpeed) > 0.05 ? 'WALKING' : 'PERCHED',
     };
   }
 

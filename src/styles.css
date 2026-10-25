@@ -246,11 +246,97 @@ h1 {
   bottom: 22px;
   z-index: 8;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100vw - 32px);
   color: rgba(242, 247, 245, 0.72);
   font-size: 11px;
-  white-space: nowrap;
+  line-height: 1.7;
+  text-align: center;
 }
 .controls-hint span { color: #fff; font-weight: 700; }
+
+/* Area title on arrival, like an open-world region name. */
+.place-banner {
+  position: absolute;
+  left: 50%;
+  top: 17%;
+  z-index: 7;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  text-align: center;
+  color: #f6f3ea;
+  pointer-events: none;
+  padding: 18px 0 20px;
+  background: radial-gradient(closest-side, rgba(8, 18, 24, 0.42), rgba(8, 18, 24, 0.18) 60%, transparent);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), 0 2px 18px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+}
+.place-banner.is-showing { animation: place-banner 5.2s ease-in-out forwards; }
+.place-banner h2 {
+  margin: 4px 0 2px;
+  font-family: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  font-size: clamp(30px, 5.4vw, 50px);
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-indent: 0.22em;
+}
+.place-banner-tag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: rgba(246, 243, 234, 0.82);
+}
+.place-banner-tag::before,
+.place-banner-tag::after {
+  content: "";
+  width: 54px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(246, 243, 234, 0.75), transparent);
+}
+.place-first {
+  padding: 1px 7px;
+  border: 1px solid rgba(255, 224, 150, 0.7);
+  border-radius: 2px;
+  color: #ffe9b0;
+  letter-spacing: 0.12em;
+}
+.place-subtitle {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(246, 243, 234, 0.78);
+}
+.place-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: rgba(246, 243, 234, 0.85);
+}
+.place-banner[data-tone="landmark"] { top: 24%; }
+.place-banner[data-tone="landmark"] h2 { font-size: clamp(22px, 3.4vw, 32px); letter-spacing: 0.16em; text-indent: 0.16em; }
+.place-banner[data-tone="landmark"] .place-banner-tag::before,
+.place-banner[data-tone="landmark"] .place-banner-tag::after { width: 32px; }
+.place-banner[data-tone="memorial"] { color: #fbf7ef; }
+.place-banner[data-tone="memorial"] h2 { font-weight: 500; letter-spacing: 0.32em; text-indent: 0.32em; }
+.place-banner[data-tone="memorial"] .place-banner-tag { color: rgba(251, 247, 239, 0.9); }
+@keyframes place-banner {
+  0% { opacity: 0; transform: translate(-50%, 8px); filter: blur(3px); }
+  14% { opacity: 1; transform: translate(-50%, 0); filter: blur(0); }
+  78% { opacity: 1; transform: translate(-50%, 0); filter: blur(0); }
+  100% { opacity: 0; transform: translate(-50%, -4px); filter: blur(2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .place-banner.is-showing { animation: place-banner-still 5.2s linear forwards; }
+}
+@keyframes place-banner-still {
+  0%, 85% { opacity: 1; transform: translateX(-50%); }
+  100% { opacity: 0; transform: translateX(-50%); }
+}
 
 .google-maps-panel {
   position: absolute;
@@ -339,7 +425,8 @@ h1 {
 .world-player-list:focus-visible { outline: 2px solid #cdf5b5; outline-offset: 2px; }
 .world-player-list button { max-width: 100%; overflow-wrap: anywhere; font-size: 11px; }
 .touch-flight { display: none; }
-@media (pointer: coarse), (max-width: 700px) {
+/* Touch buttons only on touch-first devices (phones, tablets), never with a mouse. */
+@media (hover: none) and (pointer: coarse) {
   .touch-flight {
     display: grid; grid-template-columns: repeat(3, 48px); gap: 6px;
     position: absolute; right: 14px; bottom: 112px; z-index: 8;
@@ -489,3 +576,38 @@ h1 {
   .flower-prompt { bottom: 150px; }
   .flower-place-button { bottom: 96px; }
 }
+
+.flower-card {
+  position: absolute;
+  left: 50%;
+  bottom: 40px;
+  z-index: 9;
+  display: grid;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(5, 16, 22, 0.9);
+  color: #f5f8f6;
+}
+.flower-card h2 { margin: 0; font-size: 18px; }
+.flower-card label { display: grid; gap: 6px; font-size: 13px; color: #cfdcda; }
+.flower-card textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f8f6;
+  font: inherit;
+  font-size: 15px;
+  resize: vertical;
+}
+.flower-card textarea:focus-visible { outline: 2px solid #a3e5c1; outline-offset: 1px; }
+.flower-card-note { margin: 0; color: #a9bab7; font-size: 12px; line-height: 1.5; }
+.flower-card-error { margin: 0; color: #ffc6b8; font-size: 13px; }
+.flower-card-actions { display: flex; gap: 10px; }

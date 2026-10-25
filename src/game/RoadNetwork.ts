@@ -3,6 +3,7 @@ import Pbf from 'pbf';
 import { Group } from 'three';
 import { geographicToTileFraction } from './AerialImageryGround';
 import { fetchVectorTile } from './LandUseMask';
+import { dedupePlaces, extractPlaceNames, type PlaceName } from './PlaceNames';
 import type { FlightRegion } from './regions';
 
 const EARTH_CIRCUMFERENCE_METRES = 40_075_016.686;
@@ -55,6 +56,7 @@ const ROAD_STYLES: Readonly<Record<RoadClass, RoadStyle>> = Object.freeze({
 export class RoadNetwork {
   public readonly group = new Group();
   private currentMetrics: RoadNetworkMetrics = emptyMetrics();
+  private names: PlaceName[] = [];
 
   public constructor() {
     this.group.name = 'OpenStreetMap navigation data (not rendered)';
@@ -70,12 +72,14 @@ export class RoadNetwork {
     let successful = 0;
     onProgress({ completed, total: requests.length, successful });
 
+    const center = geographicToTileFraction(region.latitude, region.longitude, ROAD_ZOOM);
+    const tileWidthMetres = roadTileWidthMetres(region.latitude);
     const tiles = await Promise.all(requests.map(async request => {
       try {
         // Shared with the ground land-use mask, so each tile is downloaded once.
         const data = await fetchVectorTile(ROAD_ZOOM, request.x, request.y);
         if (data) successful += 1;
-        return data;
+        return data ? { data, request } : null;
       } catch {
         return null;
       } finally {
@@ -87,9 +91,15 @@ export class RoadNetwork {
     let features = 0;
     let segments = 0;
     let waterFeatures = 0;
-    for (const data of tiles) {
-      if (!data) continue;
-      const vectorTile = new VectorTile(new Pbf(data));
+    const places: PlaceName[] = [];
+    for (const tile of tiles) {
+      if (!tile) continue;
+      const vectorTile = new VectorTile(new Pbf(tile.data));
+      try {
+        places.push(...extractPlaceNames(vectorTile, { tileX: tile.request.x, tileY: tile.request.y, center, tileWidthMetres }));
+      } catch (error) {
+        console.warn('Place names in one map tile could not be read.', error);
+      }
       const roads = vectorTile.layers[ROAD_LAYER_NAME];
       if (roads) {
         for (let index = 0; index < roads.length; index += 1) {
@@ -112,6 +122,7 @@ export class RoadNetwork {
       }
     }
 
+    this.names = dedupePlaces(places);
     if (features === 0) throw new Error('The Hong Kong navigation road data could not be loaded.');
     this.currentMetrics = {
       features,
@@ -121,6 +132,11 @@ export class RoadNetwork {
       visibleMeshes: 0,
       surfacesRendered: false,
     };
+  }
+
+  /** Named places (OpenStreetMap) found in the loaded tiles. */
+  public get placeNames(): readonly PlaceName[] {
+    return this.names;
   }
 
   public get metrics(): Readonly<RoadNetworkMetrics> {

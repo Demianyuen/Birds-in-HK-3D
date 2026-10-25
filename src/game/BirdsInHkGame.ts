@@ -29,6 +29,7 @@ import {
 import { BirdController, type FlightControl, type FlightTelemetry } from './BirdController';
 import { CsdiTiles, type MapLoadProgress } from './CsdiTiles';
 import { getFlightRegion, type FlightRegionId } from './regions';
+import { browserDiscoveryStore, memorialPlaces, PlaceTracker, type PlaceArrival } from './PlaceNames';
 import { RoadNetwork, type RoadNetworkMetrics } from './RoadNetwork';
 import { getBirdProfile, type BirdProfileId } from './birdProfiles';
 import { evaluateWorldReadiness } from './worldReadiness';
@@ -77,6 +78,9 @@ export class BirdsInHkGame {
   private readonly sun = new DirectionalLight('#ffe7c2', 3.1);
   private sky: Mesh | null = null;
   private readonly telemetryCallback: (telemetry: GameTelemetry) => void;
+  private readonly places = new PlaceTracker(browserDiscoveryStore());
+  /** Called when the bird arrives somewhere with a name (banner like an open-world area title). */
+  public onPlaceArrival: ((arrival: PlaceArrival) => void) | null = null;
   private mode: GameMode = 'attract';
   private animationFrame = 0;
   private elapsed = 0;
@@ -241,6 +245,20 @@ export class BirdsInHkGame {
         });
       },
     );
+    const blocks = region.id === 'tai-po'
+      ? wangFukLocalMarkers(region.latitude, region.longitude)
+        .map(marker => ({ name: marker.name, block: marker.block, position: { x: marker.position.x, z: marker.position.z } }))
+      : [];
+    const courtCentre = blocks.length > 0
+      ? {
+        x: blocks.reduce((sum, block) => sum + block.position.x, 0) / blocks.length,
+        z: blocks.reduce((sum, block) => sum + block.position.z, 0) / blocks.length,
+      }
+      : null;
+    this.places.setPlaces([
+      ...(courtCentre ? memorialPlaces(courtCentre, blocks) : []),
+      ...this.roads.placeNames,
+    ]);
     onProgress({
       stage: 'navigation road data ready',
       detail: `${this.roads.metrics.features} road features are available without rendered ribbon meshes.`,
@@ -322,10 +340,15 @@ export class BirdsInHkGame {
     for (const control of ['yawLeft', 'yawRight', 'pitchUp', 'pitchDown', 'accelerate', 'decelerate'] as const) {
       this.bird.setControl(control, false);
     }
+    this.bird.setSteerAxes(0, 0);
   }
 
   public steer(deltaX: number, deltaY: number): void {
     this.bird.steer(deltaX, deltaY);
+  }
+
+  public setSteerAxes(x: number, y: number): void {
+    this.bird.setSteerAxes(x, y);
   }
 
   public adjustSpeed(direction: number): void {
@@ -446,6 +469,9 @@ export class BirdsInHkGame {
       this.bird.update(deltaSeconds, [this.aerialGround.group, this.officialWorldRoot]);
       this.bird.updateCamera(this.camera, deltaSeconds);
       this.remoteBirds.update(deltaSeconds);
+      const position = this.bird.object.position;
+      const arrival = this.places.update(deltaSeconds, position.x, position.z, position.y);
+      if (arrival) this.onPlaceArrival?.(arrival);
       this.aerialGround.updateDetailNear(this.bird.object.position.x, this.bird.object.position.z, window.innerWidth < 720);
     } else {
       this.bird.rig.update(deltaSeconds, { mode: 'flight', flapDemand: 0.5 });

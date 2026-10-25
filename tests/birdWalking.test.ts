@@ -73,8 +73,9 @@ describe('walking on the ground', () => {
     // A wall 1.5 m ahead, running east–west.
     const wall = box(0, 5, -1.5, 40, 10, 0.4);
     const bird = standingBird();
+    // About 35° off square: a glancing walk slides; walking straight at it climbs (birdClimbing.test.ts).
     bird.setControl('yawLeft', true);
-    step(bird, [ground, wall], 0.25);
+    step(bird, [ground, wall], 0.6);
     bird.setControl('yawLeft', false);
     bird.setControl('pitchUp', true);
     step(bird, [ground, wall], 4);

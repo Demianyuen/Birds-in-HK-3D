@@ -78,6 +78,35 @@ if (!openWorldEnabled) app.append(worldPanel.element);
 const openWorld = new OpenWorldPanel(game);
 openWorld.mount(app);
 let visitor: Visitor | null = null;
+
+const placeBanner = requireElement<HTMLElement>('place-banner');
+const placeCategory = requireElement<HTMLElement>('place-category');
+const placeFirst = requireElement<HTMLElement>('place-first');
+const placeTitle = requireElement<HTMLElement>('place-title');
+const placeSubtitle = requireElement<HTMLElement>('place-subtitle');
+const placeNote = requireElement<HTMLElement>('place-note');
+let placeBannerTimer = 0;
+game.onPlaceArrival = arrival => {
+  const { place } = arrival;
+  placeBanner.dataset.tone = place.tone;
+  placeCategory.textContent = place.category;
+  placeFirst.hidden = !arrival.firstVisit || place.tone === 'memorial';
+  placeTitle.textContent = place.title;
+  placeSubtitle.textContent = place.subtitle;
+  const memorialCourt = place.id === 'memorial:宏福苑';
+  placeNote.hidden = !memorialCourt;
+  placeNote.textContent = memorialCourt ? '降落地面，按 F 放下一朵花' : '';
+  placeBanner.hidden = false;
+  placeBanner.classList.remove('is-showing');
+  void placeBanner.offsetWidth; // restart the animation
+  placeBanner.classList.add('is-showing');
+  window.clearTimeout(placeBannerTimer);
+  placeBannerTimer = window.setTimeout(() => {
+    placeBanner.classList.remove('is-showing');
+    placeBanner.hidden = true;
+  }, 5_400);
+  reportRuntimeEvent('place.arrival', { id: place.id, tone: place.tone, firstVisit: arrival.firstVisit });
+};
 let lastFrameTime = performance.now();
 visitorName.value = rememberedName();
 const touchControls = new TouchFlightControls(game);
@@ -117,10 +146,25 @@ canvas.addEventListener('click', () => {
 });
 
 document.addEventListener('mousemove', event => {
-  if (currentScreen === 'game' && document.pointerLockElement === canvas) {
+  if (currentScreen !== 'game') return;
+  if (document.pointerLockElement === canvas) {
+    // Locked pointer (after clicking the view): relative mouse look.
+    game.setSteerAxes(0, 0);
     game.steer(event.movementX, event.movementY);
+    return;
   }
+  // Free cursor: point where to go. Only while the cursor is over the 3D view.
+  if (event.target !== canvas) {
+    game.setSteerAxes(0, 0);
+    return;
+  }
+  game.setSteerAxes(
+    cursorAxis(event.clientX, window.innerWidth),
+    cursorAxis(event.clientY, window.innerHeight),
+  );
 });
+canvas.addEventListener('mouseleave', () => game.setSteerAxes(0, 0));
+document.addEventListener('pointerlockchange', () => game.setSteerAxes(0, 0));
 
 window.addEventListener('wheel', event => {
   if (currentScreen === 'game' && event.target === canvas) game.adjustSpeed(event.deltaY < 0 ? 1 : -1);
@@ -128,7 +172,7 @@ window.addEventListener('wheel', event => {
 
 window.addEventListener('keydown', event => {
   if (currentScreen !== 'game') return;
-  if (event.target instanceof HTMLElement && (event.target.closest('.world-panel, .open-world-panel') || event.target.isContentEditable
+  if (event.target instanceof HTMLElement && (event.target.closest('.world-panel, .open-world-panel, .flower-card') || event.target.isContentEditable
     || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(event.target.tagName))) return;
   if (event.code === 'Space') {
     event.preventDefault();
@@ -356,6 +400,14 @@ function selectedRegionId(): FlightRegionId {
 function selectedBirdProfileId(): BirdProfileId {
   const selected = document.querySelector<HTMLInputElement>('input[name="bird-profile"]:checked');
   return getBirdProfile(selected?.value).id;
+}
+
+/** Cursor offset from the centre → steering axis, with a calm dead zone in the middle. */
+function cursorAxis(position: number, size: number): number {
+  const offset = (position - size / 2) / (size / 2);
+  const deadZone = 0.12;
+  const magnitude = Math.max(0, Math.abs(offset) - deadZone) / (1 - deadZone);
+  return Math.sign(offset) * Math.min(1, magnitude) ** 1.6;
 }
 
 function keyboardControlForCode(code: string): FlightControl | null {

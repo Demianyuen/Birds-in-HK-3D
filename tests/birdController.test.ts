@@ -33,24 +33,21 @@ describe('bird collision and perching', () => {
     expect(bird.getTelemetry().state).toBe('PERCHED');
     expect(bird.getTelemetry().heading).toBe('N');
   });
-  it('slides along a building wall at maximum speed instead of bouncing back or passing through', () => {
+  it('holds on to a building wall hit head-on at maximum speed instead of bouncing back or passing through', () => {
     const bird = new BirdController();
     const wall = createWall(316.5);
     bird.setEnabled(true);
     for (let index = 0; index < 20; index += 1) bird.adjustSpeed(1);
-    const before = bird.getTelemetry().speedKmh;
 
     bird.update(0.05, wall);
 
-    expect(bird.getTelemetry().state).toBe('FLYING');
-    // Still on the near side of the wall, and not pushed back away from it.
-    expect(bird.object.position.z).toBeGreaterThan(317);
+    expect(bird.getTelemetry().state).toBe('CLINGING');
+    // On the near side of the wall, and not pushed back away from it.
+    expect(bird.object.position.z).toBeGreaterThan(316.5);
     expect(bird.object.position.z).toBeLessThan(319);
-    expect(bird.getTelemetry().speedKmh).toBeLessThan(before);
-    // Now flying along the wall (east or west), not back the way it came (south).
-    expect(['E', 'W']).toContain(bird.getTelemetry().heading);
     for (let index = 0; index < 10; index += 1) bird.update(0.05, wall);
-    expect(bird.object.position.z).toBeGreaterThan(317);
+    expect(bird.object.position.z).toBeGreaterThan(316.5);
+    expect(bird.getTelemetry().state).toBe('CLINGING');
   });
 
   it('lands on a roof and takes off again after a flap', () => {

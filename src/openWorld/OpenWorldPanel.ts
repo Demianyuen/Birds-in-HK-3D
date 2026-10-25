@@ -3,7 +3,7 @@ import type { BirdsInHkGame } from '../game/BirdsInHkGame';
 import type { WorldPlayer } from '../multiplayer/protocol';
 import { WORLD_PLAYER_LIMIT } from '../multiplayer/protocol';
 import { openWorldConfig } from './config';
-import { checkChat, CHAT_MAX, insideMemorialGround, MEMORIAL_CENTRE, rejectReasonText } from './contentRules';
+import { checkChat, checkMessage, CHAT_MAX, insideMemorialGround, MEMORIAL_CENTRE, MESSAGE_MAX, rejectReasonText } from './contentRules';
 import { fetchFlowers, placeFlower, sendChat } from './flowerApi';
 import type { ChatLine, LiveStatus, LiveWorld } from './LiveWorld';
 import { FLOWER_LABELS, type Visitor } from './visitor';
@@ -24,6 +24,11 @@ export class OpenWorldPanel {
   public readonly labels = new WorldLabels();
   private readonly prompt = document.createElement('div');
   private readonly placeButton = document.createElement('button');
+  /** Card to write (or edit) the words left with the flower before laying it. */
+  private readonly card = document.createElement('form');
+  private readonly cardMessage = document.createElement('textarea');
+  private readonly cardError = document.createElement('p');
+  private readonly cardTitle = document.createElement('h2');
   private readonly status = document.createElement('p');
   private readonly log = document.createElement('ol');
   private readonly chatForm = document.createElement('form');
@@ -47,7 +52,8 @@ export class OpenWorldPanel {
     this.placeButton.type = 'button';
     this.placeButton.className = 'primary-button flower-place-button';
     this.placeButton.hidden = true;
-    this.placeButton.addEventListener('click', () => void this.layFlower());
+    this.placeButton.addEventListener('click', () => this.openCard());
+    this.buildCard();
 
     const details = document.createElement('details');
     details.open = window.innerWidth > 720;
@@ -127,6 +133,7 @@ export class OpenWorldPanel {
     if (!visible) {
       this.prompt.hidden = true;
       this.placeButton.hidden = true;
+      this.card.hidden = true;
     }
   }
 
@@ -147,7 +154,7 @@ export class OpenWorldPanel {
 
   /** F key. */
   public tryLayFlower(): void {
-    void this.layFlower();
+    this.openCard();
   }
 
   public dispose(): void {
@@ -160,7 +167,78 @@ export class OpenWorldPanel {
 
   /** Attach the floating prompt and button to the game container. */
   public mount(container: HTMLElement): void {
-    container.append(this.labels.element, this.prompt, this.placeButton, this.element);
+    container.append(this.labels.element, this.prompt, this.placeButton, this.card, this.element);
+  }
+
+  private buildCard(): void {
+    this.card.className = 'flower-card';
+    this.card.hidden = true;
+    this.card.setAttribute('aria-labelledby', 'flower-card-title');
+    this.cardTitle.id = 'flower-card-title';
+    const label = document.createElement('label');
+    const caption = document.createElement('span');
+    caption.textContent = '想留下的話（可以留空）';
+    this.cardMessage.maxLength = MESSAGE_MAX;
+    this.cardMessage.rows = 4;
+    this.cardMessage.placeholder = '寫給宏福苑的一句話';
+    label.append(caption, this.cardMessage);
+    const note = document.createElement('p');
+    note.className = 'flower-card-note';
+    note.textContent = '花和名字會即時讓所有人看到。留言經審核後，會顯示在花旁邊，所有人走近都能讀到。';
+    this.cardError.className = 'flower-card-error';
+    this.cardError.setAttribute('role', 'alert');
+    this.cardError.hidden = true;
+    const actions = document.createElement('div');
+    actions.className = 'flower-card-actions';
+    const confirm = document.createElement('button');
+    confirm.type = 'submit';
+    confirm.className = 'primary-button';
+    confirm.textContent = '放下';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'secondary-button';
+    cancel.textContent = '取消';
+    cancel.addEventListener('click', () => this.closeCard());
+    actions.append(confirm, cancel);
+    this.card.append(this.cardTitle, label, note, this.cardError, actions);
+    this.card.addEventListener('submit', event => {
+      event.preventDefault();
+      const checked = checkMessage(this.cardMessage.value);
+      if (!checked.ok) {
+        this.cardError.textContent = rejectReasonText(checked.reason);
+        this.cardError.hidden = false;
+        return;
+      }
+      if (this.visitor) this.visitor.message = checked.text;
+      this.closeCard();
+      void this.layFlower();
+    });
+    this.card.addEventListener('keydown', event => {
+      if (event.key === 'Escape') this.closeCard();
+    });
+    this.card.addEventListener('focusin', () => {
+      this.game.clearControls();
+      if (document.pointerLockElement) document.exitPointerLock();
+    });
+  }
+
+  /** Opens the flower card when the bird stands on the memorial ground. */
+  private openCard(): void {
+    const visitor = this.visitor;
+    const ground = this.game.birdGroundPoint;
+    if (!visitor || visitor.placed || this.placing || !ground || !insideMemorialGround(ground.x, ground.z)) return;
+    this.cardTitle.textContent = `在這裡放下${FLOWER_LABELS[visitor.kind]}`;
+    this.cardMessage.value = visitor.message;
+    this.cardError.hidden = true;
+    this.card.hidden = false;
+    this.game.clearControls();
+    if (document.pointerLockElement) document.exitPointerLock();
+    this.cardMessage.focus();
+  }
+
+  private closeCard(): void {
+    this.card.hidden = true;
+    (document.activeElement as HTMLElement | null)?.blur?.();
   }
 
   private async refreshFlowers(): Promise<void> {
@@ -192,9 +270,10 @@ export class OpenWorldPanel {
       }
       this.placeButton.textContent = `放下${flower}（F）`;
     }
+    if (!this.card.hidden && !canPlace) this.card.hidden = true;
     this.prompt.textContent = text;
-    this.prompt.hidden = !text;
-    this.placeButton.hidden = !canPlace;
+    this.prompt.hidden = !text || !this.card.hidden;
+    this.placeButton.hidden = !canPlace || !this.card.hidden;
   }
 
   private async layFlower(): Promise<void> {
