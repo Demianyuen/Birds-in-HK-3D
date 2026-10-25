@@ -24,7 +24,7 @@ export interface SupabaseConfig {
 export function supabaseConfig(): SupabaseConfig {
   const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceKey) throw new ApiError(503, 'The memorial service is not configured yet.');
+  if (!url || !serviceKey) throw new ApiError(503, '共享紀念服務暫未開放，請稍後再試。');
   return { url: url.replace(/\/+$/, ''), serviceKey };
 }
 
@@ -112,7 +112,7 @@ export function sendError(res: ServerResponse, error: unknown): void {
 /** Moderator check: Authorization: Bearer <MODERATOR_TOKEN>, compared in constant time. */
 export function requireModerator(req: IncomingMessage): void {
   const expected = process.env.MODERATOR_TOKEN;
-  if (!expected || expected.length < 16) throw new ApiError(503, 'Moderation is not configured.');
+  if (!expected || expected.length < 16) throw new ApiError(503, '審核功能尚未設定。');
   const header = req.headers.authorization ?? '';
   const supplied = header.startsWith('Bearer ') ? header.slice(7) : '';
   const a = Buffer.from(supplied);

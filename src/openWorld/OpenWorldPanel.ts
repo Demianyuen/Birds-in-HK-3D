@@ -90,6 +90,8 @@ export class OpenWorldPanel {
   public begin(visitor: Visitor): void {
     this.visitor = visitor;
     this.active = true;
+    // Without the shared service there is nowhere to keep a flower: fly without one.
+    if (!openWorldConfig()) visitor.placed = true;
     this.game.holdFlower(visitor.placed ? null : visitor.kind);
     void this.refreshFlowers();
     void this.joinLiveWorld(visitor);
