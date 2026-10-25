@@ -5,7 +5,7 @@ import {
   insideMemorialGround,
   isFlowerKind,
   rejectReasonText,
-} from '../src/openWorld/contentRules';
+} from '../src/openWorld/contentRules.js';
 import {
   ApiError,
   countRows,
@@ -17,7 +17,7 @@ import {
   sendJson,
   supabaseConfig,
   type ApiRequest,
-} from './_lib/openWorld';
+} from './_lib/openWorld.js';
 
 /** Per visitor: at most 3 flowers in 10 minutes. Whole site: 300 in 10 minutes. */
 const PER_SENDER_LIMIT = 3;

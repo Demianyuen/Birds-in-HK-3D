@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import { checkChat, checkName, rejectReasonText } from '../src/openWorld/contentRules';
+import { checkChat, checkName, rejectReasonText } from '../src/openWorld/contentRules.js';
 import {
   ApiError,
   countRows,
@@ -11,7 +11,7 @@ import {
   sendJson,
   supabaseConfig,
   type ApiRequest,
-} from './_lib/openWorld';
+} from './_lib/openWorld.js';
 
 /** One line every 3 seconds and 20 lines in 10 minutes per visitor. */
 const BURST_SECONDS = 3;

@@ -8,7 +8,7 @@ import {
   sendJson,
   supabaseConfig,
   type ApiRequest,
-} from './_lib/openWorld';
+} from './_lib/openWorld.js';
 
 type Action = 'approve' | 'reject' | 'hide-flower' | 'hide-chat';
 const ACTIONS: readonly Action[] = ['approve', 'reject', 'hide-flower', 'hide-chat'];
