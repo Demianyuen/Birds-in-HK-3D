@@ -373,6 +373,19 @@ export default defineConfig(({ mode }) => {
         });
       },
     },
+    '/landsd-3dvis': {
+      target: 'https://data.map.gov.hk',
+      changeOrigin: true,
+      secure: true,
+      rewrite: path => path.replace(/^\/landsd-3dvis/, '/api/3d-data/3dtiles/f2'),
+      configure: proxyServer => {
+        proxyServer.on('proxyReq', proxyRequest => {
+          if (!apiKey) return;
+          const separator = proxyRequest.path.includes('?') ? '&' : '?';
+          proxyRequest.path = `${proxyRequest.path}${separator}key=${encodeURIComponent(apiKey)}`;
+        });
+      },
+    },
     '/csdi-3d': {
       target: 'https://data.map.gov.hk',
       changeOrigin: true,
@@ -398,6 +411,7 @@ export default defineConfig(({ mode }) => {
           studio: resolve(process.cwd(), 'studio.html'),
           cityStyle: resolve(process.cwd(), 'city-style.html'),
           moderate: resolve(process.cwd(), 'moderate.html'),
+          landsdPreview: resolve(process.cwd(), 'landsd-preview.html'),
         },
       },
     },

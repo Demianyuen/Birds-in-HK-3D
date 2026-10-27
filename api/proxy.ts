@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-type Service = 'csdi-3d' | 'csdi-region' | 'landsd-map' | 'terrain-elevation' | 'road-data';
+type Service = 'csdi-3d' | 'csdi-region' | 'landsd-map' | 'landsd-3dvis' | 'terrain-elevation' | 'road-data';
 
 const CSDI_ORIGIN = 'https://data.map.gov.hk';
 const LANDSD_ORIGIN = 'https://mapapi.geodata.gov.hk';
@@ -62,6 +62,12 @@ async function buildUpstreamUrl(service: Exclude<Service, 'csdi-region'>, route:
   if (!cleanRoute || cleanRoute.includes('..')) throw new Error('Invalid map route.');
   if (service === 'csdi-3d') {
     const url = new URL(`/api/3d-data/3dsd/WGS84/${cleanRoute}`, CSDI_ORIGIN);
+    addCsdiKey(url);
+    return url.toString();
+  }
+  if (service === 'landsd-3dvis') {
+    // LandsD 3D Visualisation Map: photo-textured mesh from oblique aerial images (preview only).
+    const url = new URL(`/api/3d-data/3dtiles/f2/${cleanRoute}`, CSDI_ORIGIN);
     addCsdiKey(url);
     return url.toString();
   }
@@ -129,7 +135,7 @@ function addCsdiKey(url: URL): void {
 }
 
 function isService(value: string): value is Service {
-  return ['csdi-3d', 'csdi-region', 'landsd-map', 'terrain-elevation', 'road-data'].includes(value);
+  return ['csdi-3d', 'csdi-region', 'landsd-map', 'landsd-3dvis', 'terrain-elevation', 'road-data'].includes(value);
 }
 
 function value(value: string | null): string | null {
