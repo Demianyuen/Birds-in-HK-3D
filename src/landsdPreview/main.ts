@@ -86,7 +86,7 @@ scene.add(tiles.group);
 const metrics = { models: 0, errors: 0, lastError: '', uris: [] as string[], groundY: null as number | null };
 (window as unknown as { __landsd: typeof metrics }).__landsd = metrics;
 
-tiles.addEventListener('load-tile-set', (event: { tileSet?: { asset?: unknown; root?: { children?: unknown[] } }; url?: string }) => {
+tiles.addEventListener('load-tileset', (event: { tileSet?: { asset?: unknown; root?: { children?: unknown[] } }; url?: string }) => {
   if (metrics.uris.length === 0) {
     status.textContent = '已連接，正在下載宏福苑附近的模型…';
     const asset = event.tileSet?.asset;
@@ -144,7 +144,23 @@ window.addEventListener('resize', () => {
 });
 
 let frame = 0;
-renderer.setAnimationLoop(() => {
+// requestAnimationFrame stops while the page sits in a hidden pane or tab;
+// a timer keeps tiles streaming (and screenshots possible) regardless.
+let lastFrame = 0;
+function loop(): void {
+  const now = performance.now();
+  if (now - lastFrame >= 30) {
+    lastFrame = now;
+    renderFrame();
+  }
+}
+requestAnimationFrame(function raf() { loop(); requestAnimationFrame(raf); });
+setInterval(loop, 50);
+(window as unknown as { __landsdCapture: (quality?: number) => string }).__landsdCapture = (quality = 0.8) => {
+  renderFrame();
+  return renderer.domElement.toDataURL('image/jpeg', quality);
+};
+function renderFrame(): void {
   controls.update();
   camera.updateMatrixWorld();
   tiles.update();
@@ -154,4 +170,4 @@ renderer.setAnimationLoop(() => {
     if (metrics.groundY === null) findGround();
     stats.textContent = `已載入模型 ${metrics.models} 個 · 錯誤 ${metrics.errors} · 下載中 ${(tiles as unknown as { stats: { downloading: number; parsing: number } }).stats.downloading} · 解析中 ${(tiles as unknown as { stats: { downloading: number; parsing: number } }).stats.parsing}`;
   }
-});
+}
