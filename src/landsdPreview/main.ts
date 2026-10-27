@@ -5,6 +5,10 @@ import {
   Color,
   DirectionalLight,
   MathUtils,
+  Mesh,
+  MeshBasicMaterial,
+  type MeshStandardMaterial,
+  type Object3D,
   PerspectiveCamera,
   Raycaster,
   Scene,
@@ -29,6 +33,38 @@ const centre = {
   longitude: WANG_FUK_ADDRESS_POINTS.reduce((sum, point) => sum + point.longitude, 0) / WANG_FUK_ADDRESS_POINTS.length,
 };
 const UPSTREAM = /^https?:\/\/data\.map\.gov\.hk\/api\/3d-data\/3dtiles\/f2\//;
+
+/**
+ * The LandsD tiles store their photo textures as KTX2 images but reference
+ * them as plain images (no KHR_texture_basisu), which three.js would try to
+ * decode as PNG/JPEG and leave the mesh white. Point those textures at the
+ * Basis/KTX2 path before the glTF is parsed.
+ */
+class Ktx2ImageFix {
+  public readonly name = 'LANDSD_KTX2_IMAGE_FIX';
+  public constructor(private readonly parser: { json: GltfJson }) {}
+  public beforeRoot(): null {
+    const json = this.parser.json;
+    let patched = false;
+    for (const texture of json.textures ?? []) {
+      const image = texture.source === undefined ? undefined : json.images?.[texture.source];
+      if (!image || image.mimeType !== 'image/ktx2' || texture.extensions?.KHR_texture_basisu) continue;
+      texture.extensions = { ...texture.extensions, KHR_texture_basisu: { source: texture.source } };
+      patched = true;
+    }
+    if (patched) {
+      json.extensionsUsed = [...new Set([...(json.extensionsUsed ?? []), 'KHR_texture_basisu'])];
+      ktxPatched += 1;
+    }
+    return null;
+  }
+}
+interface GltfJson {
+  textures?: Array<{ source?: number; extensions?: Record<string, unknown> }>;
+  images?: Array<{ mimeType?: string }>;
+  extensionsUsed?: string[];
+}
+let ktxPatched = 0;
 
 const status = document.getElementById('status')!;
 const stats = document.getElementById('stats')!;
@@ -68,7 +104,12 @@ tiles.setCamera(camera);
 tiles.setResolutionFromRenderer(camera, renderer);
 const draco = new DRACOLoader(tiles.manager).setDecoderPath('/draco/gltf/');
 const ktx2 = new KTX2Loader(tiles.manager).setTranscoderPath('/basis/').detectSupport(renderer);
-tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco, ktxLoader: ktx2, rtc: true }));
+tiles.registerPlugin(new GLTFExtensionsPlugin({
+  dracoLoader: draco,
+  ktxLoader: ktx2,
+  rtc: true,
+  plugins: [parser => new Ktx2ImageFix(parser)],
+}));
 const region = new LoadRegionPlugin();
 region.addRegion(new SphereRegion({
   sphere: new Sphere(geodeticToEcef(centre.latitude, centre.longitude, 40), 700),
@@ -83,7 +124,7 @@ tiles.registerPlugin(new ReorientationPlugin({
 }));
 scene.add(tiles.group);
 
-const metrics = { models: 0, errors: 0, lastError: '', uris: [] as string[], groundY: null as number | null };
+const metrics = { get ktxPatched() { return ktxPatched; }, models: 0, errors: 0, lastError: '', uris: [] as string[], groundY: null as number | null };
 (window as unknown as { __landsd: typeof metrics }).__landsd = metrics;
 
 tiles.addEventListener('load-tileset', (event: { tileSet?: { asset?: unknown; root?: { children?: unknown[] } }; url?: string }) => {
@@ -94,8 +135,17 @@ tiles.addEventListener('load-tileset', (event: { tileSet?: { asset?: unknown; ro
   }
   if (event.url) metrics.uris.push(String(event.url).replace(/\?.*$/, ''));
 });
-tiles.addEventListener('load-model', (event: { tile?: { content?: { uri?: string } } }) => {
+tiles.addEventListener('load-model', (event: { scene?: Object3D; tile?: { content?: { uri?: string } } }) => {
   metrics.models += 1;
+  // The photo texture already holds the light of the day it was taken: show it unlit.
+  event.scene?.traverse(object => {
+    const mesh = object as Mesh;
+    if (!mesh.isMesh) return;
+    const old = mesh.material as MeshStandardMaterial;
+    if (old.type === 'MeshBasicMaterial') return;
+    mesh.material = new MeshBasicMaterial({ map: old.map ?? null, color: old.map ? '#ffffff' : '#d9d9d9' });
+    old.dispose();
+  });
   const uri = event.tile?.content?.uri;
   if (uri && metrics.uris.length < 60) metrics.uris.push(uri.replace(/\?.*$/, ''));
 });
