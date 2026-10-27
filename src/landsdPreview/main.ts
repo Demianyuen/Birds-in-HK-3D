@@ -20,6 +20,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { geodeticToEcef } from '../game/geo';
+import { Ktx2ImageFix, landsdProxyUrl } from '../game/ktx2ImageFix';
 import { WANG_FUK_ADDRESS_POINTS } from '../game/wangFukLocations';
 
 /**
@@ -32,39 +33,7 @@ const centre = {
   latitude: WANG_FUK_ADDRESS_POINTS.reduce((sum, point) => sum + point.latitude, 0) / WANG_FUK_ADDRESS_POINTS.length,
   longitude: WANG_FUK_ADDRESS_POINTS.reduce((sum, point) => sum + point.longitude, 0) / WANG_FUK_ADDRESS_POINTS.length,
 };
-const UPSTREAM = /^https?:\/\/data\.map\.gov\.hk\/api\/3d-data\/3dtiles\/f2\//;
 
-/**
- * The LandsD tiles store their photo textures as KTX2 images but reference
- * them as plain images (no KHR_texture_basisu), which three.js would try to
- * decode as PNG/JPEG and leave the mesh white. Point those textures at the
- * Basis/KTX2 path before the glTF is parsed.
- */
-class Ktx2ImageFix {
-  public readonly name = 'LANDSD_KTX2_IMAGE_FIX';
-  public constructor(private readonly parser: { json: GltfJson }) {}
-  public beforeRoot(): null {
-    const json = this.parser.json;
-    let patched = false;
-    for (const texture of json.textures ?? []) {
-      const image = texture.source === undefined ? undefined : json.images?.[texture.source];
-      if (!image || image.mimeType !== 'image/ktx2' || texture.extensions?.KHR_texture_basisu) continue;
-      texture.extensions = { ...texture.extensions, KHR_texture_basisu: { source: texture.source } };
-      patched = true;
-    }
-    if (patched) {
-      json.extensionsUsed = [...new Set([...(json.extensionsUsed ?? []), 'KHR_texture_basisu'])];
-      ktxPatched += 1;
-    }
-    return null;
-  }
-}
-interface GltfJson {
-  textures?: Array<{ source?: number; extensions?: Record<string, unknown> }>;
-  images?: Array<{ mimeType?: string }>;
-  extensionsUsed?: string[];
-}
-let ktxPatched = 0;
 
 const status = document.getElementById('status')!;
 const stats = document.getElementById('stats')!;
@@ -91,14 +60,7 @@ controls.enableDamping = true;
 controls.update();
 
 const tiles = new TilesRenderer('/landsd-3dvis/tileset.json');
-tiles.registerPlugin({ name: 'LANDSD_PROXY', preprocessURL: (uri: string | URL) => {
-  const text = uri.toString();
-  // Absolute links back to the upstream service go through our proxy (which adds the key).
-  const local = text.replace(UPSTREAM, `${window.location.origin}/landsd-3dvis/`);
-  const url = new URL(local, window.location.href);
-  url.searchParams.delete('key');
-  return url.toString();
-} } as never);
+tiles.registerPlugin({ name: 'LANDSD_PROXY', preprocessURL: (uri: string | URL) => landsdProxyUrl(uri, window.location.origin) } as never);
 tiles.errorTarget = 6;
 tiles.setCamera(camera);
 tiles.setResolutionFromRenderer(camera, renderer);
@@ -108,7 +70,7 @@ tiles.registerPlugin(new GLTFExtensionsPlugin({
   dracoLoader: draco,
   ktxLoader: ktx2,
   rtc: true,
-  plugins: [parser => new Ktx2ImageFix(parser)],
+  plugins: [parser => new Ktx2ImageFix(parser as never)],
 }));
 const region = new LoadRegionPlugin();
 region.addRegion(new SphereRegion({
@@ -124,7 +86,7 @@ tiles.registerPlugin(new ReorientationPlugin({
 }));
 scene.add(tiles.group);
 
-const metrics = { get ktxPatched() { return ktxPatched; }, models: 0, errors: 0, lastError: '', uris: [] as string[], groundY: null as number | null };
+const metrics = { get ktxPatched() { return Ktx2ImageFix.patchedCount; }, models: 0, errors: 0, lastError: '', uris: [] as string[], groundY: null as number | null };
 (window as unknown as { __landsd: typeof metrics }).__landsd = metrics;
 
 tiles.addEventListener('load-tileset', (event: { tileSet?: { asset?: unknown; root?: { children?: unknown[] } }; url?: string }) => {

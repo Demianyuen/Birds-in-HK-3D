@@ -7,7 +7,7 @@ import { TouchFlightControls } from './game/TouchFlightControls';
 import { createHeritageDiagram } from './game/heritageDiagram';
 import { transitionFlow, type ScreenName } from './app/flow';
 import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
-import { BirdsInHkGame, type GameTelemetry } from './game/BirdsInHkGame';
+import { BirdsInHkGame, type GameTelemetry, type WorldPresentation } from './game/BirdsInHkGame';
 import type { FlightControl } from './game/BirdController';
 import { getBirdProfile, type BirdProfileId } from './game/birdProfiles';
 import type { MapLoadProgress } from './game/CsdiTiles';
@@ -118,12 +118,28 @@ document.querySelector('.heritage-evidence')?.append(createHeritageDiagram());
 worldPanel.element.addEventListener('toggle', () => {
   touchControls.setVisible(currentScreen === 'game' && !worldPanel.element.open);
 });
+const PRESENTATION_KEY = 'birds-in-hk:world-presentation';
+const PRESENTATION_NOTES: Record<WorldPresentation, string> = {
+  photo: '地政總署以斜角航拍相片建成的實景模型。從空中看最清楚，貼近地面會較模糊。',
+  reference: 'CSDI 來源材質；不代表初建成或今日現況。地形、光照與碰撞保持相同。',
+  preservation: '現為 CSDI 幾何的美術預覽，尚非初建成外觀還原。配色與窗格屬藝術補足。',
+};
+function selectedPresentation(): WorldPresentation {
+  const value = buildingPresentation.value;
+  return value === 'reference' || value === 'preservation' ? value : 'photo';
+}
+try {
+  const saved = localStorage.getItem(PRESENTATION_KEY);
+  if (saved === 'photo' || saved === 'reference' || saved === 'preservation') buildingPresentation.value = saved;
+} catch {
+  // storage blocked: keep the default
+}
+buildingPresentationNote.textContent = PRESENTATION_NOTES[selectedPresentation()];
 buildingPresentation.addEventListener('change', () => {
-  const mode = buildingPresentation.value === 'reference' ? 'reference' : 'preservation';
+  const mode = selectedPresentation();
   game.setBuildingPresentation(mode);
-  buildingPresentationNote.textContent = mode === 'reference'
-    ? 'CSDI 來源材質；不代表初建成或今日現況。地形、光照與碰撞保持相同。'
-    : '現為 CSDI 幾何的美術預覽，尚非初建成外觀還原。配色與窗格屬藝術補足。';
+  buildingPresentationNote.textContent = PRESENTATION_NOTES[mode];
+  try { localStorage.setItem(PRESENTATION_KEY, mode); } catch { /* per-browser convenience only */ }
   game.clearControls();
 });
 
@@ -248,6 +264,7 @@ async function beginFlight(): Promise<void> {
       game.loadWorld(region.id, updateLoading),
       delay(1_000),
     ]);
+    game.setBuildingPresentation(selectedPresentation());
     updateLoading({
       stage: 'Ready for takeoff',
       detail: 'Hong Kong geometry and collision are active.',

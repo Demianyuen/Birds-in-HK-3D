@@ -14,6 +14,14 @@ export const DAY_SKY: SkyPalette = {
   sunGlow: '#fff2d6',
 };
 
+/** Late-afternoon light for the flight-sim look: deep blue overhead, a warm glowing horizon. */
+export const GOLDEN_SKY: SkyPalette = {
+  zenith: '#3d7fc6',
+  horizon: '#f1dcc4',
+  ground: '#a7aa9c',
+  sunGlow: '#ffd29a',
+};
+
 /** Stylised gradient sky dome with a soft sun halo. Not affected by fog. */
 export function createGradientSky(sunDirection: Vector3, palette: SkyPalette = DAY_SKY, radius = 45_000): Mesh {
   const material = new ShaderMaterial({

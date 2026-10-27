@@ -4,6 +4,7 @@ import { Group } from 'three';
 import { geographicToTileFraction } from './AerialImageryGround';
 import { fetchVectorTile } from './LandUseMask';
 import { dedupePlaces, extractPlaceNames, type PlaceName } from './PlaceNames';
+import { emptyStreetData, extractStreetData, type StreetData } from './streetData';
 import type { FlightRegion } from './regions';
 
 const EARTH_CIRCUMFERENCE_METRES = 40_075_016.686;
@@ -57,6 +58,7 @@ export class RoadNetwork {
   public readonly group = new Group();
   private currentMetrics: RoadNetworkMetrics = emptyMetrics();
   private names: PlaceName[] = [];
+  private streets: StreetData = emptyStreetData();
 
   public constructor() {
     this.group.name = 'OpenStreetMap navigation data (not rendered)';
@@ -92,6 +94,7 @@ export class RoadNetwork {
     let segments = 0;
     let waterFeatures = 0;
     const places: PlaceName[] = [];
+    const streets = emptyStreetData();
     for (const tile of tiles) {
       if (!tile) continue;
       const vectorTile = new VectorTile(new Pbf(tile.data));
@@ -99,6 +102,11 @@ export class RoadNetwork {
         places.push(...extractPlaceNames(vectorTile, { tileX: tile.request.x, tileY: tile.request.y, center, tileWidthMetres }));
       } catch (error) {
         console.warn('Place names in one map tile could not be read.', error);
+      }
+      try {
+        extractStreetData(vectorTile, { tileX: tile.request.x, tileY: tile.request.y, center, tileWidthMetres }, streets);
+      } catch (error) {
+        console.warn('Streets in one map tile could not be read.', error);
       }
       const roads = vectorTile.layers[ROAD_LAYER_NAME];
       if (roads) {
@@ -123,6 +131,7 @@ export class RoadNetwork {
     }
 
     this.names = dedupePlaces(places);
+    this.streets = streets;
     if (features === 0) throw new Error('The Hong Kong navigation road data could not be loaded.');
     this.currentMetrics = {
       features,
@@ -132,6 +141,11 @@ export class RoadNetwork {
       visibleMeshes: 0,
       surfacesRendered: false,
     };
+  }
+
+  /** Roads, footpaths and open water (OpenStreetMap) for traffic, people and boats. */
+  public get streetData(): Readonly<StreetData> {
+    return this.streets;
   }
 
   /** Named places (OpenStreetMap) found in the loaded tiles. */

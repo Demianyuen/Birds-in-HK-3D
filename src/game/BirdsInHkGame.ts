@@ -21,16 +21,20 @@ import {
   Quaternion,
   Euler,
 } from 'three';
-import { createGradientSky, DAY_SKY } from './GradientSky';
+import { createGradientSky, GOLDEN_SKY as DAY_SKY } from './GradientSky';
 import {
   AerialImageryGround,
   type OfficialGroundMetrics,
 } from './AerialImageryGround';
 import { BirdController, type FlightControl, type FlightTelemetry } from './BirdController';
 import { CsdiTiles, type MapLoadProgress } from './CsdiTiles';
-import { getFlightRegion, type FlightRegionId } from './regions';
+import { getFlightRegion, type FlightRegion, type FlightRegionId } from './regions';
+import type { Object3D } from 'three';
 import { browserDiscoveryStore, memorialPlaces, PlaceTracker, type PlaceArrival } from './PlaceNames';
+import { CinematicPost } from './CinematicPost';
+import { PhotoMeshTiles, type PhotoMeshMetrics } from './PhotoMeshTiles';
 import { RoadNetwork, type RoadNetworkMetrics } from './RoadNetwork';
+import { StreetLife } from './StreetLife';
 import { getBirdProfile, type BirdProfileId } from './birdProfiles';
 import { evaluateWorldReadiness } from './worldReadiness';
 import { stylizedGroundUniforms } from './StylizedGround';
@@ -58,6 +62,9 @@ export interface GameTelemetry extends FlightTelemetry {
   detailPatchesLoaded: number;
 }
 
+/** Stylised CSDI buildings (two looks) or the LandsD aerial photo mesh. */
+export type WorldPresentation = BuildingPresentation | 'photo';
+
 export class BirdsInHkGame {
   private readonly scene = new Scene();
   private readonly camera: PerspectiveCamera;
@@ -74,8 +81,16 @@ export class BirdsInHkGame {
   private readonly clouds = new StylizedClouds();
   /** Flowers laid at Wang Fuk Court by visitors. */
   public readonly flowers = new MemorialFlowers();
+  /** LandsD aerial photo mesh, loaded the first time the visitor picks that view. */
+  private readonly photoMesh = new PhotoMeshTiles();
+  /** Cars, buses, people and boats moving through Tai Po. */
+  private readonly streetLife = new StreetLife();
+  private worldPresentation: WorldPresentation = 'preservation';
+  private readonly post: CinematicPost;
+  private slowFrames = 0;
+  private region: FlightRegion | null = null;
   private carried: ReturnType<typeof createCarriedFlower> | null = null;
-  private readonly sun = new DirectionalLight('#ffe7c2', 3.1);
+  private readonly sun = new DirectionalLight('#ffd9a6', 3.0);
   private sky: Mesh | null = null;
   private readonly telemetryCallback: (telemetry: GameTelemetry) => void;
   private readonly places = new PlaceTracker(browserDiscoveryStore());
@@ -97,7 +112,7 @@ export class BirdsInHkGame {
   public constructor(canvas: HTMLCanvasElement, onTelemetry: (telemetry: GameTelemetry) => void) {
     this.telemetryCallback = onTelemetry;
     this.scene.background = new Color('#a7c9d7');
-    this.scene.fog = new Fog(DAY_SKY.horizon, 1_600, 9_500);
+    this.scene.fog = new Fog(DAY_SKY.horizon, 1_400, 8_500);
     this.camera = new PerspectiveCamera(61, window.innerWidth / window.innerHeight, 0.1, 70_000);
     this.camera.position.set(0, 145, 430);
     this.camera.lookAt(0, 100, 0);
@@ -130,6 +145,8 @@ export class BirdsInHkGame {
     this.scene.add(this.sun.target);
     this.configureSky();
     this.configureEnvironment();
+    this.post = new CinematicPost(this.renderer, this.scene, this.camera);
+    this.post.setPixelRatio(this.resolution.current);
     this.scene.add(this.bird.object);
     this.scene.add(this.remoteBirds.group);
     this.scene.add(this.aerialGround.group);
@@ -140,6 +157,8 @@ export class BirdsInHkGame {
     this.clouds.build();
     this.officialWorldRoot.name = 'Official CSDI 3D world';
     this.scene.add(this.officialWorldRoot);
+    this.scene.add(this.photoMesh.group);
+    this.scene.add(this.streetLife.group);
 
     const harbour = new Mesh(
       new PlaneGeometry(9_000, 9_000),
@@ -156,6 +175,7 @@ export class BirdsInHkGame {
 
   public async loadWorld(regionId: FlightRegionId, onProgress: (progress: MapLoadProgress) => void): Promise<void> {
     const region = getFlightRegion(regionId);
+    this.region = region;
     this.mode = 'loading';
     this.bird.setEnabled(false);
     this.bird.setFlightRadius(region.flightRadiusMetres - 120);
@@ -245,6 +265,7 @@ export class BirdsInHkGame {
         });
       },
     );
+    this.streetLife.setStreets(this.roads.streetData);
     const blocks = region.id === 'tai-po'
       ? wangFukLocalMarkers(region.latitude, region.longitude)
         .map(marker => ({ name: marker.name, block: marker.block, position: { x: marker.position.x, z: marker.position.z } }))
@@ -314,8 +335,32 @@ export class BirdsInHkGame {
     this.remoteBirds.sync(players);
   }
 
-  public setBuildingPresentation(mode: BuildingPresentation): void {
-    this.city.setPresentation(mode);
+  public setBuildingPresentation(mode: WorldPresentation): void {
+    this.worldPresentation = mode;
+    const photo = mode === 'photo';
+    if (!photo) this.city.setPresentation(mode);
+    if (photo && this.region) void this.photoMesh.load(this.camera, this.renderer, this.region);
+    this.applyWorldPresentation();
+  }
+
+  /** The photo mesh already holds ground, trees and buildings: hide the stylised ones while it shows. */
+  private applyWorldPresentation(): void {
+    const photo = this.worldPresentation === 'photo' && this.photoMesh.ready;
+    this.photoMesh.setVisible(this.worldPresentation === 'photo');
+    this.officialWorldRoot.visible = !photo;
+    this.aerialGround.group.visible = !photo;
+    this.trees.group.visible = !photo;
+  }
+
+  public get photoMeshMetrics(): PhotoMeshMetrics {
+    return this.photoMesh.metrics;
+  }
+
+  /** What the bird can hit: the photo mesh when shown, else the stylised ground and CSDI models. */
+  private collisionRoots(): Object3D[] {
+    return this.worldPresentation === 'photo' && this.photoMesh.ready
+      ? [this.photoMesh.group]
+      : [this.aerialGround.group, this.officialWorldRoot];
   }
 
   public getNetworkPose(): { position: Position; quaternion: Rotation; perched: boolean } {
@@ -382,12 +427,13 @@ export class BirdsInHkGame {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.post.setSize(window.innerWidth, window.innerHeight);
   };
 
   private configureSky(): void {
     this.sunDirection.setFromSphericalCoords(
       1,
-      MathUtils.degToRad(56),
+      MathUtils.degToRad(63),
       MathUtils.degToRad(218),
     );
     this.sky = createGradientSky(this.sunDirection);
@@ -430,7 +476,7 @@ export class BirdsInHkGame {
   }
 
   public debugCapture(): Promise<Blob | null> {
-    this.renderer.render(this.scene, this.camera);
+    this.post.render();
     return new Promise(resolve => this.renderer.domElement.toBlob(resolve, 'image/png'));
   }
 
@@ -462,13 +508,18 @@ export class BirdsInHkGame {
     this.elapsed += deltaSeconds;
     this.city.update(this.camera, this.renderer);
     this.infrastructure.update(this.camera, this.renderer);
+    this.photoMesh.update(this.camera, this.renderer);
+    // Keep the stylised world showing until the first photo tiles arrive.
+    if (this.worldPresentation === 'photo' && this.officialWorldRoot.visible && this.photoMesh.ready) this.applyWorldPresentation();
 
     if (this.mode === 'playing' && this.paused) {
       this.bird.updateCamera(this.camera, 1);
     } else if (this.mode === 'playing') {
-      this.bird.update(deltaSeconds, [this.aerialGround.group, this.officialWorldRoot]);
+      this.bird.update(deltaSeconds, this.collisionRoots());
       this.bird.updateCamera(this.camera, deltaSeconds);
       this.remoteBirds.update(deltaSeconds);
+      this.streetLife.setSurface((x, z) => this.aerialGround.getElevationAtWorld(x, z) + 0.2, this.collisionRoots());
+      this.streetLife.update(deltaSeconds, this.bird.object.position);
       const position = this.bird.object.position;
       const arrival = this.places.update(deltaSeconds, position.x, position.z, position.y);
       if (arrival) this.onPlaceArrival?.(arrival);
@@ -498,12 +549,19 @@ export class BirdsInHkGame {
     }
     if (this.mode === 'playing' && !this.paused) {
       const ratio = this.resolution.update(deltaSeconds * 1_000, performance.now());
-      if (ratio !== null) this.renderer.setPixelRatio(ratio);
+      if (ratio !== null) {
+        this.renderer.setPixelRatio(ratio);
+        this.post.setPixelRatio(ratio);
+      }
+      // Still slow at the lowest resolution: drop the glow; bring it back when there is headroom.
+      this.slowFrames = this.smoothedFrameMilliseconds > 26 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 2);
+      if (this.post.bloomEnabled && this.slowFrames > 180) this.post.setBloom(false);
+      else if (!this.post.bloomEnabled && this.slowFrames === 0 && this.smoothedFrameMilliseconds < 14) this.post.setBloom(true);
     }
     stylizedGroundUniforms.uSgTime.value = this.elapsed;
     this.clouds.update(this.elapsed);
     this.flowers.update(deltaSeconds, this.camera.position);
-    this.renderer.render(this.scene, this.camera);
+    this.post.render();
     if (this.mode === 'playing') {
       if (!this.renderVerified) this.renderVerified = this.hasNonBlankFramebuffer();
       this.telemetryCallback({
