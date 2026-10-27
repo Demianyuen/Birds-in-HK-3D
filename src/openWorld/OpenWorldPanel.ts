@@ -3,13 +3,16 @@ import type { BirdsInHkGame } from '../game/BirdsInHkGame';
 import type { WorldPlayer } from '../multiplayer/protocol';
 import { WORLD_PLAYER_LIMIT } from '../multiplayer/protocol';
 import { openWorldConfig } from './config';
+import { playLayingChime } from './chime';
 import { checkChat, checkMessage, CHAT_MAX, insideMemorialGround, MEMORIAL_CENTRE, MESSAGE_MAX, rejectReasonText } from './contentRules';
-import { fetchFlowers, placeFlower, sendChat } from './flowerApi';
+import { fetchFlowers, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
 import type { ChatLine, LiveStatus, LiveWorld } from './LiveWorld';
 import { FLOWER_LABELS, type Visitor } from './visitor';
 import { WorldLabels, type WorldLabel } from './WorldLabels';
 
 const FLOWER_REFRESH_MS = 30_000;
+/** Flowers laid in this browser while the shared service is not available yet. */
+const LOCAL_FLOWERS_KEY = 'birds-in-hk:my-flowers';
 /** Words left with flowers show when the walking bird is this close (m). */
 const FLOWER_LABEL_RADIUS = 6;
 /** Names over other birds show within this distance (m). */
@@ -29,6 +32,7 @@ export class OpenWorldPanel {
   private readonly cardMessage = document.createElement('textarea');
   private readonly cardError = document.createElement('p');
   private readonly cardTitle = document.createElement('h2');
+  private readonly cardNote = document.createElement('p');
   private readonly status = document.createElement('p');
   private readonly log = document.createElement('ol');
   private readonly chatForm = document.createElement('form');
@@ -96,8 +100,8 @@ export class OpenWorldPanel {
   public begin(visitor: Visitor): void {
     this.visitor = visitor;
     this.active = true;
-    // Without the shared service there is nowhere to keep a flower: fly without one.
-    if (!openWorldConfig()) visitor.placed = true;
+    // Without the shared service the flower is kept in this browser only.
+    for (const flower of readLocalFlowers()) this.game.flowers.add(flower);
     this.game.holdFlower(visitor.placed ? null : visitor.kind);
     void this.refreshFlowers();
     void this.joinLiveWorld(visitor);
@@ -148,6 +152,7 @@ export class OpenWorldPanel {
     const pose = this.game.getNetworkPose();
     this.liveWorld?.sendPose(pose.position, pose.quaternion, pose.perched);
     this.liveWorld?.prune();
+    this.game.flowers.showGuide(Boolean(this.visitor && !this.visitor.placed));
     this.updatePrompt();
     this.labels.render(this.collectLabels(), this.game.viewCamera, width, height);
   }
@@ -182,9 +187,8 @@ export class OpenWorldPanel {
     this.cardMessage.rows = 4;
     this.cardMessage.placeholder = '寫給宏福苑的一句話';
     label.append(caption, this.cardMessage);
-    const note = document.createElement('p');
+    const note = this.cardNote;
     note.className = 'flower-card-note';
-    note.textContent = '花和名字會即時讓所有人看到。留言經審核後，會顯示在花旁邊，所有人走近都能讀到。';
     this.cardError.className = 'flower-card-error';
     this.cardError.setAttribute('role', 'alert');
     this.cardError.hidden = true;
@@ -229,6 +233,9 @@ export class OpenWorldPanel {
     if (!visitor || visitor.placed || this.placing || !ground || !insideMemorialGround(ground.x, ground.z)) return;
     this.cardTitle.textContent = `在這裡放下${FLOWER_LABELS[visitor.kind]}`;
     this.cardMessage.value = visitor.message;
+    this.cardNote.textContent = openWorldConfig()
+      ? '花和名字會即時讓所有人看到。留言經審核後，會顯示在花旁邊，所有人走近都能讀到。'
+      : '共享服務尚未開放：這朵花和留言暫時只保留在你的畫面上。';
     this.cardError.hidden = true;
     this.card.hidden = false;
     this.game.clearControls();
@@ -242,6 +249,7 @@ export class OpenWorldPanel {
   }
 
   private async refreshFlowers(): Promise<void> {
+    if (!openWorldConfig()) return;
     try {
       this.game.flowers.setFlowers(await fetchFlowers());
     } catch {
@@ -258,15 +266,16 @@ export class OpenWorldPanel {
     } else if (this.visitor && !this.visitor.placed) {
       const flower = FLOWER_LABELS[this.visitor.kind];
       const ground = this.game.birdGroundPoint;
+      const bird = this.game.birdPosition;
+      const away = Math.round(Math.hypot(bird.x - MEMORIAL_CENTRE.x, bird.z - MEMORIAL_CENTRE.z));
       if (this.placing) text = `正在放下${flower}…`;
-      else if (!ground) text = `帶著${flower}飛到宏福苑，降落後可以放下。`;
+      else if (!ground && insideMemorialGround(bird.x, bird.z)) text = `已到宏福苑。降落在屋苑地面，就可以放下${flower}。`;
+      else if (!ground) text = `帶著${flower}飛向遠處那道光柱——宏福苑在約 ${away} 米外。`;
       else if (insideMemorialGround(ground.x, ground.z)) {
         text = '';
         canPlace = true;
       } else {
-        const bird = this.game.birdPosition;
-        const distance = Math.round(Math.hypot(bird.x - MEMORIAL_CENTRE.x, bird.z - MEMORIAL_CENTRE.z));
-        text = `宏福苑在約 ${distance} 米外。飛過去，降落在屋苑地面就可以放下${flower}。`;
+        text = `宏福苑在約 ${away} 米外。飛過去，降落在屋苑地面就可以放下${flower}。`;
       }
       this.placeButton.textContent = `放下${flower}（F）`;
     }
@@ -283,16 +292,25 @@ export class OpenWorldPanel {
     this.placing = true;
     const localId = `local-${Date.now()}`;
     const flower = { id: localId, createdAt: new Date().toISOString(), name: visitor.name, message: '', kind: visitor.kind, x: ground.x, y: ground.y, z: ground.z };
-    // Lay it at once; the server confirms (or refuses) in the background.
-    this.game.flowers.add(flower);
+    // Lay it at once with its small ceremony; the server confirms (or refuses) in the background.
+    this.game.flowers.ceremony(flower);
     this.game.holdFlower(null);
+    playLayingChime();
+    const label = FLOWER_LABELS[visitor.kind];
+    if (!openWorldConfig()) {
+      saveLocalFlower({ ...flower, message: visitor.message });
+      visitor.placed = true;
+      this.placing = false;
+      this.showNotice(`你在宏福苑放下了${label}。共享服務開放後，其他人才會看到；現在只保留在你的畫面。`, 10_000);
+      return;
+    }
     try {
       const placed = await placeFlower({ name: visitor.name, message: visitor.message, kind: visitor.kind, x: ground.x, y: ground.y, z: ground.z });
       this.game.flowers.replace(localId, { ...placed.flower, y: ground.y });
       visitor.placed = true;
       this.showNotice(placed.messageStatus === 'pending'
-        ? `你的${FLOWER_LABELS[visitor.kind]}已放在宏福苑。你的留言會在審核後讓其他人看到。`
-        : `你的${FLOWER_LABELS[visitor.kind]}已放在宏福苑。`, 9_000);
+        ? `你在宏福苑放下了${label}，所有人都看得到。留言會在審核後顯示在花旁。`
+        : `你在宏福苑放下了${label}，所有人都看得到。`, 10_000);
     } catch (error) {
       this.game.flowers.remove(localId);
       this.game.holdFlower(visitor.kind);
@@ -380,6 +398,26 @@ export class OpenWorldPanel {
     } catch (error) {
       this.chatNote.textContent = error instanceof Error ? error.message : '訊息未能送出。';
     }
+  }
+}
+
+function readLocalFlowers(): MemorialFlower[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(LOCAL_FLOWERS_KEY) ?? '[]');
+    if (!Array.isArray(stored)) return [];
+    return stored.filter((item): item is MemorialFlower => typeof item === 'object' && item !== null
+      && typeof (item as MemorialFlower).id === 'string' && (item as MemorialFlower).id.startsWith('local-')
+      && [item.x, item.y, item.z].every(value => typeof value === 'number' && Number.isFinite(value))).slice(-20);
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalFlower(flower: MemorialFlower): void {
+  try {
+    localStorage.setItem(LOCAL_FLOWERS_KEY, JSON.stringify([...readLocalFlowers(), flower].slice(-20)));
+  } catch {
+    // private window: the flower stays for this visit only
   }
 }
 

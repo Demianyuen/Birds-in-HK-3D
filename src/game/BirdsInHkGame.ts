@@ -502,7 +502,7 @@ export class BirdsInHkGame {
     }
     stylizedGroundUniforms.uSgTime.value = this.elapsed;
     this.clouds.update(this.elapsed);
-    this.flowers.update();
+    this.flowers.update(deltaSeconds, this.camera.position);
     this.renderer.render(this.scene, this.camera);
     if (this.mode === 'playing') {
       if (!this.renderVerified) this.renderVerified = this.hasNonBlankFramebuffer();

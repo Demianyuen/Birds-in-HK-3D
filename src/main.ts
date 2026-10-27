@@ -95,7 +95,10 @@ game.onPlaceArrival = arrival => {
   placeSubtitle.textContent = place.subtitle;
   const memorialCourt = place.id === 'memorial:宏福苑';
   placeNote.hidden = !memorialCourt;
-  placeNote.textContent = memorialCourt ? '降落地面，按 F 放下一朵花' : '';
+  const flowerCount = game.flowers.count;
+  placeNote.textContent = memorialCourt
+    ? `${flowerCount > 0 ? `這裏已有 ${flowerCount} 朵花 · ` : ''}降落地面，按 F 放下一朵花`
+    : '';
   placeBanner.hidden = false;
   placeBanner.classList.remove('is-showing');
   void placeBanner.offsetWidth; // restart the animation
