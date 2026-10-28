@@ -392,6 +392,10 @@ export class BirdsInHkGame {
     this.bird.steer(deltaX, deltaY);
   }
 
+  public setPointerLocked(locked: boolean): void {
+    this.bird.setPointerLocked(locked);
+  }
+
   public setSteerAxes(x: number, y: number): void {
     this.bird.setSteerAxes(x, y);
   }

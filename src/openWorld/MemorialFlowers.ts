@@ -243,6 +243,11 @@ export class MemorialFlowers {
     return this.flowers.size;
   }
 
+  /** Flowers that carry words (approved on the server, or the visitor's own). */
+  public get words(): MemorialFlower[] {
+    return [...this.flowers.values()].filter(flower => flower.message.trim().length > 0);
+  }
+
   /** Flowers within `radius` metres of a point, nearest first. */
   public nearest(point: Vector3, radius: number, limit: number): Array<{ flower: MemorialFlower; distance: number }> {
     const found: Array<{ flower: MemorialFlower; distance: number }> = [];

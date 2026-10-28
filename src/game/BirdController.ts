@@ -28,6 +28,10 @@ const FLARE_LOOKAHEAD_SECONDS = 1.0;
  * 4.5× larger than a real pigeon (≈0.33 m long) so it reads from the chase camera.
  */
 export const WALK_SCALE = 0.22;
+/** Camera look-around limits (radians). */
+const LOOK_PITCH_MIN = -0.45;
+const LOOK_PITCH_MAX = 1.05;
+const CLING_LOOK_YAW = 1.25;
 /** Walking and running speeds on the ground (m/s). */
 const WALK_SPEED = 1.4;
 const RUN_SPEED = 3.2;
@@ -105,6 +109,12 @@ export class BirdController {
   private readonly cameraRay = new Raycaster();
   private clockSeconds = 0;
   private lastMouseSteer = -10;
+  /** Camera-only look offsets while standing still or clinging (radians). */
+  private lookYaw = 0;
+  private lookPitch = 0;
+  private readonly lookOrientation = new Quaternion();
+  private readonly lookTurn = new Quaternion();
+  private pointerLocked = false;
   /** Continuous steering from the cursor's offset from screen centre (−1…1 each). */
   private readonly steerAxes = { x: 0, y: 0 };
   /** Seconds since the last wall bump; drives camera shake. */
@@ -138,6 +148,8 @@ export class BirdController {
     this.takeoffTimer = 0;
     this.walkSpeed = 0;
     this.clinging = false;
+    this.lookYaw = 0;
+    this.lookPitch = 0;
     this.setSize(1);
     for (const control of Object.keys(this.controls) as FlightControl[]) {
       this.controls[control] = false;
@@ -181,6 +193,12 @@ export class BirdController {
 
   public steer(deltaX: number, deltaY: number): void {
     if (!this.enabled) return;
+    if (this.lookingAround) {
+      // Standing still: the mouse turns the camera, not the bird.
+      this.lookYaw = MathUtils.clamp(this.lookYaw - deltaX * 0.0035, ...this.lookYawLimits);
+      this.lookPitch = MathUtils.clamp(this.lookPitch - deltaY * 0.003, LOOK_PITCH_MIN, LOOK_PITCH_MAX);
+      return;
+    }
     this.yaw -= deltaX * 0.0022;
     this.pitch = MathUtils.clamp(this.pitch - deltaY * 0.0018, -0.65, 0.58);
     this.lastMouseSteer = this.clockSeconds;
@@ -194,6 +212,49 @@ export class BirdController {
   public setSteerAxes(x: number, y: number): void {
     this.steerAxes.x = MathUtils.clamp(x, -1, 1);
     this.steerAxes.y = MathUtils.clamp(y, -1, 1);
+  }
+
+  /** Pointer lock accumulates the look offset; a free cursor maps its position to it. */
+  public setPointerLocked(locked: boolean): void {
+    this.pointerLocked = locked;
+  }
+
+  /** True while the bird is standing still on the ground or clinging: the mouse looks around. */
+  public get lookingAround(): boolean {
+    if (this.clinging) return true;
+    return this.perched
+      && Math.abs(this.walkSpeed) < 0.05
+      && !this.controls.pitchUp
+      && !this.controls.pitchDown;
+  }
+
+  private get lookYawLimits(): [number, number] {
+    const limit = this.clinging ? CLING_LOOK_YAW : Math.PI;
+    return [-limit, limit];
+  }
+
+  /** Ease the look offset: follow the cursor while standing still, hand it to the bird when walking, drop it in flight. */
+  private updateLook(deltaSeconds: number): void {
+    if (this.lookingAround && this.enabled) {
+      if (!this.pointerLocked) {
+        const limit = this.lookYawLimits[1];
+        const targetYaw = -this.steerAxes.x * Math.min(limit, 1.9);
+        const targetPitch = MathUtils.clamp(-this.steerAxes.y * 0.9, LOOK_PITCH_MIN, LOOK_PITCH_MAX);
+        const follow = 1 - Math.exp(-5 * deltaSeconds);
+        this.lookYaw += (targetYaw - this.lookYaw) * follow;
+        this.lookPitch += (targetPitch - this.lookPitch) * follow;
+      }
+      return;
+    }
+    if (this.perched && !this.clinging && Math.abs(this.lookYaw) > 1e-3) {
+      // Walking off in the direction being looked at: the bird turns to face it.
+      const turn = this.lookYaw * (1 - Math.exp(-3.5 * deltaSeconds));
+      this.yaw += turn;
+      this.lookYaw -= turn;
+    } else {
+      this.lookYaw *= Math.exp(-4 * deltaSeconds);
+    }
+    this.lookPitch *= Math.exp(-3 * deltaSeconds);
   }
 
   public adjustSpeed(direction: number): void {
@@ -236,6 +297,7 @@ export class BirdController {
     this.bumpAge += deltaSeconds;
     this.frameIndex += 1;
     this.cameraRoots = !collisionRoot ? [] : Array.isArray(collisionRoot) ? [...collisionRoot] : [collisionRoot as Object3D];
+    this.updateLook(deltaSeconds);
     if (this.clinging) {
       this.updateCling(deltaSeconds, this.cameraRoots);
       if (this.clinging || this.perched) return;
@@ -247,7 +309,8 @@ export class BirdController {
       // Perched birds shuffle round on the spot more slowly than they bank in the air.
       this.yaw += yawDirection * this.flightProfile.turnRate * (this.perched ? 0.8 : 1) * deltaSeconds;
       // Cursor steering: hold the pointer to one side to keep turning.
-      this.yaw -= this.steerAxes.x * this.flightProfile.turnRate * 1.15 * deltaSeconds;
+      // (Standing still, the cursor looks around instead of turning the bird.)
+      if (!this.lookingAround) this.yaw -= this.steerAxes.x * this.flightProfile.turnRate * 1.15 * deltaSeconds;
       if (!this.perched && this.steerAxes.x !== 0) {
         this.targetRoll = MathUtils.clamp(this.targetRoll - this.steerAxes.x * 0.5, -0.62, 0.62);
       }
@@ -687,8 +750,9 @@ export class BirdController {
   public updateCamera(camera: PerspectiveCamera, deltaSeconds: number): void {
     if (this.clinging) {
       // Stand back from the wall, a little above the bird, looking at it on the facade.
-      const desired = this.object.position.clone().addScaledVector(this.wallNormal, 2.4);
-      desired.y += 0.45;
+      const around = this.wallNormal.clone().applyAxisAngle(UP, this.lookYaw);
+      const desired = this.object.position.clone().addScaledVector(around, 2.4);
+      desired.y += 0.45 + this.lookPitch * 1.6;
       camera.position.lerp(desired, 1 - Math.exp(-6 * deltaSeconds));
       camera.lookAt(this.object.position.x, this.object.position.y + 0.25, this.object.position.z);
       return;
@@ -696,11 +760,14 @@ export class BirdController {
     this.cameraPerch += ((this.perched ? 1 : 0) - this.cameraPerch) * (1 - Math.exp(-2.5 * deltaSeconds));
     // On the ground the bird is life-size, so the camera comes down to a pigeon's-eye view.
     const ground = MathUtils.clamp((1 - this.sizeScale) / (1 - WALK_SCALE), 0, 1);
+    const viewOrientation = this.lookYaw === 0
+      ? this.orientation
+      : this.lookOrientation.copy(this.orientation).multiply(this.lookTurn.setFromAxisAngle(UP, this.lookYaw));
     const offset = new Vector3(
       0,
       MathUtils.lerp(5.2 - this.cameraPerch * 2.4, 0.62, ground),
       MathUtils.lerp(15.5 - this.cameraPerch * 6, 2.1, ground),
-    ).applyQuaternion(this.orientation);
+    ).applyQuaternion(viewOrientation);
     const pivot = this.object.position.clone();
     pivot.y += MathUtils.lerp(1.2, 0.22, ground);
     const boom = this.object.position.clone().add(offset).sub(pivot);
@@ -728,10 +795,11 @@ export class BirdController {
     // Never lerp through a wall: snap while the boom is shortened.
     if (this.cameraReach < 0.999) camera.position.copy(desiredPosition);
     else camera.position.lerp(desiredPosition, 1 - Math.exp(-7 * deltaSeconds));
+    const lookDistance = MathUtils.lerp(18, 3.5, ground);
     const lookTarget = this.object.position.clone().add(
-      FORWARD.clone().applyQuaternion(this.orientation).multiplyScalar(MathUtils.lerp(18, 3.5, ground)),
+      FORWARD.clone().applyQuaternion(viewOrientation).multiplyScalar(lookDistance),
     );
-    lookTarget.y += MathUtils.lerp(1.1, 0.18, ground);
+    lookTarget.y += MathUtils.lerp(1.1, 0.18, ground) + Math.tan(this.lookPitch) * lookDistance;
     camera.lookAt(lookTarget);
   }
 

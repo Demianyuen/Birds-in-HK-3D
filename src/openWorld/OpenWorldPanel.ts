@@ -4,6 +4,7 @@ import type { WorldPlayer } from '../multiplayer/protocol';
 import { WORLD_PLAYER_LIMIT } from '../multiplayer/protocol';
 import { openWorldConfig } from './config';
 import { playLayingChime } from './chime';
+import { Danmaku } from './Danmaku';
 import { checkChat, checkMessage, CHAT_MAX, insideMemorialGround, MEMORIAL_CENTRE, MESSAGE_MAX, rejectReasonText } from './contentRules';
 import { fetchFlowers, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
 import type { ChatLine, LiveStatus, LiveWorld } from './LiveWorld';
@@ -13,6 +14,9 @@ import { WorldLabels, type WorldLabel } from './WorldLabels';
 const FLOWER_REFRESH_MS = 30_000;
 /** Flowers laid in this browser while the shared service is not available yet. */
 const LOCAL_FLOWERS_KEY = 'birds-in-hk:my-flowers';
+const LOCAL_FLOWER_CAP = 300;
+/** Last flower total seen, so the count is there at once on the next visit. */
+const FLOWER_TOTAL_KEY = 'birds-in-hk:flower-total';
 /** Words left with flowers show when the walking bird is this close (m). */
 const FLOWER_LABEL_RADIUS = 6;
 /** Names over other birds show within this distance (m). */
@@ -25,6 +29,9 @@ const NAME_LABEL_RADIUS = 160;
 export class OpenWorldPanel {
   public readonly element = document.createElement('section');
   public readonly labels = new WorldLabels();
+  /** Words left at the memorial, drifting across the view. */
+  public readonly danmaku = new Danmaku();
+  private danmakuTimer = 0;
   private readonly prompt = document.createElement('div');
   private readonly placeButton = document.createElement('button');
   /** Card to write (or edit) the words left with the flower before laying it. */
@@ -60,7 +67,7 @@ export class OpenWorldPanel {
     this.buildCard();
 
     const details = document.createElement('details');
-    details.open = window.innerWidth > 720;
+    details.open = false; // words drift across the view as danmaku; the chat box stays tucked away until wanted
     const summary = document.createElement('summary');
     summary.textContent = '同在 · 對話';
     this.status.className = 'open-world-status';
@@ -134,6 +141,7 @@ export class OpenWorldPanel {
   public setVisible(visible: boolean): void {
     this.element.hidden = !visible;
     this.labels.element.hidden = !visible;
+    this.danmaku.setVisible(visible);
     if (!visible) {
       this.prompt.hidden = true;
       this.placeButton.hidden = true;
@@ -152,9 +160,20 @@ export class OpenWorldPanel {
     const pose = this.game.getNetworkPose();
     this.liveWorld?.sendPose(pose.position, pose.quaternion, pose.perched);
     this.liveWorld?.prune();
+    this.danmakuTimer += deltaSeconds;
+    if (this.danmakuTimer > 5) {
+      this.danmakuTimer = 0;
+      this.danmaku.setPool(this.game.flowers.words.map(flower => ({ id: flower.id, name: flower.name, body: flower.message })));
+    }
+    this.danmaku.update(deltaSeconds);
     this.game.flowers.showGuide(Boolean(this.visitor && !this.visitor.placed));
     this.updatePrompt();
     this.labels.render(this.collectLabels(), this.game.viewCamera, width, height);
+  }
+
+  /** Flowers at the memorial: what is loaded now, or the last total seen while loading. */
+  public get flowerTotal(): number {
+    return Math.max(this.game.flowers.count, readFlowerTotal());
   }
 
   /** F key. */
@@ -165,6 +184,8 @@ export class OpenWorldPanel {
   public dispose(): void {
     this.liveWorld?.dispose();
     this.labels.clear();
+    this.danmaku.element.remove();
+    this.danmaku.toggleButton.remove();
     this.element.remove();
     this.prompt.remove();
     this.placeButton.remove();
@@ -172,7 +193,7 @@ export class OpenWorldPanel {
 
   /** Attach the floating prompt and button to the game container. */
   public mount(container: HTMLElement): void {
-    container.append(this.labels.element, this.prompt, this.placeButton, this.card, this.element);
+    container.append(this.labels.element, this.danmaku.element, this.danmaku.toggleButton, this.prompt, this.placeButton, this.card, this.element);
   }
 
   private buildCard(): void {
@@ -252,6 +273,7 @@ export class OpenWorldPanel {
     if (!openWorldConfig()) return;
     try {
       this.game.flowers.setFlowers(await fetchFlowers());
+      rememberFlowerTotal(this.game.flowers.count);
     } catch {
       // Flowers are shown again on the next refresh; flying is never blocked.
     }
@@ -299,6 +321,7 @@ export class OpenWorldPanel {
     const label = FLOWER_LABELS[visitor.kind];
     if (!openWorldConfig()) {
       saveLocalFlower({ ...flower, message: visitor.message });
+      rememberFlowerTotal(this.game.flowers.count);
       visitor.placed = true;
       this.placing = false;
       this.showNotice(`你在宏福苑放下了${label}。共享服務開放後，其他人才會看到；現在只保留在你的畫面。`, 10_000);
@@ -372,6 +395,7 @@ export class OpenWorldPanel {
 
   private appendChat(line: ChatLine): void {
     if (line.id && this.log.querySelector(`[data-id="${line.id}"]`)) return;
+    this.danmaku.push({ id: `chat-${line.id}`, name: line.name, body: line.body });
     const item = document.createElement('li');
     item.dataset.id = String(line.id);
     const name = document.createElement('strong');
@@ -407,15 +431,28 @@ function readLocalFlowers(): MemorialFlower[] {
     if (!Array.isArray(stored)) return [];
     return stored.filter((item): item is MemorialFlower => typeof item === 'object' && item !== null
       && typeof (item as MemorialFlower).id === 'string' && (item as MemorialFlower).id.startsWith('local-')
-      && [item.x, item.y, item.z].every(value => typeof value === 'number' && Number.isFinite(value))).slice(-20);
+      && [item.x, item.y, item.z].every(value => typeof value === 'number' && Number.isFinite(value))).slice(-LOCAL_FLOWER_CAP);
   } catch {
     return [];
   }
 }
 
+function readFlowerTotal(): number {
+  try {
+    const value = Number(localStorage.getItem(FLOWER_TOTAL_KEY));
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function rememberFlowerTotal(total: number): void {
+  try { localStorage.setItem(FLOWER_TOTAL_KEY, String(total)); } catch { /* per-browser convenience */ }
+}
+
 function saveLocalFlower(flower: MemorialFlower): void {
   try {
-    localStorage.setItem(LOCAL_FLOWERS_KEY, JSON.stringify([...readLocalFlowers(), flower].slice(-20)));
+    localStorage.setItem(LOCAL_FLOWERS_KEY, JSON.stringify([...readLocalFlowers(), flower].slice(-LOCAL_FLOWER_CAP)));
   } catch {
     // private window: the flower stays for this visit only
   }

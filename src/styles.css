@@ -611,3 +611,55 @@ h1 {
 .flower-card-note { margin: 0; color: #a9bab7; font-size: 12px; line-height: 1.5; }
 .flower-card-error { margin: 0; color: #ffc6b8; font-size: 13px; }
 .flower-card-actions { display: flex; gap: 10px; }
+
+/* Danmaku: words left at the memorial, drifting slowly across the upper view. */
+.danmaku { position: absolute; inset: 0; z-index: 3; overflow: hidden; pointer-events: none; }
+.danmaku-line {
+  position: absolute;
+  left: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  max-width: min(70vw, 520px);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(8, 20, 26, 0.22);
+  color: rgba(255, 250, 238, 0.78);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  animation: danmaku-drift linear forwards;
+  will-change: transform, opacity;
+}
+.danmaku-line small { font-size: 11px; color: rgba(214, 228, 224, 0.62); }
+@keyframes danmaku-drift {
+  0% { transform: translateX(0); opacity: 0; }
+  6% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { transform: translateX(calc(-100vw - 100%)); opacity: 0; }
+}
+.danmaku-toggle {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 6;
+  padding: 4px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(8, 20, 26, 0.35);
+  color: rgba(235, 242, 240, 0.7);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.danmaku-toggle:hover { color: #fff; background: rgba(8, 20, 26, 0.6); }
+@media (prefers-reduced-motion: reduce) {
+  .danmaku-line { animation-duration: 60s !important; }
+}
+@media (max-width: 720px) {
+  .danmaku-line { font-size: 12px; max-width: 80vw; }
+  .danmaku-toggle { bottom: 76px; }
+}

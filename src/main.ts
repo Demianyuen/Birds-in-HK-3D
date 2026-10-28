@@ -95,7 +95,7 @@ game.onPlaceArrival = arrival => {
   placeSubtitle.textContent = place.subtitle;
   const memorialCourt = place.id === 'memorial:宏福苑';
   placeNote.hidden = !memorialCourt;
-  const flowerCount = game.flowers.count;
+  const flowerCount = openWorld.flowerTotal;
   placeNote.textContent = memorialCourt
     ? `${flowerCount > 0 ? `這裏已有 ${flowerCount} 朵花 · ` : ''}降落地面，按 F 放下一朵花`
     : '';
@@ -183,7 +183,10 @@ document.addEventListener('mousemove', event => {
   );
 });
 canvas.addEventListener('mouseleave', () => game.setSteerAxes(0, 0));
-document.addEventListener('pointerlockchange', () => game.setSteerAxes(0, 0));
+document.addEventListener('pointerlockchange', () => {
+  game.setPointerLocked(document.pointerLockElement === canvas);
+  game.setSteerAxes(0, 0);
+});
 
 window.addEventListener('wheel', event => {
   if (currentScreen === 'game' && event.target === canvas) game.adjustSpeed(event.deltaY < 0 ? 1 : -1);
