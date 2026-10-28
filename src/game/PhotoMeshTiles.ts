@@ -1,6 +1,6 @@
 import type { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin, LoadRegionPlugin, ReorientationPlugin, SphereRegion } from '3d-tiles-renderer/plugins';
-import { Group, MathUtils, Mesh, MeshBasicMaterial, Sphere, Vector4, type Material, type MeshStandardMaterial, type Object3D, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { DoubleSide, Group, MathUtils, Mesh, MeshBasicMaterial, Sphere, Vector4, type Material, type MeshStandardMaterial, type Object3D, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { createRegionClippingPlanes } from './CsdiTiles';
@@ -88,7 +88,8 @@ export class PhotoMeshTiles {
           const mesh = object as Mesh;
           if (!mesh.isMesh) return;
           const old = mesh.material as MeshStandardMaterial;
-          const material = new MeshBasicMaterial({ map: old.map ?? null, color: old.map ? '#ffffff' : '#cfcfcf' });
+          // Both sides, so rays fired from inside a tower (to measure it) still meet its walls.
+          const material = new MeshBasicMaterial({ map: old.map ?? null, color: old.map ? '#ffffff' : '#cfcfcf', side: DoubleSide });
           if (material.map) material.map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
           material.clippingPlanes = clipping;
           this.addCutoutShader(material);

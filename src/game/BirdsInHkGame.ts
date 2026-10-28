@@ -43,6 +43,10 @@ import { StylizedClouds } from './StylizedClouds';
 import { StylizedTrees } from './StylizedTrees';
 import { setBuildingGroundHeight, setMemorialSites, type BuildingPresentation } from './BuildingMaterial';
 import { wangFukLocalMarkers } from './wangFukLocations';
+import { CourtPlacer, type CourtMetrics } from '../wangFuk/CourtPlacer';
+import { Grove } from '../wangFuk/grove';
+import { WangFukCourt } from '../wangFuk/WangFukCourt';
+import { inAnyWater } from './streetData';
 import { RemoteBirds } from '../multiplayer/RemoteBirds';
 import { createCarriedFlower, disposeCarriedFlower, MemorialFlowers } from '../openWorld/MemorialFlowers';
 import type { FlowerKind } from '../openWorld/contentRules';
@@ -103,6 +107,10 @@ export class BirdsInHkGame {
   private renderVerified = false;
   private paused = false;
   private readonly sunDirection = new Vector3();
+  /** Hand-built Wang Fuk Court towers and the trees around them, placed once measured in the photo mesh. */
+  private readonly court = new WangFukCourt(this.sunDirection);
+  private readonly grove = new Grove(420);
+  private courtPlacer: CourtPlacer | null = null;
   private readonly resolution = new DynamicResolution({
     maximum: Math.min(window.devicePixelRatio || 1, 1.5),
     minimum: 0.65,
@@ -158,6 +166,8 @@ export class BirdsInHkGame {
     this.officialWorldRoot.name = 'Official CSDI 3D world';
     this.scene.add(this.officialWorldRoot);
     this.scene.add(this.photoMesh.group);
+    this.scene.add(this.court.group);
+    this.scene.add(this.grove.mesh);
     this.scene.add(this.streetLife.group);
 
     const harbour = new Mesh(
@@ -270,6 +280,22 @@ export class BirdsInHkGame {
       ? wangFukLocalMarkers(region.latitude, region.longitude)
         .map(marker => ({ name: marker.name, block: marker.block, position: { x: marker.position.x, z: marker.position.z } }))
       : [];
+    this.courtPlacer = blocks.length > 0
+      ? new CourtPlacer(
+        this.court,
+        this.grove,
+        blocks.map(block => ({ block: block.block, x: block.position.x, z: block.position.z })),
+        {
+          roots: () => [this.photoMesh.group],
+          terrain: (x, z) => this.aerialGround.getElevationAtWorld(x, z),
+          canGrowTree: (x, z) => !inAnyWater(this.roads.streetData.water, x, z),
+        },
+        () => {
+          this.photoMesh.setCutouts(this.court.cutouts());
+          this.applyWorldPresentation();
+        },
+      )
+      : null;
     const courtCentre = blocks.length > 0
       ? {
         x: blocks.reduce((sum, block) => sum + block.position.x, 0) / blocks.length,
@@ -350,6 +376,13 @@ export class BirdsInHkGame {
     this.officialWorldRoot.visible = !photo;
     this.aerialGround.group.visible = !photo;
     this.trees.group.visible = !photo;
+    this.court.setVisible(photo);
+    this.grove.setVisible(photo);
+  }
+
+  /** How many towers have been measured and built, and the measurements (for checking placement). */
+  public get courtMetrics(): CourtMetrics | null {
+    return this.courtPlacer ? this.courtPlacer.metrics : null;
   }
 
   public get photoMeshMetrics(): PhotoMeshMetrics {
@@ -359,7 +392,7 @@ export class BirdsInHkGame {
   /** What the bird can hit: the photo mesh when shown, else the stylised ground and CSDI models. */
   private collisionRoots(): Object3D[] {
     return this.worldPresentation === 'photo' && this.photoMesh.ready
-      ? [this.photoMesh.group]
+      ? [this.photoMesh.group, this.court.group]
       : [this.aerialGround.group, this.officialWorldRoot];
   }
 
@@ -422,6 +455,8 @@ export class BirdsInHkGame {
     this.trees.dispose();
     this.clouds.dispose();
     this.flowers.dispose();
+    this.court.dispose();
+    this.grove.dispose();
     this.holdFlower(null);
     this.remoteBirds.dispose();
     this.renderer.dispose();
@@ -522,6 +557,7 @@ export class BirdsInHkGame {
       this.bird.update(deltaSeconds, this.collisionRoots());
       this.bird.updateCamera(this.camera, deltaSeconds);
       this.remoteBirds.update(deltaSeconds);
+      this.courtPlacer?.update(deltaSeconds, this.bird.object.position, this.worldPresentation === 'photo' && this.photoMesh.ready);
       this.streetLife.setSurface((x, z) => this.aerialGround.getElevationAtWorld(x, z) + 0.2, this.collisionRoots());
       this.streetLife.update(deltaSeconds, this.bird.object.position);
       const position = this.bird.object.position;
