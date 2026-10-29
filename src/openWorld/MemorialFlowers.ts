@@ -17,7 +17,9 @@ import {
   PlaneGeometry,
   Points,
   PointsMaterial,
+  Object3D,
   Quaternion,
+  Raycaster,
   RingGeometry,
   SphereGeometry,
   Sprite,
@@ -80,6 +82,18 @@ export class MemorialFlowers {
   /** A faint column of light over Wang Fuk Court while the visitor still carries a flower. */
   private readonly guide: Mesh;
   private guideWanted = false;
+  /**
+   * Where each flower is drawn. The photo mesh refines as you come closer and its
+   * ground can rise or sink by a metre, which would bury a flower laid on the
+   * coarser version; so flowers near the bird are settled onto the surface that
+   * is showing now (a few per frame).
+   */
+  private readonly settledY = new Map<string, number>();
+  private readonly settledAt = new Map<string, number>();
+  private settleOrder: string[] = [];
+  private settleCursor = 0;
+  private readonly raycaster = new Raycaster();
+  private readonly down = new Vector3(0, -1, 0);
 
   public constructor() {
     this.group.name = 'Memorial flowers';
@@ -248,12 +262,59 @@ export class MemorialFlowers {
     return [...this.flowers.values()].filter(flower => flower.message.trim().length > 0);
   }
 
-  /** Flowers within `radius` metres of a point, nearest first. */
-  public nearest(point: Vector3, radius: number, limit: number): Array<{ flower: MemorialFlower; distance: number }> {
+  /** Height a flower is drawn at (settled onto the surface showing now). */
+  public displayY(flower: MemorialFlower): number {
+    return this.settledY.get(flower.id) ?? flower.y;
+  }
+
+  /**
+   * Settle flowers near `focus` onto the visible surface, `budget` rays per call.
+   * Looks only from 1.5 m above to 3 m below where the flower was laid, so a tree
+   * crown or a roof overhead never lifts it.
+   */
+  public settleOnSurface(roots: readonly Object3D[], focus: Vector3, budget = 2): void {
+    if (roots.length === 0 || this.flowers.size === 0) return;
+    if (this.settleOrder.length !== this.flowers.size) {
+      this.settleOrder = [...this.flowers.keys()];
+      this.settleCursor = 0;
+    }
+    let rays = 0;
+    for (let looked = 0; looked < 48 && rays < budget; looked += 1) {
+      const id = this.settleOrder[this.settleCursor];
+      this.settleCursor = (this.settleCursor + 1) % this.settleOrder.length;
+      const flower = id ? this.flowers.get(id) : undefined;
+      if (!flower || this.blooming.has(flower.id)) continue;
+      if (Math.hypot(flower.x - focus.x, flower.z - focus.z) > 160) continue;
+      if (this.clock - (this.settledAt.get(flower.id) ?? -Infinity) < 3) continue;
+      this.settledAt.set(flower.id, this.clock);
+      rays += 1;
+      this.raycaster.set(this.position.set(flower.x, flower.y + 1.5, flower.z), this.down);
+      this.raycaster.far = 4.5;
+      const hit = this.raycaster.intersectObjects(roots as Object3D[], true)[0];
+      if (!hit) continue;
+      const previous = this.displayY(flower);
+      if (Math.abs(hit.point.y - previous) > 0.03) {
+        this.settledY.set(flower.id, hit.point.y);
+        this.dirty = true;
+      }
+    }
+  }
+
+  /** Every flower shown now. */
+  public get all(): MemorialFlower[] {
+    return [...this.flowers.values()];
+  }
+
+  /**
+   * Flowers within `radius` metres of a point across the ground (and, when given,
+   * within `height` metres above or below it), nearest first.
+   */
+  public nearest(point: Vector3, radius: number, limit: number, height = radius): Array<{ flower: MemorialFlower; distance: number }> {
     const found: Array<{ flower: MemorialFlower; distance: number }> = [];
     for (const flower of this.flowers.values()) {
-      const distance = Math.hypot(flower.x - point.x, flower.y - point.y, flower.z - point.z);
-      if (distance <= radius) found.push({ flower, distance });
+      const across = Math.hypot(flower.x - point.x, flower.z - point.z);
+      const rise = Math.abs(this.displayY(flower) - point.y);
+      if (across <= radius && rise <= height) found.push({ flower, distance: Math.hypot(across, rise) });
     }
     return found.sort((a, b) => a.distance - b.distance).slice(0, limit);
   }
@@ -292,7 +353,7 @@ export class MemorialFlowers {
         this.moteSeeds[this.moteCount] = seed;
         this.moteBases.set([
           flower.x + (hash(`${flower.id}:mx${mote}`) - 0.5) * 1.6,
-          flower.y,
+          this.displayY(flower),
           flower.z + (hash(`${flower.id}:mz${mote}`) - 0.5) * 1.6,
         ], this.moteCount * 3);
         this.moteCount += 1;
@@ -301,7 +362,7 @@ export class MemorialFlowers {
       const index = counts.get(flower.kind) ?? 0;
       if (index >= CAPACITY || glowCount >= CAPACITY) continue;
       const seed = hash(flower.id);
-      this.position.set(flower.x, flower.y, flower.z);
+      this.position.set(flower.x, this.displayY(flower), flower.z);
       // Laid flowers lean a little and face different ways.
       this.rotation.setFromAxisAngle(this.up, seed * Math.PI * 2);
       const size = 0.9 + (hash(`${flower.id}:s`) * 0.25);

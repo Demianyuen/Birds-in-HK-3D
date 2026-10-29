@@ -206,6 +206,12 @@ window.addEventListener('keydown', event => {
     openWorld.tryLayFlower();
     return;
   }
+  if (event.code === 'Enter' || event.code === 'NumpadEnter') {
+    event.preventDefault();
+    game.clearControls();
+    openWorld.openSpeech();
+    return;
+  }
   const control = keyboardControlForCode(event.code);
   if (control) {
     event.preventDefault();

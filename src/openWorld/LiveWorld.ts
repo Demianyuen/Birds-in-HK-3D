@@ -11,6 +11,8 @@ export interface ChatLine {
   body: string;
   x: number;
   z: number;
+  /** Id of the bird that said it (empty on rows from before ids were stored). */
+  speaker: string;
   createdAt: string;
 }
 
@@ -362,6 +364,7 @@ function parseChat(row: unknown): ChatLine | null {
     body: data.body,
     x: Number(data.x) || 0,
     z: Number(data.z) || 0,
+    speaker: typeof data.speaker === 'string' ? data.speaker : '',
     createdAt: typeof data.created_at === 'string' ? data.created_at : '',
   };
 }

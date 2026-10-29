@@ -120,6 +120,38 @@ describe('chat API', () => {
     expect((await done).status).toBe(201);
   });
 
+  it('stores which bird said it, so the line can show over that bird', async () => {
+    const { res, done } = response();
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '大家好', x: 3, z: 4, speaker: 'abcd1234-ef56' }), res);
+    expect((await done).status).toBe(201);
+    const insert = calls.find(call => call.init.method === 'POST');
+    expect(JSON.parse(String(insert?.init.body))).toMatchObject({ speaker: 'abcd1234-ef56', body: '大家好' });
+  });
+
+  it('ignores a malformed speaker id and still takes the line without it when the column is missing', async () => {
+    const { res, done } = response();
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '你好', speaker: '<script>' }), res);
+    expect((await done).status).toBe(201);
+    expect(JSON.parse(String(calls.find(call => call.init.method === 'POST')?.init.body))).not.toHaveProperty('speaker');
+
+    calls.length = 0;
+    let posts = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      if ((init.headers as Record<string, string>)?.Prefer === 'count=exact') {
+        return new Response('[]', { status: 206, headers: { 'content-range': '0-0/0' } });
+      }
+      posts += 1;
+      return posts === 1 ? new Response('{"code":"PGRST204"}', { status: 400 }) : new Response('', { status: 201 });
+    }));
+    const second = response();
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '再見', speaker: 'abcd1234-ef56' }), second.res);
+    expect((await second.done).status).toBe(201);
+    const inserts = calls.filter(call => call.init.method === 'POST').map(call => JSON.parse(String(call.init.body)));
+    expect(inserts).toHaveLength(2);
+    expect(inserts[1]).not.toHaveProperty('speaker');
+  });
+
   it('slows down rapid senders', async () => {
     counts = [1, 1];
     const { res, done } = response();

@@ -5,11 +5,12 @@ import { WORLD_PLAYER_LIMIT } from '../multiplayer/protocol';
 import { openWorldConfig } from './config';
 import { playLayingChime } from './chime';
 import { Danmaku } from './Danmaku';
-import { checkChat, checkMessage, CHAT_MAX, insideMemorialGround, MEMORIAL_CENTRE, MESSAGE_MAX, rejectReasonText } from './contentRules';
+import { checkChat, checkMessage, insideMemorialGround, MEMORIAL_CENTRE, MESSAGE_MAX, rejectReasonText } from './contentRules';
 import { FlowerRefused, fetchFlowers, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
 import type { ChatLine, LiveStatus, LiveWorld } from './LiveWorld';
 import { FLOWER_LABELS, type Visitor } from './visitor';
 import { WorldLabels, type WorldLabel } from './WorldLabels';
+import { findSpeaker, SpeechBubbles, SpeechInput } from './speech';
 
 const FLOWER_REFRESH_MS = 30_000;
 /** Flowers waiting to reach the shared service are offered again this often. */
@@ -19,8 +20,13 @@ const LOCAL_FLOWERS_KEY = 'birds-in-hk:my-flowers';
 const LOCAL_FLOWER_CAP = 300;
 /** Last flower total seen, so the count is there at once on the next visit. */
 const FLOWER_TOTAL_KEY = 'birds-in-hk:flower-total';
-/** Words left with flowers show when the walking bird is this close (m). */
-const FLOWER_LABEL_RADIUS = 6;
+/** Words left with flowers show when the bird is this close (m, across the ground). */
+const FLOWER_LABEL_RADIUS = 12;
+/** ...and no more than this far above or below them (m). */
+const FLOWER_LABEL_HEIGHT = 10;
+/** Words this visitor left with their own flowers, kept so they can read them before approval. */
+const OWN_WORDS_KEY = 'birds-in-hk:my-words';
+const OWN_WORDS_CAP = 60;
 /** Names over other birds show within this distance (m). */
 const NAME_LABEL_RADIUS = 160;
 
@@ -43,10 +49,10 @@ export class OpenWorldPanel {
   private readonly cardTitle = document.createElement('h2');
   private readonly cardNote = document.createElement('p');
   private readonly status = document.createElement('p');
-  private readonly log = document.createElement('ol');
-  private readonly chatForm = document.createElement('form');
-  private readonly chatInput = document.createElement('input');
-  private readonly chatNote = document.createElement('p');
+  /** Enter opens a line in the middle of the view; what is said shows over the bird. */
+  private readonly speech: SpeechInput;
+  private readonly speakButton = document.createElement('button');
+  private readonly bubbles = new SpeechBubbles();
   private visitor: Visitor | null = null;
   private placing = false;
   private flowerTimer = 0;
@@ -70,41 +76,19 @@ export class OpenWorldPanel {
     this.placeButton.addEventListener('click', () => this.openCard());
     this.buildCard();
 
-    const details = document.createElement('details');
-    details.open = false; // words drift across the view as danmaku; the chat box stays tucked away until wanted
-    const summary = document.createElement('summary');
-    summary.textContent = '同在 · 對話';
     this.status.className = 'open-world-status';
-    this.log.className = 'open-world-log';
-    this.log.setAttribute('role', 'log');
-    this.log.setAttribute('aria-label', '對話');
-    this.chatInput.maxLength = CHAT_MAX;
-    this.chatInput.placeholder = '說一句話…';
-    this.chatInput.setAttribute('aria-label', '對話內容');
-    this.chatInput.autocomplete = 'off';
-    const send = document.createElement('button');
-    send.type = 'submit';
-    send.textContent = '傳送';
-    this.chatForm.append(this.chatInput, send);
-    this.chatNote.className = 'open-world-note';
-    this.chatNote.textContent = '對話會自動過濾並保留一天以供管理。請保持尊重。';
-    details.append(summary, this.status, this.log, this.chatForm, this.chatNote);
-    this.element.append(details);
-    this.chatForm.addEventListener('submit', event => {
-      event.preventDefault();
-      void this.sendChatLine();
-    });
-    // Typing must not steer the bird.
-    this.element.addEventListener('focusin', () => {
+    this.status.setAttribute('role', 'status');
+    this.element.append(this.status);
+    this.speech = new SpeechInput(text => void this.say(text), () => {
       game.clearControls();
       if (document.pointerLockElement) document.exitPointerLock();
     });
+    this.speakButton.type = 'button';
+    this.speakButton.className = 'speak-button';
+    this.speakButton.textContent = '說話（Enter）';
+    this.speakButton.addEventListener('click', () => this.openSpeech());
 
-    if (!openWorldConfig()) {
-      this.status.textContent = '單人模式：尚未設定共享服務。';
-      this.chatForm.hidden = true;
-      this.chatNote.hidden = true;
-    }
+    if (!openWorldConfig()) this.status.textContent = '單人模式：尚未設定共享服務。';
   }
 
   /** Called once when the visitor starts flying. */
@@ -132,6 +116,7 @@ export class OpenWorldPanel {
         try {
           const placed = await placeFlower({ name: flower.name, message: flower.message, kind: flower.kind, x: flower.x, y: flower.y, z: flower.z });
           this.game.flowers.replace(flower.id, { ...placed.flower, y: flower.y });
+          moveOwnWords(flower.id, placed.flower.id);
           forgetLocalFlower(flower.id);
         } catch (error) {
           if (error instanceof FlowerRefused) forgetLocalFlower(flower.id);
@@ -158,8 +143,6 @@ export class OpenWorldPanel {
       });
       this.liveWorld = live;
       live.connect();
-      const lines = await live.recentChat();
-      lines.forEach(line => this.appendChat(line));
     } catch {
       this.status.textContent = '暫時未能連上共享天空，你仍然可以飛行和放花。';
     }
@@ -171,7 +154,9 @@ export class OpenWorldPanel {
     this.element.hidden = !visible;
     this.labels.element.hidden = !visible;
     this.danmaku.setVisible(visible);
+    this.speakButton.hidden = !visible;
     if (!visible) {
+      this.speech.close();
       this.prompt.hidden = true;
       this.placeButton.hidden = true;
       this.card.hidden = true;
@@ -200,7 +185,11 @@ export class OpenWorldPanel {
     this.danmakuTimer += deltaSeconds;
     if (this.danmakuTimer > 5) {
       this.danmakuTimer = 0;
-      this.danmaku.setPool(this.game.flowers.words.map(flower => ({ id: flower.id, name: flower.name, body: flower.message })));
+      const own = readOwnWords();
+      const pool = this.game.flowers.all
+        .map(flower => ({ id: flower.id, name: flower.name, body: flower.message || own[flower.id] || '' }))
+        .filter(line => line.body);
+      this.danmaku.setPool(pool);
     }
     this.danmaku.update(deltaSeconds);
     this.game.flowers.showGuide(Boolean(this.visitor && !this.visitor.placed));
@@ -218,19 +207,49 @@ export class OpenWorldPanel {
     this.openCard();
   }
 
+  /** Enter key (or the 說話 button): open the line to say something. */
+  public openSpeech(): void {
+    if (!this.active || !this.card.hidden) return;
+    this.speech.show();
+  }
+
+  public get speaking(): boolean {
+    return this.speech.open;
+  }
+
+  /** Say a line: it shows over our own bird at once and reaches everyone nearby through the filter. */
+  private async say(text: string): Promise<void> {
+    const checked = checkChat(text);
+    if (!checked.ok) {
+      this.showNotice(rejectReasonText(checked.reason), 4_000);
+      return;
+    }
+    this.bubbles.say('self', checked.text, performance.now());
+    if (!openWorldConfig()) return;
+    const bird = this.game.birdPosition;
+    try {
+      await sendChat({ name: this.visitor?.name ?? '', body: checked.text, x: bird.x, z: bird.z, speaker: this.visitor?.id ?? '' });
+    } catch (error) {
+      this.bubbles.forget('self');
+      this.showNotice(error instanceof Error ? error.message : '訊息未能送出。', 5_000);
+    }
+  }
+
   public dispose(): void {
     this.liveWorld?.dispose();
     this.labels.clear();
     this.danmaku.element.remove();
     this.danmaku.toggleButton.remove();
     this.element.remove();
+    this.speech.element.remove();
+    this.speakButton.remove();
     this.prompt.remove();
     this.placeButton.remove();
   }
 
   /** Attach the floating prompt and button to the game container. */
   public mount(container: HTMLElement): void {
-    container.append(this.labels.element, this.danmaku.element, this.danmaku.toggleButton, this.prompt, this.placeButton, this.card, this.element);
+    container.append(this.labels.element, this.danmaku.element, this.danmaku.toggleButton, this.prompt, this.placeButton, this.card, this.element, this.speakButton, this.speech.element);
   }
 
   private buildCard(): void {
@@ -286,13 +305,14 @@ export class OpenWorldPanel {
 
   /** Opens the flower card when the bird stands on the memorial ground. */
   private openCard(): void {
+    if (this.speech.open) return;
     const visitor = this.visitor;
     const ground = this.game.birdGroundPoint;
     if (!visitor || visitor.placed || this.placing || !ground || !insideMemorialGround(ground.x, ground.z)) return;
     this.cardTitle.textContent = `在這裡放下${FLOWER_LABELS[visitor.kind]}`;
     this.cardMessage.value = visitor.message;
     this.cardNote.textContent = openWorldConfig()
-      ? '花和名字會即時讓所有人看到。留言經審核後，會顯示在花旁邊，所有人走近都能讀到。'
+      ? '花和名字會即時讓所有人看到，會一直留在這裡。留言你自己走近就能讀到；經審核後，所有人走近花旁都能讀到。'
       : '共享服務尚未開放：這朵花和留言暫時只保留在你的畫面上。';
     this.cardError.hidden = true;
     this.card.hidden = false;
@@ -356,6 +376,7 @@ export class OpenWorldPanel {
     this.game.holdFlower(null);
     playLayingChime();
     const label = FLOWER_LABELS[visitor.kind];
+    if (visitor.message) rememberOwnWords(localId, visitor.message);
     if (!openWorldConfig()) {
       saveLocalFlower({ ...flower, message: visitor.message });
       rememberFlowerTotal(this.game.flowers.count);
@@ -367,6 +388,7 @@ export class OpenWorldPanel {
     try {
       const placed = await placeFlower({ name: visitor.name, message: visitor.message, kind: visitor.kind, x: ground.x, y: ground.y, z: ground.z });
       this.game.flowers.replace(localId, { ...placed.flower, y: ground.y });
+      if (visitor.message) rememberOwnWords(placed.flower.id, visitor.message);
       visitor.placed = true;
       this.showNotice(placed.messageStatus === 'pending'
         ? `你在宏福苑放下了${label}，所有人都看得到。留言會在審核後顯示在花旁。`
@@ -380,6 +402,7 @@ export class OpenWorldPanel {
       } else {
         // The service is unreachable: the flower stays where it was laid, and is sent on later.
         saveLocalFlower({ ...flower, message: visitor.message });
+        if (visitor.message) rememberOwnWords(localId, visitor.message);
         rememberFlowerTotal(this.game.flowers.count);
         visitor.placed = true;
         this.showNotice(`你在宏福苑放下了${label}。共享服務暫時未能連上，花會留在這裡，連上後其他人就會看到。`, 10_000);
@@ -396,28 +419,41 @@ export class OpenWorldPanel {
 
   private collectLabels(): WorldLabel[] {
     const labels: WorldLabel[] = [];
-    const ground = this.game.birdGroundPoint;
-    if (ground) {
-      for (const { flower } of this.game.flowers.nearest(ground, FLOWER_LABEL_RADIUS, 3)) {
-        const title = flower.name ? `${flower.name} · ${FLOWER_LABELS[flower.kind]}` : `一朵${FLOWER_LABELS[flower.kind]}`;
-        labels.push({
-          id: `flower-${flower.id}`,
-          title,
-          body: flower.message || undefined,
-          position: new Vector3(flower.x, flower.y + 0.45, flower.z),
-          tone: 'flower',
-        });
-      }
-    }
+    const now = performance.now();
     const bird = this.game.birdPosition;
+    const own = readOwnWords();
+    for (const { flower } of this.game.flowers.nearest(bird, FLOWER_LABEL_RADIUS, 3, FLOWER_LABEL_HEIGHT)) {
+      const title = flower.name ? `${flower.name} · ${FLOWER_LABELS[flower.kind]}` : `一朵${FLOWER_LABELS[flower.kind]}`;
+      const mine = !flower.message && own[flower.id];
+      labels.push({
+        id: `flower-${flower.id}`,
+        title,
+        body: flower.message || (mine ? `${mine}\n（審核中・暫時只有你看得到）` : undefined),
+        position: new Vector3(flower.x, this.game.flowers.displayY(flower) + 0.45, flower.z),
+        tone: 'flower',
+      });
+    }
+    const said = this.bubbles.textFor('self', now);
+    if (said) {
+      const ground = this.game.birdGroundPoint;
+      labels.push({
+        id: 'speech-self',
+        title: this.visitor?.name || '你',
+        body: said,
+        position: ground ? new Vector3(ground.x, ground.y + 0.75, ground.z) : bird.clone().setY(bird.y + 2.6),
+        tone: 'speech',
+      });
+    }
     for (const remote of this.game.remoteBirdLabels) {
       if (remote.position.distanceTo(bird) > NAME_LABEL_RADIUS) continue;
       const lift = remote.size * 2.2;
+      const words = this.bubbles.textFor(remote.id, now);
       labels.push({
         id: `player-${remote.id}`,
         title: remote.name || '訪客',
+        body: words ?? undefined,
         position: remote.position.clone().setY(remote.position.y + lift),
-        tone: 'player',
+        tone: words ? 'speech' : 'player',
       });
     }
     return labels;
@@ -448,35 +484,12 @@ export class OpenWorldPanel {
       : `${live.homeLabel}此刻只有你。其他人來到時，你會看見他們。`;
   }
 
+  /** A line said somewhere in the world: shown over the bird that said it, if that bird is in sight. */
   private appendChat(line: ChatLine): void {
-    if (line.id && this.log.querySelector(`[data-id="${line.id}"]`)) return;
-    this.danmaku.push({ id: `chat-${line.id}`, name: line.name, body: line.body });
-    const item = document.createElement('li');
-    item.dataset.id = String(line.id);
-    const name = document.createElement('strong');
-    name.textContent = line.name;
-    const body = document.createElement('span');
-    body.textContent = line.body;
-    item.append(name, body);
-    this.log.append(item);
-    while (this.log.children.length > 60) this.log.firstElementChild?.remove();
-    this.log.scrollTop = this.log.scrollHeight;
-  }
-
-  private async sendChatLine(): Promise<void> {
-    const checked = checkChat(this.chatInput.value);
-    if (!checked.ok) {
-      this.chatNote.textContent = rejectReasonText(checked.reason);
-      return;
-    }
-    const bird = this.game.birdPosition;
-    try {
-      await sendChat({ name: this.visitor?.name ?? '', body: checked.text, x: bird.x, z: bird.z });
-      this.chatInput.value = '';
-      this.chatNote.textContent = '對話會自動過濾並保留一天以供管理。請保持尊重。';
-    } catch (error) {
-      this.chatNote.textContent = error instanceof Error ? error.message : '訊息未能送出。';
-    }
+    if (this.visitor && line.speaker === this.visitor.id) return; // already showing over our own bird
+    const birds = this.game.remoteBirdLabels.map(remote => ({ id: remote.id, name: remote.name, position: remote.position }));
+    const speaker = findSpeaker(line, birds);
+    if (speaker) this.bubbles.say(speaker, line.body, performance.now());
   }
 }
 
@@ -503,6 +516,28 @@ function readFlowerTotal(): number {
 
 function rememberFlowerTotal(total: number): void {
   try { localStorage.setItem(FLOWER_TOTAL_KEY, String(total)); } catch { /* per-browser convenience */ }
+}
+
+function readOwnWords(): Record<string, string> {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(OWN_WORDS_KEY) ?? '{}');
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+    return Object.fromEntries(Object.entries(stored).filter(([, value]) => typeof value === 'string')) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function rememberOwnWords(flowerId: string, words: string): void {
+  try {
+    const entries = Object.entries({ ...readOwnWords(), [flowerId]: words }).slice(-OWN_WORDS_CAP);
+    localStorage.setItem(OWN_WORDS_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch { /* per-browser convenience */ }
+}
+
+function moveOwnWords(from: string, to: string): void {
+  const words = readOwnWords()[from];
+  if (words) rememberOwnWords(to, words);
 }
 
 function forgetLocalFlower(id: string): void {

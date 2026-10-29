@@ -601,6 +601,7 @@ export class BirdsInHkGame {
     }
     stylizedGroundUniforms.uSgTime.value = this.elapsed;
     this.clouds.update(this.elapsed);
+    if (this.mode === 'playing') this.flowers.settleOnSurface(this.collisionRoots(), this.bird.object.position);
     this.flowers.update(deltaSeconds, this.camera.position);
     this.post.render();
     if (this.mode === 'playing') {

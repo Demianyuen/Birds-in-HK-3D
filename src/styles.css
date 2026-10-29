@@ -508,10 +508,34 @@ h1 {
   will-change: transform;
 }
 .world-label strong { display: block; font-weight: 700; }
-.world-label span { display: block; margin-top: 2px; color: #e9e2cf; }
+.world-label span { display: block; margin-top: 2px; color: #e9e2cf; white-space: pre-line; }
 .world-label-flower { background: rgba(250, 246, 236, 0.9); color: #29302f; }
 .world-label-flower span { color: #4a4a40; }
 .world-label-player { padding: 3px 8px; font-size: 11px; background: rgba(8, 20, 26, 0.55); }
+/* What a bird says, over its head: a light bubble with a small tail. */
+.world-label-speech {
+  max-width: 240px;
+  padding: 7px 11px;
+  border-radius: 12px;
+  background: rgba(255, 252, 244, 0.95);
+  color: #2b2f2c;
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  margin-top: -8px;
+}
+.world-label-speech strong { font-size: 11px; color: #6c6a5e; font-weight: 600; }
+.world-label-speech span { color: #222823; font-size: 14px; overflow-wrap: anywhere; }
+.world-label-speech::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-bottom: 0;
+  border-top-color: rgba(255, 252, 244, 0.95);
+}
+
 
 .flower-prompt {
   position: absolute;
@@ -535,44 +559,59 @@ h1 {
   left: 16px;
   bottom: 16px;
   z-index: 7;
-  width: min(320px, calc(100vw - 32px));
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
-  background: rgba(5, 16, 22, 0.78);
-  color: #f5f8f6;
-  font-size: 13px;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(5, 16, 22, 0.6);
+  color: #dfe9e6;
+  font-size: 12px;
 }
-.open-world-panel summary { cursor: pointer; padding: 10px 12px; color: #b4edcb; font-weight: 700; }
-.open-world-panel details > :not(summary) { margin-left: 12px; margin-right: 12px; }
-.open-world-status { margin: 0 0 8px; color: #cfdcda; }
-.open-world-log { max-height: 180px; margin: 0 0 8px; padding: 0; overflow: auto; list-style: none; }
-.open-world-log li { padding: 3px 0; overflow-wrap: anywhere; }
-.open-world-log strong { margin-right: 6px; color: #b4edcb; }
-.open-world-panel form { display: flex; gap: 6px; margin-bottom: 6px; }
-.open-world-panel input {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
+.open-world-status { margin: 0; }
+.speak-button {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 7;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(5, 16, 22, 0.6);
   color: #f5f8f6;
   font: inherit;
-}
-.open-world-panel form button {
-  padding: 8px 12px;
-  border: 1px solid #a3e5c1;
-  border-radius: 4px;
-  background: #80d8a8;
-  color: #05130d;
-  font-weight: 800;
+  font-size: 13px;
   cursor: pointer;
 }
-.open-world-note { margin: 0 0 10px; color: #93a7a4; font-size: 11px; }
+.speak-button:hover { background: rgba(5, 16, 22, 0.78); }
+.speech-input {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 9;
+  width: min(520px, calc(100vw - 32px));
+  transform: translate(-50%, -50%);
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(8, 20, 26, 0.82);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+}
+.speech-input input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1d2422;
+  font: inherit;
+  font-size: 16px;
+}
+.speech-input input:focus { outline: 2px solid #f1d39a; outline-offset: 1px; }
+.speech-input-note { margin: 8px 2px 0; color: #b9c9c5; font-size: 12px; }
 
 @media (max-width: 720px) {
   .visitor-form { padding: 16px; }
   .open-world-panel { bottom: auto; top: 64px; }
+  .speech-input { top: 30%; }
   .flower-prompt { bottom: 150px; }
   .flower-place-button { bottom: 96px; }
 }
