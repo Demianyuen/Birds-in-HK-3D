@@ -7,10 +7,13 @@ import {
 } from 'three';
 import { BirdRig, type BirdMotion } from '../game/BirdRig';
 import type { BirdProfileId } from '../game/birdProfiles';
+import { createCarriedFlower } from '../openWorld/MemorialFlowers';
+import { isFlowerKind } from '../openWorld/contentRules';
 
 const params = new URLSearchParams(location.search);
 const profile = (params.get('profile') ?? 'pigeon') as BirdProfileId;
 const view = params.get('view') ?? 'side';
+const carry = params.get('carry');
 
 const renderer = new WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -44,6 +47,7 @@ const columns = 4;
 const spacing = 6.5;
 cells.forEach((cell, index) => {
   const rig = new BirdRig(profile);
+  if (isFlowerKind(carry)) rig.holdInBeak(createCarriedFlower(carry));
   const internal = rig as unknown as { phase: number; flapWeight: number; flapIntensity: number };
   for (let t = 0; t < cell.settle; t += 1 / 60) rig.update(1 / 60, cell.motion);
   if (cell.phase !== undefined) {

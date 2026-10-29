@@ -12,6 +12,8 @@ interface RemoteBird {
   /** 1 in the air, life-size on the ground (matches the local bird). */
   size: number;
   name: string;
+  /** Pose already smoothed by the caller: draw it as given. */
+  direct: boolean;
 }
 
 export class RemoteBirds {
@@ -69,7 +71,7 @@ export class RemoteBirds {
     this.batches.push({ mesh, local, wing });
   }
 
-  sync(players: readonly WorldPlayer[]): void {
+  sync(players: readonly WorldPlayer[], direct = false): void {
     if (this.disposed) return;
     if (players.length > WORLD_PLAYER_LIMIT) throw new Error('Remote player count exceeds world capacity.');
     const present = new Set(players.map(player => player.id));
@@ -86,6 +88,7 @@ export class RemoteBirds {
           phase: this.birds.size * 0.71,
           size: player.perched ? WALK_SCALE : 1,
           name: player.name,
+          direct,
         };
         this.birds.set(player.id, bird);
       }
@@ -93,6 +96,7 @@ export class RemoteBirds {
       bird.targetRotation.fromArray(player.quaternion).normalize();
       bird.perched = player.perched;
       bird.name = player.name;
+      bird.direct = direct;
     }
     this.update(0);
   }
@@ -102,8 +106,13 @@ export class RemoteBirds {
     const alpha = 1 - Math.exp(-12 * delta);
     let index = 0;
     for (const bird of this.birds.values()) {
-      bird.position.lerp(bird.targetPosition, alpha);
-      bird.rotation.slerp(bird.targetRotation, alpha);
+      if (bird.direct) {
+        bird.position.copy(bird.targetPosition);
+        bird.rotation.copy(bird.targetRotation);
+      } else {
+        bird.position.lerp(bird.targetPosition, alpha);
+        bird.rotation.slerp(bird.targetRotation, alpha);
+      }
       bird.phase += delta * (bird.perched ? 1.3 : 8);
       bird.size += ((bird.perched ? WALK_SCALE : 1) - bird.size) * (1 - Math.exp(-5 * delta));
       this.scale.setScalar(bird.size);

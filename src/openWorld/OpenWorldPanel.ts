@@ -6,12 +6,14 @@ import { openWorldConfig } from './config';
 import { playLayingChime } from './chime';
 import { Danmaku } from './Danmaku';
 import { checkChat, checkMessage, CHAT_MAX, insideMemorialGround, MEMORIAL_CENTRE, MESSAGE_MAX, rejectReasonText } from './contentRules';
-import { fetchFlowers, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
+import { FlowerRefused, fetchFlowers, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
 import type { ChatLine, LiveStatus, LiveWorld } from './LiveWorld';
 import { FLOWER_LABELS, type Visitor } from './visitor';
 import { WorldLabels, type WorldLabel } from './WorldLabels';
 
 const FLOWER_REFRESH_MS = 30_000;
+/** Flowers waiting to reach the shared service are offered again this often. */
+const FLOWER_RETRY_MS = 45_000;
 /** Flowers laid in this browser while the shared service is not available yet. */
 const LOCAL_FLOWERS_KEY = 'birds-in-hk:my-flowers';
 const LOCAL_FLOWER_CAP = 300;
@@ -48,6 +50,8 @@ export class OpenWorldPanel {
   private visitor: Visitor | null = null;
   private placing = false;
   private flowerTimer = 0;
+  private retryTimer = 0;
+  private syncingLocal = false;
   private notice = '';
   private noticeUntil = 0;
   private active = false;
@@ -110,8 +114,34 @@ export class OpenWorldPanel {
     // Without the shared service the flower is kept in this browser only.
     for (const flower of readLocalFlowers()) this.game.flowers.add(flower);
     this.game.holdFlower(visitor.placed ? null : visitor.kind);
-    void this.refreshFlowers();
+    void this.refreshFlowers().then(() => this.syncLocalFlowers());
     void this.joinLiveWorld(visitor);
+  }
+
+  /**
+   * Flowers laid while the shared service was unreachable stay where they were laid
+   * (and are kept in this browser). Whenever the service answers, they are sent on.
+   */
+  private async syncLocalFlowers(): Promise<void> {
+    if (!openWorldConfig() || this.syncingLocal || this.placing) return;
+    const pending = readLocalFlowers();
+    if (pending.length === 0) return;
+    this.syncingLocal = true;
+    try {
+      for (const flower of pending) {
+        try {
+          const placed = await placeFlower({ name: flower.name, message: flower.message, kind: flower.kind, x: flower.x, y: flower.y, z: flower.z });
+          this.game.flowers.replace(flower.id, { ...placed.flower, y: flower.y });
+          forgetLocalFlower(flower.id);
+        } catch (error) {
+          if (error instanceof FlowerRefused) forgetLocalFlower(flower.id);
+          else return; // still unreachable: try again later
+        }
+      }
+      void this.refreshFlowers();
+    } finally {
+      this.syncingLocal = false;
+    }
   }
 
   /** The realtime client is loaded only when someone actually joins the shared world. */
@@ -124,7 +154,6 @@ export class OpenWorldPanel {
       if (this.liveWorld) return;
       const live = new Live(config, { id: visitor.id, name: visitor.name }, {
         onStatus: status => this.showStatus(status),
-        onPeers: peers => this.showPeers(peers),
         onChat: line => this.appendChat(line),
       });
       this.liveWorld = live;
@@ -157,9 +186,17 @@ export class OpenWorldPanel {
       this.flowerTimer = 0;
       void this.refreshFlowers();
     }
+    this.retryTimer += deltaSeconds * 1_000;
+    if (this.retryTimer > FLOWER_RETRY_MS) {
+      this.retryTimer = 0;
+      void this.syncLocalFlowers();
+    }
     const pose = this.game.getNetworkPose();
-    this.liveWorld?.sendPose(pose.position, pose.quaternion, pose.perched);
-    this.liveWorld?.prune();
+    if (this.liveWorld) {
+      this.liveWorld.sendPose(pose.position, pose.quaternion, pose.perched);
+      this.liveWorld.prune();
+      this.showPeers(this.liveWorld.snapshot());
+    }
     this.danmakuTimer += deltaSeconds;
     if (this.danmakuTimer > 5) {
       this.danmakuTimer = 0;
@@ -335,9 +372,18 @@ export class OpenWorldPanel {
         ? `你在宏福苑放下了${label}，所有人都看得到。留言會在審核後顯示在花旁。`
         : `你在宏福苑放下了${label}，所有人都看得到。`, 10_000);
     } catch (error) {
-      this.game.flowers.remove(localId);
-      this.game.holdFlower(visitor.kind);
-      this.showNotice(error instanceof Error ? error.message : '未能放下花，請稍後再試。', 6_000);
+      if (error instanceof FlowerRefused) {
+        // Not allowed (too many at once, outside the grounds): take it back and keep carrying it.
+        this.game.flowers.remove(localId);
+        this.game.holdFlower(visitor.kind);
+        this.showNotice(error.message, 6_000);
+      } else {
+        // The service is unreachable: the flower stays where it was laid, and is sent on later.
+        saveLocalFlower({ ...flower, message: visitor.message });
+        rememberFlowerTotal(this.game.flowers.count);
+        visitor.placed = true;
+        this.showNotice(`你在宏福苑放下了${label}。共享服務暫時未能連上，花會留在這裡，連上後其他人就會看到。`, 10_000);
+      }
     } finally {
       this.placing = false;
     }
@@ -379,7 +425,7 @@ export class OpenWorldPanel {
 
   private showStatus(status: LiveStatus): void {
     this.status.textContent = status === 'online'
-      ? `此刻有 ${this.liveWorld?.onlineCount ?? 1} 位在大埔上空。`
+      ? this.nearbyText()
       : status === 'connecting' ? '正在連線…' : '連線中斷，正在重試。';
   }
 
@@ -389,8 +435,17 @@ export class OpenWorldPanel {
     const nearest = [...peers]
       .sort((a, b) => distance(a.position, bird) - distance(b.position, bird))
       .slice(0, WORLD_PLAYER_LIMIT);
-    this.game.syncPlayers(nearest);
-    if (this.liveWorld) this.status.textContent = `此刻有 ${this.liveWorld.onlineCount} 位在大埔上空。`;
+    this.game.syncPlayers(nearest, true);
+    const text = this.nearbyText();
+    if (text !== this.status.textContent) this.status.textContent = text;
+  }
+
+  private nearbyText(): string {
+    const live = this.liveWorld;
+    if (!live || !live.homeZone) return '正在連線…';
+    return live.nearbyCount > 1
+      ? `${live.homeLabel}此刻有 ${live.nearbyCount} 位同在。`
+      : `${live.homeLabel}此刻只有你。其他人來到時，你會看見他們。`;
   }
 
   private appendChat(line: ChatLine): void {
@@ -448,6 +503,12 @@ function readFlowerTotal(): number {
 
 function rememberFlowerTotal(total: number): void {
   try { localStorage.setItem(FLOWER_TOTAL_KEY, String(total)); } catch { /* per-browser convenience */ }
+}
+
+function forgetLocalFlower(id: string): void {
+  try {
+    localStorage.setItem(LOCAL_FLOWERS_KEY, JSON.stringify(readLocalFlowers().filter(flower => flower.id !== id)));
+  } catch { /* per-browser convenience */ }
 }
 
 function saveLocalFlower(flower: MemorialFlower): void {

@@ -267,7 +267,9 @@ export class MemorialFlowers {
       // Fades out as the bird gets close, so it guides without covering the court.
       const near = Math.hypot(cameraPosition.x - this.guide.position.x, cameraPosition.z - this.guide.position.z);
       const material = this.guide.material as MeshBasicMaterial;
-      const target = this.guideWanted ? MathClamp((near - 60) / 260, 0, 1) * 0.2 : 0;
+      // Stays faintly lit once flowers are laid, a little brighter the more there are, so the place can be found from afar.
+      const remembrance = this.flowers.size > 0 ? Math.min(0.08, 0.03 + Math.log10(this.flowers.size + 1) * 0.015) : 0;
+      const target = MathClamp((near - 60) / 260, 0, 1) * (this.guideWanted ? 0.2 : remembrance);
       material.opacity += (target - material.opacity) * Math.min(1, deltaSeconds * 2);
       this.guide.visible = material.opacity > 0.005;
     }
@@ -308,7 +310,7 @@ export class MemorialFlowers {
       this.meshes.get(flower.kind)!.setMatrixAt(index, this.matrix);
       counts.set(flower.kind, index + 1);
       this.position.y += 0.02;
-      this.scale.set(flower.kind === 'lantern' ? 2.4 : 1.6, 1, flower.kind === 'lantern' ? 2.4 : 1.6);
+      this.scale.set(flower.kind === 'lantern' ? 3.2 : 2.2, 1, flower.kind === 'lantern' ? 3.2 : 2.2);
       this.matrix.compose(this.position, this.rotation, this.scale);
       this.glow.setMatrixAt(glowCount, this.matrix);
       glowCount += 1;
@@ -398,15 +400,19 @@ export function createCarriedFlower(kind: FlowerKind): Group {
   const geometry = kind === 'lantern' ? lanternGeometry() : kind === 'lily' ? lilyGeometry() : chrysanthemumGeometry(kind);
   const material = new MeshStandardMaterial({
     vertexColors: true, flatShading: true, roughness: 0.75, metalness: 0,
-    emissive: new Color(kind === 'lantern' ? '#ffb15a' : '#000000'), emissiveIntensity: kind === 'lantern' ? 0.9 : 0,
+    // A little light of its own so the white bloom reads against the sky from behind the bird.
+    emissive: new Color(kind === 'lantern' ? '#ffb15a' : '#fff6e0'),
+    emissiveIntensity: kind === 'lantern' ? 0.9 : 0.22,
   });
   const mesh = new Mesh(geometry, material);
-  // Rig units: about twice life size so it reads on the flight-size bird.
-  mesh.scale.setScalar(1.7);
-  // Stem runs along local +y; centre the bloom near the beak tip.
-  mesh.position.y = -0.2;
+  // Rig units: the bloom is about as big as the bird's head, so it reads from the follow camera.
+  const scale = kind === 'lantern' ? 2.6 : 4.4;
+  mesh.scale.setScalar(scale);
   const holder = new Group();
   holder.name = 'Carried flower';
+  // A lantern hangs from the beak; a flower is held by its stem and points ahead and up.
+  holder.userData.hang = kind === 'lantern';
+  if (kind === 'lantern') mesh.position.y = -0.2 * scale;
   holder.add(mesh);
   return holder;
 }

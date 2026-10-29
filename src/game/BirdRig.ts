@@ -171,9 +171,15 @@ export class BirdRig {
     if (this.heldItem) this.head.remove(this.heldItem);
     this.heldItem = item;
     if (!item) return;
-    item.position.set(0, -0.09, -0.46);
-    // Stem across the beak, bloom to one side.
-    item.rotation.set(0, Math.PI / 2, Math.PI / 2 - 0.25);
+    if (item.userData.hang === true) {
+      // A paper lantern hangs just under the beak.
+      item.position.set(0, -0.1, -0.5);
+      item.rotation.set(0, 0, 0);
+    } else {
+      // The stem is gripped at the beak and the bloom leads, ahead of the bird and a little above it.
+      item.position.set(0, -0.08, -0.42);
+      item.rotation.set(-(Math.PI / 2 - 0.45), 0, 0);
+    }
     this.head.add(item);
   }
 

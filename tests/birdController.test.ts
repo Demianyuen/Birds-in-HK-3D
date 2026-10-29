@@ -167,3 +167,23 @@ function createWall(z: number): Mesh {
   wall.updateMatrixWorld(true);
   return wall;
 }
+
+describe('memorial approach start', () => {
+  it('starts far from the court, high up, and facing it', async () => {
+    const { MEMORIAL_APPROACH, MEMORIAL_CENTRE } = await import('../src/openWorld/contentRules');
+    const bird = new BirdController();
+    bird.beginAt(MEMORIAL_APPROACH, MEMORIAL_CENTRE);
+    const position = bird.object.position;
+    expect(position.toArray()).toEqual([MEMORIAL_APPROACH.x, MEMORIAL_APPROACH.y, MEMORIAL_APPROACH.z]);
+    const away = Math.hypot(position.x - MEMORIAL_CENTRE.x, position.z - MEMORIAL_CENTRE.z);
+    expect(away).toBeGreaterThan(1_500);
+    expect(away).toBeLessThan(2_500); // inside the 3.2 km flight region, a minute or two at cruise speed
+    const forward = new Vector3(0, 0, -1).applyQuaternion(bird.object.quaternion);
+    const toCourt = new Vector3(MEMORIAL_CENTRE.x - position.x, 0, MEMORIAL_CENTRE.z - position.z).normalize();
+    expect(forward.dot(toCourt)).toBeGreaterThan(0.99);
+    bird.setEnabled(true);
+    for (let index = 0; index < 100; index += 1) bird.update(0.1, null);
+    const after = Math.hypot(bird.object.position.x - MEMORIAL_CENTRE.x, bird.object.position.z - MEMORIAL_CENTRE.z);
+    expect(after).toBeLessThan(away - 100);
+  });
+});

@@ -24,6 +24,13 @@ export const MEMORIAL_CENTRE = Object.freeze({ x: 18, z: 22 });
 export const MEMORIAL_RADIUS = 190;
 
 /**
+ * Where every visit begins: high above Tolo Harbour, about 1.7 km east-north-east
+ * of the estate and facing it, so arriving is a flight of a minute or so with
+ * the flower in the beak, not a drop onto the court.
+ */
+export const MEMORIAL_APPROACH = Object.freeze({ x: 1560, y: 260, z: -640 });
+
+/**
  * Words that are never shown. Kept short and specific: common Cantonese and
  * English profanity and slurs. Messages also go through human moderation.
  */

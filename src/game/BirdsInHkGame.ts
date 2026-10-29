@@ -49,7 +49,7 @@ import { WangFukCourt } from '../wangFuk/WangFukCourt';
 import { inAnyWater } from './streetData';
 import { RemoteBirds } from '../multiplayer/RemoteBirds';
 import { createCarriedFlower, disposeCarriedFlower, MemorialFlowers } from '../openWorld/MemorialFlowers';
-import type { FlowerKind } from '../openWorld/contentRules';
+import { MEMORIAL_APPROACH, MEMORIAL_CENTRE, type FlowerKind } from '../openWorld/contentRules';
 import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 
 type GameMode = 'attract' | 'loading' | 'playing';
@@ -324,7 +324,7 @@ export class BirdsInHkGame {
   public startFlight(): void {
     this.mode = 'playing';
     this.renderVerified = false;
-    this.bird.reset();
+    this.bird.beginAt(MEMORIAL_APPROACH, MEMORIAL_CENTRE);
     this.bird.setEnabled(true);
   }
 
@@ -357,8 +357,9 @@ export class BirdsInHkGame {
     return this.remoteBirds.labels();
   }
 
-  public syncPlayers(players: readonly WorldPlayer[]): void {
-    this.remoteBirds.sync(players);
+  /** `smoothed` when the poses were already interpolated (shared sky); false to glide towards each one here. */
+  public syncPlayers(players: readonly WorldPlayer[], smoothed = false): void {
+    this.remoteBirds.sync(players, smoothed);
   }
 
   public setBuildingPresentation(mode: WorldPresentation): void {
@@ -405,7 +406,7 @@ export class BirdsInHkGame {
   }
 
   public resetFlight(): void {
-    this.bird.reset();
+    this.bird.beginAt(MEMORIAL_APPROACH, MEMORIAL_CENTRE);
     this.bird.updateCamera(this.camera, 1);
   }
 

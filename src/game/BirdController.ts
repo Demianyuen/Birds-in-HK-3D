@@ -157,6 +157,16 @@ export class BirdController {
     this.applyOrientation();
   }
 
+  /** Begin a flight at a point in the air, facing a point on the ground (y is the height above sea level). */
+  public beginAt(from: { x: number; y: number; z: number }, facing: { x: number; z: number }): void {
+    this.reset();
+    this.object.position.set(from.x, from.y, from.z);
+    // Forward is -z at yaw 0.
+    this.yaw = Math.atan2(-(facing.x - from.x), -(facing.z - from.z));
+    this.pitch = -0.03;
+    this.applyOrientation();
+  }
+
   public setEnabled(enabled: boolean): void {
     this.enabled = enabled;
   }

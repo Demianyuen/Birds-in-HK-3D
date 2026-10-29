@@ -38,13 +38,19 @@ describe('game entry document', () => {
   });
 
   it('contains valid Traditional Chinese copy without mojibake or broken tags', () => {
-    expect(html).toContain('化身一隻鴿子，飛過大埔，在宏福苑放下一朵花。');
+    expect(html).toContain('化身一隻鴿子，帶著一朵花飛過大埔，輕輕放在宏福苑。');
     expect(html).toContain('大埔 · 宏福苑');
     expect(html).toContain('正在建立飛行世界');
     expect(html).not.toMatch(/[\uE000-\uF8FF]/u);
     expect(html).not.toMatch(/\?\/(?:p|h[1-6]|strong|button)>/i);
     expect(countMatches(html, /<button\b/g)).toBe(countMatches(html, /<\/button>/g));
     expect(countMatches(html, /<section\b/g)).toBe(countMatches(html, /<\/section>/g));
+  });
+
+  it('presents itself as a memorial space, not a game', () => {
+    expect(html).toContain('這裡不是遊戲，沒有分數、排名或任務。');
+    expect(html).toContain('只要心裡有香港');
+    expect(html).not.toMatch(/遊戲畫面|可遊玩|玩家|得分|排行/);
   });
 
   it('defines a favicon without issuing an implicit missing-file request', () => {

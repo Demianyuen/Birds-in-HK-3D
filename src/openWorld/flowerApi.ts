@@ -12,6 +12,14 @@ export interface MemorialFlower {
   z: number;
 }
 
+/** The service answered "no" (4xx: not allowed, too many) rather than being unreachable or broken. */
+export class FlowerRefused extends Error {
+  public constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'FlowerRefused';
+  }
+}
+
 export interface PlacedFlower {
   flower: MemorialFlower;
   messageStatus: 'none' | 'pending';
@@ -58,7 +66,14 @@ export async function placeFlower(input: {
     body: JSON.stringify(input),
   });
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : '未能放下花，請稍後再試。');
+  if (!response.ok) {
+    const reason = typeof data.error === 'string' ? data.error : '未能放下花，請稍後再試。';
+    // Only a clear refusal discards the flower; a broken or unreachable service keeps it to try again.
+    if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 404) {
+      throw new FlowerRefused(reason, response.status);
+    }
+    throw new Error(reason);
+  }
   const flower = parseFlower(data.flower);
   if (!flower) throw new Error('未能放下花，請稍後再試。');
   return { flower: { ...flower, name: input.name }, messageStatus: data.messageStatus === 'pending' ? 'pending' : 'none' };
