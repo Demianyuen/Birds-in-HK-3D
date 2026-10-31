@@ -24,8 +24,12 @@ describe('speech over birds', () => {
     bubbles.say('a1', '大家好', 0);
     expect(bubbles.textFor('a1', 3_000)).toBe('大家好');
     expect(bubbles.textFor('a1', bubbleSeconds('大家好') * 1_000 + 1)).toBeNull();
-    expect(bubbleSeconds('長'.repeat(120))).toBeLessThanOrEqual(11);
-    expect(bubbleSeconds('長'.repeat(40))).toBeGreaterThan(bubbleSeconds('短'));
+    // About 15 seconds, never longer.
+    expect(bubbleSeconds('長'.repeat(120))).toBe(15);
+    expect(bubbles.textFor('a1', 14_000)).toBeNull(); // already let go above
+    bubbles.say('a1', '再說一次', 20_000);
+    expect(bubbles.textFor('a1', 34_900)).toBe('再說一次');
+    expect(bubbles.textFor('a1', 35_001)).toBeNull();
   });
 
   it('a new line replaces the last one over the same bird', () => {

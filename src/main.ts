@@ -115,6 +115,9 @@ visitorName.value = rememberedName();
 const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
 document.querySelector('.heritage-evidence')?.append(createHeritageDiagram());
+// Layer switches, frame rate and data-source state are working tools, not part of the memorial:
+// shown only in development or with ?tools in the address.
+if (import.meta.env.DEV || new URLSearchParams(location.search).has('tools')) document.body.dataset.tools = 'on';
 worldPanel.element.addEventListener('toggle', () => {
   touchControls.setVisible(currentScreen === 'game' && !worldPanel.element.open);
 });
@@ -194,6 +197,10 @@ window.addEventListener('wheel', event => {
 
 window.addEventListener('keydown', event => {
   if (currentScreen !== 'game') return;
+  if (event.code === 'Escape' && openWorld.speaking) {
+    openWorld.closeSpeech();
+    return;
+  }
   if (event.target instanceof HTMLElement && (event.target.closest('.world-panel, .open-world-panel, .flower-card') || event.target.isContentEditable
     || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(event.target.tagName))) return;
   if (event.code === 'Space') {

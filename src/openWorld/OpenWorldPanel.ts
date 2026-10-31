@@ -85,7 +85,8 @@ export class OpenWorldPanel {
     });
     this.speakButton.type = 'button';
     this.speakButton.className = 'speak-button';
-    this.speakButton.textContent = '說話（Enter）';
+    this.speakButton.textContent = '說話';
+    this.speakButton.setAttribute('aria-label', '說話（Enter）');
     this.speakButton.addEventListener('click', () => this.openSpeech());
 
     if (!openWorldConfig()) this.status.textContent = '單人模式：尚未設定共享服務。';
@@ -195,6 +196,7 @@ export class OpenWorldPanel {
     this.game.flowers.showGuide(Boolean(this.visitor && !this.visitor.placed));
     this.updatePrompt();
     this.labels.render(this.collectLabels(), this.game.viewCamera, width, height);
+    if (this.speech.open) this.speech.place(this.labels.project(this.ownHead(), this.game.viewCamera, width, height));
   }
 
   /** Flowers at the memorial: what is loaded now, or the last total seen while loading. */
@@ -433,16 +435,9 @@ export class OpenWorldPanel {
         tone: 'flower',
       });
     }
-    const said = this.bubbles.textFor('self', now);
+    const said = this.speech.open ? null : this.bubbles.textFor('self', now);
     if (said) {
-      const ground = this.game.birdGroundPoint;
-      labels.push({
-        id: 'speech-self',
-        title: this.visitor?.name || '你',
-        body: said,
-        position: ground ? new Vector3(ground.x, ground.y + 0.75, ground.z) : bird.clone().setY(bird.y + 2.6),
-        tone: 'speech',
-      });
+      labels.push({ id: 'speech-self', title: this.visitor?.name || '你', body: said, position: this.ownHead(), tone: 'speech' });
     }
     for (const remote of this.game.remoteBirdLabels) {
       if (remote.position.distanceTo(bird) > NAME_LABEL_RADIUS) continue;
@@ -457,6 +452,18 @@ export class OpenWorldPanel {
       });
     }
     return labels;
+  }
+
+  /** Just above our own bird's head (life size on the ground, larger in the air). */
+  private ownHead(): Vector3 {
+    const ground = this.game.birdGroundPoint;
+    const bird = this.game.birdPosition;
+    return ground ? new Vector3(ground.x, ground.y + 0.75, ground.z) : bird.clone().setY(bird.y + 2.6);
+  }
+
+  /** Esc anywhere while typing. */
+  public closeSpeech(): void {
+    this.speech.close();
   }
 
   private showStatus(status: LiveStatus): void {

@@ -54,6 +54,13 @@ export class WorldLabels {
     }
   }
 
+  /** Screen position of a point in the world, or null when it is behind the camera or off screen. */
+  public project(position: Vector3, camera: PerspectiveCamera, width: number, height: number): { x: number; y: number } | null {
+    this.projected.copy(position).project(camera);
+    if (this.projected.z > 1 || Math.abs(this.projected.x) > 0.95 || Math.abs(this.projected.y) > 0.95) return null;
+    return { x: (this.projected.x * 0.5 + 0.5) * width, y: (-this.projected.y * 0.5 + 0.5) * height };
+  }
+
   public clear(): void {
     for (const node of this.nodes.values()) node.remove();
     this.nodes.clear();

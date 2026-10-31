@@ -1,8 +1,10 @@
 import { CHAT_MAX } from './contentRules';
 
-/** How long a line stays over a bird: long enough to read, longer for longer lines. */
-export function bubbleSeconds(text: string): number {
-  return Math.min(11, 4 + [...text].length * 0.12);
+/** A line stays over the bird for 15 seconds at most; a newer line replaces it at once. */
+export const BUBBLE_SECONDS = 15;
+
+export function bubbleSeconds(_text: string): number {
+  return BUBBLE_SECONDS;
 }
 
 /** Words said in the world, shown over the bird that said them for a few seconds. */
@@ -64,30 +66,28 @@ export function findSpeaker(
 }
 
 /**
- * The line that opens in the middle of the view when Enter is pressed. Enter says it,
- * Esc (or an empty line) closes it. Typing never steers the bird.
+ * Typing straight over your own bird: Enter opens a small bubble above its head
+ * and the words appear there as you type (Chinese input methods included).
+ * Enter says it, Esc or clicking elsewhere lets it go. Typing never steers the bird.
  */
 export class SpeechInput {
   public readonly element = document.createElement('form');
   private readonly input = document.createElement('input');
-  private readonly note = document.createElement('p');
 
   public constructor(
     private readonly onSay: (text: string) => void,
     private readonly onFocus: () => void,
   ) {
-    this.element.className = 'speech-input';
+    this.element.className = 'speech-compose';
     this.element.hidden = true;
     this.element.setAttribute('aria-label', '說一句話');
     this.input.type = 'text';
     this.input.maxLength = CHAT_MAX;
     this.input.autocomplete = 'off';
     this.input.enterKeyHint = 'send';
-    this.input.placeholder = '說一句話…';
-    this.input.setAttribute('aria-label', '說一句話');
-    this.note.className = 'speech-input-note';
-    this.note.textContent = 'Enter 說出 · Esc 取消 · 會顯示在你的小鳥頭上，附近的人都看得到';
-    this.element.append(this.input, this.note);
+    this.input.placeholder = '說一句話… Enter 說出 · Esc 取消';
+    this.input.setAttribute('aria-label', '說一句話，按 Enter 說出，Esc 取消');
+    this.element.append(this.input);
     this.element.addEventListener('submit', event => {
       event.preventDefault();
       const text = this.input.value.trim();
@@ -101,6 +101,9 @@ export class SpeechInput {
         this.close();
       }
     });
+    this.input.addEventListener('keyup', event => event.stopPropagation());
+    // Clicking back into the world (or anywhere else) lets the line go.
+    this.input.addEventListener('blur', () => this.close());
     this.input.addEventListener('focus', () => this.onFocus());
   }
 
@@ -115,7 +118,18 @@ export class SpeechInput {
   }
 
   public close(): void {
+    if (this.element.hidden) return;
     this.element.hidden = true;
+    this.input.value = '';
     this.input.blur();
+  }
+
+  /** Keep the bubble over the bird's head (screen pixels), or at the bottom centre when the head is off screen. */
+  public place(point: { x: number; y: number } | null): void {
+    if (this.element.hidden) return;
+    this.element.classList.toggle('speech-compose-docked', !point);
+    this.element.style.transform = point
+      ? `translate(${point.x.toFixed(1)}px, ${point.y.toFixed(1)}px) translate(-50%, -100%)`
+      : '';
   }
 }

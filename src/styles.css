@@ -582,36 +582,44 @@ h1 {
   cursor: pointer;
 }
 .speak-button:hover { background: rgba(5, 16, 22, 0.78); }
-.speech-input {
+.speech-compose {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 9;
+  margin-top: -10px;
+  will-change: transform;
+}
+.speech-compose input {
+  width: min(300px, calc(100vw - 48px));
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 252, 244, 0.96);
+  color: #222823;
+  font: inherit;
+  font-size: 15px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+}
+.speech-compose input::placeholder { color: #8b897d; font-size: 13px; }
+.speech-compose input:focus { outline: 2px solid #f1d39a; outline-offset: 1px; }
+.speech-compose::after {
+  content: '';
   position: absolute;
   left: 50%;
-  top: 50%;
-  z-index: 9;
-  width: min(520px, calc(100vw - 32px));
-  transform: translate(-50%, -50%);
-  padding: 14px;
-  border-radius: 10px;
-  background: rgba(8, 20, 26, 0.82);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  bottom: -6px;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-bottom: 0;
+  border-top-color: rgba(255, 252, 244, 0.96);
 }
-.speech-input input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #1d2422;
-  font: inherit;
-  font-size: 16px;
-}
-.speech-input input:focus { outline: 2px solid #f1d39a; outline-offset: 1px; }
-.speech-input-note { margin: 8px 2px 0; color: #b9c9c5; font-size: 12px; }
+/* When the bird's head is off screen the line waits at the bottom centre. */
+.speech-compose-docked { left: 50%; top: auto; bottom: 96px; transform: translateX(-50%); }
 
 @media (max-width: 720px) {
   .visitor-form { padding: 16px; }
   .open-world-panel { bottom: auto; top: 64px; }
-  .speech-input { top: 30%; }
   .flower-prompt { bottom: 150px; }
   .flower-place-button { bottom: 96px; }
 }
@@ -702,3 +710,8 @@ h1 {
   .danmaku-line { font-size: 12px; max-width: 80vw; }
   .danmaku-toggle { bottom: 76px; }
 }
+
+/* Working tools stay out of the memorial unless asked for (?tools). */
+body:not([data-tools]) .world-view-control,
+body:not([data-tools]) .map-state,
+body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
