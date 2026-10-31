@@ -314,7 +314,7 @@ export class OpenWorldPanel {
     this.cardTitle.textContent = `在這裡放下${FLOWER_LABELS[visitor.kind]}`;
     this.cardMessage.value = visitor.message;
     this.cardNote.textContent = openWorldConfig()
-      ? '花和名字會即時讓所有人看到，會一直留在這裡。留言你自己走近就能讀到；經審核後，所有人走近花旁都能讀到。'
+      ? '花和名字會即時讓所有人看到，會一直留在這裡。你的話你走近就能讀到；管理員看過後，大家走近花旁也能讀到。'
       : '共享服務尚未開放：這朵花和留言暫時只保留在你的畫面上。';
     this.cardError.hidden = true;
     this.card.hidden = false;
@@ -393,7 +393,7 @@ export class OpenWorldPanel {
       if (visitor.message) rememberOwnWords(placed.flower.id, visitor.message);
       visitor.placed = true;
       this.showNotice(placed.messageStatus === 'pending'
-        ? `你在宏福苑放下了${label}，所有人都看得到。留言會在審核後顯示在花旁。`
+        ? `你在宏福苑放下了${label}，所有人都看得到。你的話會在管理員看過後，出現在花旁。`
         : `你在宏福苑放下了${label}，所有人都看得到。`, 10_000);
     } catch (error) {
       if (error instanceof FlowerRefused) {
@@ -430,7 +430,7 @@ export class OpenWorldPanel {
       labels.push({
         id: `flower-${flower.id}`,
         title,
-        body: flower.message || (mine ? `${mine}\n（審核中・暫時只有你看得到）` : undefined),
+        body: flower.message || (mine ? `${mine}\n（暫時只有你看得到）` : undefined),
         position: new Vector3(flower.x, this.game.flowers.displayY(flower) + 0.45, flower.z),
         tone: 'flower',
       });
