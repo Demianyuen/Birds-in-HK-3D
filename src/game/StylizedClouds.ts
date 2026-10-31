@@ -40,6 +40,11 @@ export class StylizedClouds {
     flatShading: true,
   });
   private mesh: InstancedMesh | null = null;
+
+  /** The soft colour clouds glow with (blue-grey by day, rose at dusk). */
+  public setGlow(colour: Color): void {
+    this.material.emissive.copy(colour);
+  }
   private readonly offsets: Vector3[] = [];
   private readonly scales: Vector3[] = [];
   private readonly rotations: Quaternion[] = [];

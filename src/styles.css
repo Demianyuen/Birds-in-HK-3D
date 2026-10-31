@@ -570,7 +570,7 @@ h1 {
 .speak-button {
   position: absolute;
   right: 16px;
-  bottom: 16px;
+  bottom: 52px;
   z-index: 7;
   padding: 8px 14px;
   border: 1px solid rgba(255, 255, 255, 0.28);
@@ -731,3 +731,26 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
 .word-chip:hover, .word-chip:focus-visible { background: rgba(255, 250, 238, 0.26); }
 .speech-compose .word-chips { justify-content: center; margin: 0 0 8px; width: min(300px, calc(100vw - 48px)); }
 .speech-compose .word-chip { background: rgba(8, 20, 26, 0.72); border-color: rgba(255, 255, 255, 0.3); color: #f5f8f6; }
+
+/* Time of day: a quiet two-way switch, top right. */
+.time-of-day {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 7;
+  display: flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(5, 16, 22, 0.55);
+}
+.time-of-day button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #dfe9e6;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.time-of-day button[aria-pressed='true'] { background: rgba(255, 236, 206, 0.9); color: #2a2620; }

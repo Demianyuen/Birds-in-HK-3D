@@ -171,6 +171,11 @@ export class Grove {
   private readonly colour = new Color();
   private placed = 0;
 
+  /** Evening light: warm and dim the trees like the photo mesh around them. */
+  public setTint(tint: Color): void {
+    this.material.color.copy(tint);
+  }
+
   public constructor(public readonly capacity = 400) {
     this.mesh = new InstancedMesh(this.geometry, this.material, capacity);
     this.mesh.count = 0;

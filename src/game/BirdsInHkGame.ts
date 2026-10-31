@@ -21,7 +21,8 @@ import {
   Quaternion,
   Euler,
 } from 'three';
-import { createGradientSky, GOLDEN_SKY as DAY_SKY } from './GradientSky';
+import { createGradientSky, GOLDEN_SKY as DAY_SKY, type SkyPalette } from './GradientSky';
+import { lightingFor, mixLighting, type Lighting, type TimeOfDay } from './timeOfDay';
 import {
   AerialImageryGround,
   type OfficialGroundMetrics,
@@ -96,6 +97,11 @@ export class BirdsInHkGame {
   private carried: ReturnType<typeof createCarriedFlower> | null = null;
   private readonly sun = new DirectionalLight('#ffd9a6', 3.0);
   private sky: Mesh | null = null;
+  private readonly hemisphere = new HemisphereLight('#cfe6f2', '#5d6b4a', 0.85);
+  /** Time of day, and the change in progress (blend 0 → 1 over a few seconds). */
+  private timeOfDay: TimeOfDay = 'day';
+  private timeFrom: TimeOfDay = 'day';
+  private timeBlend = 1;
   private readonly telemetryCallback: (telemetry: GameTelemetry) => void;
   private readonly places = new PlaceTracker(browserDiscoveryStore());
   /** Called when the bird arrives somewhere with a name (banner like an open-world area title). */
@@ -138,7 +144,7 @@ export class BirdsInHkGame {
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.localClippingEnabled = true;
 
-    this.scene.add(new HemisphereLight('#cfe6f2', '#5d6b4a', 0.85));
+    this.scene.add(this.hemisphere);
     this.sun.position.set(-450, 850, 420);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2_048, 2_048);
@@ -481,12 +487,68 @@ export class BirdsInHkGame {
     this.scene.background = new Color(DAY_SKY.horizon);
   }
 
+  /** Change the time of day: a gentle three-second change, or at once (on load). */
+  public setTimeOfDay(time: TimeOfDay, immediate = false): void {
+    if (time === this.timeOfDay && this.timeBlend >= 1 && !immediate) return;
+    this.timeFrom = immediate ? time : this.timeOfDay;
+    this.timeOfDay = time;
+    this.timeBlend = immediate ? 1 : 0;
+    if (immediate) {
+      this.applyLighting(lightingFor(time));
+      this.configureEnvironment();
+    }
+  }
+
+  public get currentTimeOfDay(): TimeOfDay {
+    return this.timeOfDay;
+  }
+
+  private applyLighting(light: Lighting): void {
+    this.sunDirection.setFromSphericalCoords(1, MathUtils.degToRad(90 - light.sunElevation), MathUtils.degToRad(light.sunAzimuth));
+    const sky = this.sky?.material as ShaderMaterial | undefined;
+    if (sky) {
+      sky.uniforms.uZenith.value.copy(light.zenith);
+      sky.uniforms.uHorizon.value.copy(light.horizon);
+      sky.uniforms.uGround.value.copy(light.ground);
+      sky.uniforms.uSunGlow.value.copy(light.sunGlow);
+      sky.uniforms.uSunDirection.value.copy(this.sunDirection);
+    }
+    if (this.scene.background instanceof Color) this.scene.background.copy(light.horizon);
+    if (this.scene.fog instanceof Fog) {
+      this.scene.fog.color.copy(light.fogColour);
+      this.scene.fog.near = light.fogNear;
+      this.scene.fog.far = light.fogFar;
+    }
+    this.renderer.toneMappingExposure = light.exposure;
+    this.sun.color.copy(light.sunColour);
+    this.sun.intensity = light.sunIntensity;
+    this.hemisphere.color.copy(light.hemiSky);
+    this.hemisphere.groundColor.copy(light.hemiGround);
+    this.hemisphere.intensity = light.hemiIntensity;
+    this.post.setGrade(light);
+    this.photoMesh.setTint(light.surfaceTint);
+    this.court.setTint(light.surfaceTint);
+    this.grove.setTint(light.surfaceTint);
+    this.clouds.setGlow(light.cloudGlow);
+    this.flowers.setGlowStrength(light.flowerGlow);
+    this.renderer.shadowMap.needsUpdate = true;
+  }
+
+  /** The sky as it is now, for reflections. */
+  private currentPalette(): SkyPalette {
+    const sky = this.sky?.material as ShaderMaterial | undefined;
+    if (!sky) return DAY_SKY;
+    const hex = (name: string) => `#${(sky.uniforms[name].value as Color).getHexString()}`;
+    return { zenith: hex('uZenith'), horizon: hex('uHorizon'), ground: hex('uGround'), sunGlow: hex('uSunGlow') };
+  }
+
   /** Image-based lighting from the same sky, so glass and water reflect it. */
   private configureEnvironment(): void {
     const pmrem = new PMREMGenerator(this.renderer);
     const skyScene = new Scene();
-    const skyCopy = createGradientSky(this.sunDirection, DAY_SKY, 1_000);
+    const skyCopy = createGradientSky(this.sunDirection, this.currentPalette(), 1_000);
     skyScene.add(skyCopy);
+    this.scene.environment?.dispose();
     this.scene.environment = pmrem.fromScene(skyScene, 0, 0.1, 2_000).texture;
     this.scene.environmentIntensity = 0.6;
     skyCopy.geometry.dispose();
@@ -602,6 +664,12 @@ export class BirdsInHkGame {
     stylizedGroundUniforms.uSgTime.value = this.elapsed;
     this.clouds.update(this.elapsed);
     if (this.mode === 'playing') this.flowers.settleOnSurface(this.collisionRoots(), this.bird.object.position);
+    if (this.timeBlend < 1) {
+      this.timeBlend = Math.min(1, this.timeBlend + deltaSeconds / 3);
+      const eased = this.timeBlend * this.timeBlend * (3 - 2 * this.timeBlend);
+      this.applyLighting(mixLighting(this.timeFrom, this.timeOfDay, eased));
+      if (this.timeBlend >= 1) this.configureEnvironment();
+    }
     this.flowers.update(deltaSeconds, this.camera.position);
     this.post.render();
     if (this.mode === 'playing') {

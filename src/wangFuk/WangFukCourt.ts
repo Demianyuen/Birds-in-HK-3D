@@ -225,7 +225,8 @@ export function createFacadeMaterial(options: CourtMaterialOptions): MeshBasicMa
   const uniforms = {
     uSeed: { value: options.seed },
     uFloorHeight: { value: options.floorHeight },
-    uSunDir: { value: options.sunDirection.clone().normalize() },
+    // Shared with the game, so the shading follows the sun when the time of day changes.
+    uSunDir: { value: options.sunDirection },
   };
   material.userData.uniforms = uniforms;
   material.onBeforeCompile = shader => {
@@ -261,6 +262,7 @@ export class WangFukCourt {
   private readonly placed = new Map<string, PlacedBlock>();
   private readonly geometries = new Map<number, { body: BufferGeometry; caps: BufferGeometry }>();
   private readonly capMaterial = new MeshBasicMaterial({ vertexColors: true });
+  private readonly tint = new Color('#ffffff');
 
   public constructor(private readonly sunDirection: Vector3) {
     this.group.name = 'wang-fuk-court';
@@ -278,6 +280,7 @@ export class WangFukCourt {
     }
     const seed = [...block].reduce((sum, char) => sum + char.charCodeAt(0), 0) * 0.137;
     const material = createFacadeMaterial({ seed, floorHeight: height / STOREYS, sunDirection: this.sunDirection });
+    material.color.copy(this.tint);
     const mesh = new Mesh(geometry.body, material);
     const caps = new Mesh(geometry.caps, this.capMaterial);
     for (const part of [mesh, caps]) {
@@ -316,6 +319,13 @@ export class WangFukCourt {
   /** Circles that hide the photo mesh where a tower now stands (just above its ground). */
   public cutouts(): Array<{ x: number; z: number; radius: number; minY: number }> {
     return this.blocks.map(item => ({ x: item.pose.x, z: item.pose.z, radius: BLOCK_RADIUS + 3, minY: item.baseY + 1.2 }));
+  }
+
+  /** Evening light: warm and dim the towers like the photo mesh around them. */
+  public setTint(tint: Color): void {
+    this.tint.copy(tint);
+    this.capMaterial.color.copy(tint);
+    for (const placed of this.placed.values()) (placed.mesh.material as MeshBasicMaterial).color.copy(tint);
   }
 
   public setVisible(visible: boolean): void {

@@ -1,6 +1,6 @@
 import type { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin, LoadRegionPlugin, ReorientationPlugin, SphereRegion } from '3d-tiles-renderer/plugins';
-import { DoubleSide, Group, MathUtils, Mesh, MeshBasicMaterial, Sphere, Vector4, type Material, type MeshStandardMaterial, type Object3D, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { Color, DoubleSide, Group, MathUtils, Mesh, MeshBasicMaterial, Sphere, Vector4, type Material, type MeshStandardMaterial, type Object3D, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { createRegionClippingPlanes } from './CsdiTiles';
@@ -29,6 +29,8 @@ export class PhotoMeshTiles {
   private tiles: TilesRenderer | null = null;
   private loading: Promise<void> | null = null;
   private readonly materials = new Set<MeshBasicMaterial>();
+  /** The photos carry daylight; the time of day warms and dims them with this colour. */
+  private readonly tint = new Color('#ffffff');
   private readonly cutouts = { value: Array.from({ length: MAX_CUTOUTS }, () => new Vector4(0, 0, 0, 1e9)) };
   private readonly cutoutCount = { value: 0 };
   private readonly loadedModels = new Set<Object3D>();
@@ -90,6 +92,8 @@ export class PhotoMeshTiles {
           const old = mesh.material as MeshStandardMaterial;
           // Both sides, so rays fired from inside a tower (to measure it) still meet its walls.
           const material = new MeshBasicMaterial({ map: old.map ?? null, color: old.map ? '#ffffff' : '#cfcfcf', side: DoubleSide });
+          material.color.multiply(this.tint);
+          material.userData.baseColour = old.map ? 1 : 0.6;
           if (material.map) material.map.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
           material.clippingPlanes = clipping;
           this.addCutoutShader(material);
@@ -166,6 +170,14 @@ for (int i = 0; i < ${MAX_CUTOUTS}; i++) {
 
   public get ready(): boolean {
     return this.loadedModels.size > 0;
+  }
+
+  public setTint(tint: Color): void {
+    this.tint.copy(tint);
+    for (const material of this.materials) {
+      const base = typeof material.userData.baseColour === 'number' ? material.userData.baseColour : 1;
+      material.color.setScalar(base).multiply(this.tint);
+    }
   }
 
   public update(camera: PerspectiveCamera, renderer: WebGLRenderer): void {

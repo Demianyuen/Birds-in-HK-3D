@@ -4,6 +4,7 @@ import { OpenWorldPanel } from './openWorld/OpenWorldPanel';
 import { openWorldConfig } from './openWorld/config';
 import { readVisitorForm, rememberedName, type Visitor } from './openWorld/visitor';
 import { createWordChips } from './openWorld/wordChips';
+import { isTimeOfDay, type TimeOfDay } from './game/timeOfDay';
 import { TouchFlightControls } from './game/TouchFlightControls';
 import { createHeritageDiagram } from './game/heritageDiagram';
 import { transitionFlow, type ScreenName } from './app/flow';
@@ -46,6 +47,7 @@ const fpsValue = requireElement<HTMLElement>('fps-value');
 const groundDetail = requireElement<HTMLElement>('ground-detail');
 const gameHud = requireElement<HTMLElement>('game-hud');
 const controlsHint = requireElement<HTMLElement>('controls-hint');
+const timeOfDayControl = requireElement<HTMLElement>('time-of-day');
 const mapStateValue = requireElement<HTMLElement>('map-state-value');
 const buildingPresentation = requireElement<HTMLSelectElement>('building-presentation');
 const buildingPresentationNote = requireElement<HTMLElement>('building-presentation-note');
@@ -117,6 +119,32 @@ const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
 document.querySelector('.heritage-evidence')?.append(createHeritageDiagram());
 visitorMessage.closest('label')?.after(createWordChips(words => { visitorMessage.value = words; }));
+
+// Time of day: 日光 or 黃昏, remembered in this browser.
+const TIME_OF_DAY_KEY = 'birds-in-hk:time-of-day';
+function showTimeOfDay(time: TimeOfDay): void {
+  for (const button of timeOfDayControl.querySelectorAll<HTMLButtonElement>('button[data-time]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.time === time));
+  }
+}
+function savedTimeOfDay(): TimeOfDay {
+  try {
+    const saved = localStorage.getItem(TIME_OF_DAY_KEY);
+    return isTimeOfDay(saved) ? saved : 'day';
+  } catch {
+    return 'day';
+  }
+}
+game.setTimeOfDay(savedTimeOfDay(), true);
+showTimeOfDay(savedTimeOfDay());
+timeOfDayControl.addEventListener('click', event => {
+  const time = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-time]')?.dataset.time;
+  if (!isTimeOfDay(time)) return;
+  game.setTimeOfDay(time);
+  showTimeOfDay(time);
+  try { localStorage.setItem(TIME_OF_DAY_KEY, time); } catch { /* per-browser convenience */ }
+  canvas.focus?.();
+});
 // Layer switches, frame rate and data-source state are working tools, not part of the memorial:
 // shown only in development or with ?tools in the address.
 if (import.meta.env.DEV || new URLSearchParams(location.search).has('tools')) document.body.dataset.tools = 'on';
@@ -386,6 +414,7 @@ function showScreen(screen: ScreenName): void {
   const inGame = screen === 'game';
   gameHud.hidden = !inGame;
   controlsHint.hidden = !inGame;
+  timeOfDayControl.hidden = !inGame;
   worldPanel.element.hidden = !inGame;
   openWorld.setVisible(inGame);
   touchControls.setVisible(inGame && !worldPanel.element.open);

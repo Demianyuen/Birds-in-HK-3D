@@ -82,6 +82,8 @@ export class MemorialFlowers {
   /** A faint column of light over Wang Fuk Court while the visitor still carries a flower. */
   private readonly guide: Mesh;
   private guideWanted = false;
+  /** Flowers and lanterns glow more as the light falls. */
+  private glowStrength = 1;
   /**
    * Where each flower is drawn. The photo mesh refines as you come closer and its
    * ground can rise or sink by a metre, which would bury a flower laid on the
@@ -262,6 +264,10 @@ export class MemorialFlowers {
     return [...this.flowers.values()].filter(flower => flower.message.trim().length > 0);
   }
 
+  public setGlowStrength(strength: number): void {
+    this.glowStrength = strength;
+  }
+
   /** Height a flower is drawn at (settled onto the surface showing now). */
   public displayY(flower: MemorialFlower): number {
     return this.settledY.get(flower.id) ?? flower.y;
@@ -340,7 +346,7 @@ export class MemorialFlowers {
       const distance = Math.hypot(cameraPosition.x - first.x, cameraPosition.y - first.y, cameraPosition.z - first.z);
       this.glowBoost.value = MathClamp(distance / 28, 1, 9);
       // Bigger glows overlap: dim each so the field stays a soft light, not a white blob.
-      (this.glow.material as MeshBasicMaterial).opacity = 0.42 / this.glowBoost.value ** 0.85;
+      (this.glow.material as MeshBasicMaterial).opacity = Math.min(1, (0.42 * this.glowStrength) / this.glowBoost.value ** 0.85);
     }
     if (!this.dirty) return;
     this.dirty = false;

@@ -50,6 +50,7 @@ export class CinematicPost {
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
   private bloomWanted = true;
+  private readonly grade: ShaderPass;
 
   public constructor(renderer: WebGLRenderer, scene: Scene, camera: Camera) {
     const size = renderer.getSize(new Vector2());
@@ -58,9 +59,19 @@ export class CinematicPost {
     this.composer.addPass(new RenderPass(scene, camera));
     this.bloom = new UnrealBloomPass(new Vector2(size.x / 2, size.y / 2), 0.38, 0.72, 0.8);
     this.composer.addPass(this.bloom);
-    const grade = new ShaderPass(new ShaderMaterial(GradeShader));
-    this.composer.addPass(grade);
+    this.grade = new ShaderPass(new ShaderMaterial(GradeShader));
+    this.composer.addPass(this.grade);
     this.composer.addPass(new OutputPass());
+  }
+
+  /** Colour grade and glow for the time of day. */
+  public setGrade(grade: { warmth: number[]; shadowTint: number[]; saturation: number; vignette: number; bloom: number }): void {
+    const uniforms = this.grade.material.uniforms;
+    uniforms.uWarmth.value = [...grade.warmth];
+    uniforms.uShadowTint.value = [...grade.shadowTint];
+    uniforms.uSaturation.value = grade.saturation;
+    uniforms.uVignette.value = grade.vignette;
+    this.bloom.strength = grade.bloom;
   }
 
   /** Bloom is the costly part: switch it off when the frame budget is tight. */
