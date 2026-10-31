@@ -22,7 +22,8 @@ export class FlowerRefused extends Error {
 
 export interface PlacedFlower {
   flower: MemorialFlower;
-  messageStatus: 'none' | 'pending';
+  /** approved: one-tap words, shared at once; pending: written freely, read by a manager first. */
+  messageStatus: 'none' | 'pending' | 'approved';
 }
 
 function parseFlower(value: unknown): MemorialFlower | null {
@@ -76,7 +77,7 @@ export async function placeFlower(input: {
   }
   const flower = parseFlower(data.flower);
   if (!flower) throw new Error('未能放下花，請稍後再試。');
-  return { flower: { ...flower, name: input.name }, messageStatus: data.messageStatus === 'pending' ? 'pending' : 'none' };
+  return { flower: { ...flower, name: input.name }, messageStatus: data.messageStatus === 'pending' || data.messageStatus === 'approved' ? data.messageStatus : 'none' };
 }
 
 export async function sendChat(input: { name: string; body: string; x: number; z: number; speaker?: string }): Promise<void> {

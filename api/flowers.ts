@@ -4,6 +4,7 @@ import {
   checkName,
   insideMemorialGround,
   isFlowerKind,
+  isPresetWords,
   rejectReasonText,
 } from '../src/openWorld/contentRules.js';
 import {
@@ -65,7 +66,8 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
     if (mine >= PER_SENDER_LIMIT) throw new ApiError(429, '你剛剛已經放了幾朵花，請稍後再放。');
     if (everyone >= SITE_LIMIT) throw new ApiError(429, '這一刻有很多人在放花，請稍後再試。');
 
-    const messageStatus = message.text ? 'pending' : 'none';
+    // One-tap words are shared at once; anything written freely is read by a manager first.
+    const messageStatus = !message.text ? 'none' : isPresetWords(message.text) ? 'approved' : 'pending';
     const response = await rest(config, 'memorial_flowers?select=id,created_at,kind,x,y,z', {
       method: 'POST',
       headers: { Prefer: 'return=representation' },
@@ -81,7 +83,7 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
       },
     });
     const [row] = (await response.json()) as Array<Record<string, unknown>>;
-    sendJson(res, 201, { flower: { ...row, name: name.text, message: '' }, messageStatus });
+    sendJson(res, 201, { flower: { ...row, name: name.text, message: messageStatus === 'approved' ? message.text : '' }, messageStatus });
   } catch (error) {
     sendError(res, error);
   }

@@ -55,13 +55,13 @@ afterEach(() => {
 describe('flowers API', () => {
   it('lays a flower at once and holds its message for moderation', async () => {
     const { res, done } = response();
-    await flowers(request('POST', '/api/flowers', { name: '陳太', message: '願你們安息', kind: 'lily', x: 10, y: 6.5, z: 20 }), res);
+    await flowers(request('POST', '/api/flowers', { name: '陳太', message: '想念宏福苑的街坊', kind: 'lily', x: 10, y: 6.5, z: 20 }), res);
     const result = await done;
     expect(result.status).toBe(201);
     expect(result.body.messageStatus).toBe('pending');
     const insert = calls.find(call => call.init.method === 'POST')!;
     const sent = JSON.parse(String(insert.init.body));
-    expect(sent).toMatchObject({ name: '陳太', message: '願你們安息', message_status: 'pending', kind: 'lily' });
+    expect(sent).toMatchObject({ name: '陳太', message: '想念宏福苑的街坊', message_status: 'pending', kind: 'lily' });
     // The salted IP hash is stored, never the IP itself.
     expect(sent.sender_hash).toMatch(/^[0-9a-f]{32}$/);
     expect(JSON.stringify(sent)).not.toContain('203.0.113.9');
@@ -110,6 +110,33 @@ describe('flowers API', () => {
     const { res, done } = response();
     await flowers(request('GET', '/api/flowers'), res);
     expect((await done).status).toBe(503);
+  });
+});
+
+describe('one-tap words', () => {
+  it('are shared at once, while words written freely wait to be read', async () => {
+    const preset = response();
+    await flowers(request('POST', '/api/flowers', { name: '甲', message: '我們會記得你們', kind: 'lily', x: 10, y: 6, z: 20 }), preset.res);
+    const presetResult = await preset.done;
+    expect(presetResult.status).toBe(201);
+    expect(presetResult.body.messageStatus).toBe('approved');
+    expect((presetResult.body.flower as Record<string, unknown>).message).toBe('我們會記得你們');
+    expect(JSON.parse(String(calls.filter(call => call.init.method === 'POST').pop()?.init.body))).toMatchObject({ message_status: 'approved' });
+
+    const free = response();
+    await flowers(request('POST', '/api/flowers', { name: '甲', message: '想念你', kind: 'lily', x: 10, y: 6, z: 20 }), free.res);
+    const freeResult = await free.done;
+    expect(freeResult.body.messageStatus).toBe('pending');
+    expect((freeResult.body.flower as Record<string, unknown>).message).toBe('');
+  });
+
+  it('turns a slogan away before anything is stored', async () => {
+    const { res, done } = response();
+    await chat(request('POST', '/api/chat', { name: '甲', body: '光復香港 時代革命' }), res);
+    const result = await done;
+    expect(result.status).toBe(422);
+    expect(result.body.error).toBe('這裡是悼念的地方，請不要寫口號或政治訴求。');
+    expect(calls.filter(call => call.init.method === 'POST')).toHaveLength(0);
   });
 });
 

@@ -11,6 +11,7 @@ import type { ChatLine, LiveStatus, LiveWorld } from './LiveWorld';
 import { FLOWER_LABELS, type Visitor } from './visitor';
 import { WorldLabels, type WorldLabel } from './WorldLabels';
 import { findSpeaker, SpeechBubbles, SpeechInput } from './speech';
+import { createWordChips } from './wordChips';
 
 const FLOWER_REFRESH_MS = 30_000;
 /** Flowers waiting to reach the shared service are offered again this often. */
@@ -266,6 +267,10 @@ export class OpenWorldPanel {
     this.cardMessage.rows = 4;
     this.cardMessage.placeholder = '寫給宏福苑的一句話';
     label.append(caption, this.cardMessage);
+    const chips = createWordChips(words => {
+      this.cardMessage.value = words;
+      this.cardError.hidden = true;
+    });
     const note = this.cardNote;
     note.className = 'flower-card-note';
     this.cardError.className = 'flower-card-error';
@@ -283,7 +288,7 @@ export class OpenWorldPanel {
     cancel.textContent = '取消';
     cancel.addEventListener('click', () => this.closeCard());
     actions.append(confirm, cancel);
-    this.card.append(this.cardTitle, label, note, this.cardError, actions);
+    this.card.append(this.cardTitle, chips, label, note, this.cardError, actions);
     this.card.addEventListener('submit', event => {
       event.preventDefault();
       const checked = checkMessage(this.cardMessage.value);
@@ -390,11 +395,13 @@ export class OpenWorldPanel {
     try {
       const placed = await placeFlower({ name: visitor.name, message: visitor.message, kind: visitor.kind, x: ground.x, y: ground.y, z: ground.z });
       this.game.flowers.replace(localId, { ...placed.flower, y: ground.y });
-      if (visitor.message) rememberOwnWords(placed.flower.id, visitor.message);
+      if (visitor.message && placed.messageStatus === 'pending') rememberOwnWords(placed.flower.id, visitor.message);
       visitor.placed = true;
       this.showNotice(placed.messageStatus === 'pending'
         ? `你在宏福苑放下了${label}，所有人都看得到。你的話會在管理員看過後，出現在花旁。`
-        : `你在宏福苑放下了${label}，所有人都看得到。`, 10_000);
+        : placed.messageStatus === 'approved'
+          ? `你在宏福苑放下了${label}，你的話和花一起留在這裡，所有人走近都看得到。`
+          : `你在宏福苑放下了${label}，所有人都看得到。`, 10_000);
     } catch (error) {
       if (error instanceof FlowerRefused) {
         // Not allowed (too many at once, outside the grounds): take it back and keep carrying it.

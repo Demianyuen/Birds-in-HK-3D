@@ -3,6 +3,7 @@ import { WorldPanel } from './multiplayer/WorldPanel';
 import { OpenWorldPanel } from './openWorld/OpenWorldPanel';
 import { openWorldConfig } from './openWorld/config';
 import { readVisitorForm, rememberedName, type Visitor } from './openWorld/visitor';
+import { createWordChips } from './openWorld/wordChips';
 import { TouchFlightControls } from './game/TouchFlightControls';
 import { createHeritageDiagram } from './game/heritageDiagram';
 import { transitionFlow, type ScreenName } from './app/flow';
@@ -115,6 +116,7 @@ visitorName.value = rememberedName();
 const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
 document.querySelector('.heritage-evidence')?.append(createHeritageDiagram());
+visitorMessage.closest('label')?.after(createWordChips(words => { visitorMessage.value = words; }));
 // Layer switches, frame rate and data-source state are working tools, not part of the memorial:
 // shown only in development or with ?tools in the address.
 if (import.meta.env.DEV || new URLSearchParams(location.search).has('tools')) document.body.dataset.tools = 'on';

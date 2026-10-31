@@ -715,3 +715,19 @@ h1 {
 body:not([data-tools]) .world-view-control,
 body:not([data-tools]) .map-state,
 body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
+
+/* One-tap words for the memorial. */
+.word-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.word-chip {
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 244, 222, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 250, 238, 0.12);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.word-chip:hover, .word-chip:focus-visible { background: rgba(255, 250, 238, 0.26); }
+.speech-compose .word-chips { justify-content: center; margin: 0 0 8px; width: min(300px, calc(100vw - 48px)); }
+.speech-compose .word-chip { background: rgba(8, 20, 26, 0.72); border-color: rgba(255, 255, 255, 0.3); color: #f5f8f6; }

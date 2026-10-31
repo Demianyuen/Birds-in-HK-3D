@@ -8,6 +8,9 @@ import {
   MEMORIAL_CENTRE,
   MEMORIAL_RADIUS,
   MESSAGE_MAX,
+  PRESET_WORDS,
+  isPresetWords,
+  rejectReasonText,
 } from '../src/openWorld/contentRules';
 import { WANG_FUK_ADDRESS_POINTS, wangFukLocalMarkers } from '../src/game/wangFukLocations';
 import { getFlightRegion } from '../src/game/regions';
@@ -28,6 +31,32 @@ describe('memorial content rules', () => {
     expect(checkMessage('仆 街').reason).toBe('blocked-word');
     expect(checkMessage('f.u.c.k this').reason).toBe('blocked-word');
     expect(checkName('ＦＵＣＫ').reason).toBe('blocked-word');
+  });
+
+  it('turns slogans and political demands away gently, however they are written', () => {
+    for (const text of ['光復香港，時代革命', '光 復 香 港', '光复香港', '時代革命！', '五大訴求，缺一不可', '香港獨立', 'Liberate Hong Kong', 'revolution of our times', '願榮光歸香港']) {
+      const checked = checkChat(text);
+      expect(checked.ok, text).toBe(false);
+      expect(checked.reason, text).toBe('not-for-memorial');
+      expect(checkMessage(text).ok, text).toBe(false);
+      expect(checkName(text).ok, text).toBe(false);
+    }
+    expect(rejectReasonText('not-for-memorial')).toBe('這裡是悼念的地方，請不要寫口號或政治訴求。');
+  });
+
+  it('still takes words of grief, thanks and care, including about Hong Kong', () => {
+    for (const text of ['願你們安息', '香港人會記得你們', '多謝消防員', '我在多倫多，心裡有香港', '願天使們安好', 'Rest in peace']) {
+      expect(checkChat(text).ok, text).toBe(true);
+    }
+  });
+
+  it('knows the one-tap words, which all pass the rules', () => {
+    expect(PRESET_WORDS.length).toBeGreaterThan(3);
+    for (const words of PRESET_WORDS) {
+      expect(checkMessage(words).ok).toBe(true);
+      expect(isPresetWords(` ${words} `)).toBe(true);
+    }
+    expect(isPresetWords('願你們安息吧，還有別的話')).toBe(false);
   });
 
   it('refuses links and phone numbers', () => {
