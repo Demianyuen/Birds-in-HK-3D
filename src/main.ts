@@ -3,15 +3,14 @@ import { WorldPanel } from './multiplayer/WorldPanel';
 import { OpenWorldPanel } from './openWorld/OpenWorldPanel';
 import { openWorldConfig } from './openWorld/config';
 import { readVisitorForm, rememberedName, type Visitor } from './openWorld/visitor';
-import { createWordChips } from './openWorld/wordChips';
-import { isTimeOfDay, type TimeOfDay } from './game/timeOfDay';
 import { TouchFlightControls } from './game/TouchFlightControls';
 import { createHeritageDiagram } from './game/heritageDiagram';
 import { transitionFlow, type ScreenName } from './app/flow';
 import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
 import { BirdsInHkGame, type GameTelemetry, type WorldPresentation } from './game/BirdsInHkGame';
 import type { FlightControl } from './game/BirdController';
-import { getBirdProfile, type BirdProfileId } from './game/birdProfiles';
+import { getBirdProfile, getPlumage, PLUMAGES, type BirdProfileId, type PlumageId } from './game/birdProfiles';
+import { BirdPreview } from './game/BirdPreview';
 import type { MapLoadProgress } from './game/CsdiTiles';
 import { getFlightRegion, type FlightRegionId } from './game/regions';
 import {
@@ -24,7 +23,6 @@ const app = requireElement<HTMLElement>('app');
 const canvas = requireElement<HTMLCanvasElement>('game-canvas');
 const visitorForm = requireElement<HTMLFormElement>('visitor-form');
 const visitorName = requireElement<HTMLInputElement>('visitor-name');
-const visitorMessage = requireElement<HTMLTextAreaElement>('visitor-message');
 const visitorError = requireElement<HTMLElement>('visitor-error');
 const startButton = requireElement<HTMLButtonElement>('start-button');
 const retryButton = requireElement<HTMLButtonElement>('retry-button');
@@ -47,7 +45,6 @@ const fpsValue = requireElement<HTMLElement>('fps-value');
 const groundDetail = requireElement<HTMLElement>('ground-detail');
 const gameHud = requireElement<HTMLElement>('game-hud');
 const controlsHint = requireElement<HTMLElement>('controls-hint');
-const timeOfDayControl = requireElement<HTMLElement>('time-of-day');
 const mapStateValue = requireElement<HTMLElement>('map-state-value');
 const buildingPresentation = requireElement<HTMLSelectElement>('building-presentation');
 const buildingPresentationNote = requireElement<HTMLElement>('building-presentation-note');
@@ -118,33 +115,38 @@ visitorName.value = rememberedName();
 const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
 document.querySelector('.heritage-evidence')?.append(createHeritageDiagram());
-visitorMessage.closest('label')?.after(createWordChips(words => { visitorMessage.value = words; }));
 
-// Time of day: 日光 or 黃昏, remembered in this browser.
-const TIME_OF_DAY_KEY = 'birds-in-hk:time-of-day';
-function showTimeOfDay(time: TimeOfDay): void {
-  for (const button of timeOfDayControl.querySelectorAll<HTMLButtonElement>('button[data-time]')) {
-    button.setAttribute('aria-pressed', String(button.dataset.time === time));
-  }
+// Your bird: species and feather colour, with a turning preview; remembered in this browser.
+const PLUMAGE_KEY = 'birds-in-hk:plumage';
+const plumagePicker = requireElement<HTMLFieldSetElement>('plumage-picker');
+const birdPreview = new BirdPreview(requireElement<HTMLCanvasElement>('bird-preview'));
+let savedPlumage: PlumageId = 'natural';
+try { savedPlumage = getPlumage(localStorage.getItem(PLUMAGE_KEY)).id; } catch { /* storage blocked */ }
+for (const plumage of PLUMAGES) {
+  const label = document.createElement('label');
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = 'plumage';
+  input.value = plumage.id;
+  input.checked = plumage.id === savedPlumage;
+  const swatch = document.createElement('span');
+  swatch.className = 'plumage-swatch';
+  swatch.style.background = plumage.main ? `linear-gradient(135deg, ${plumage.main} 0 62%, ${plumage.dark} 62% 100%)` : 'linear-gradient(135deg, #97a0ad 0 40%, #3f8a6c 40% 62%, #f5f6f1 62% 100%)';
+  const name = document.createElement('small');
+  name.textContent = plumage.label;
+  label.append(input, swatch, name);
+  plumagePicker.append(label);
 }
-function savedTimeOfDay(): TimeOfDay {
-  try {
-    const saved = localStorage.getItem(TIME_OF_DAY_KEY);
-    return isTimeOfDay(saved) ? saved : 'day';
-  } catch {
-    return 'day';
+const refreshPreview = (): void => birdPreview.set(selectedBirdProfileId(), selectedPlumageId());
+refreshPreview();
+document.addEventListener('change', event => {
+  const target = event.target as HTMLInputElement | null;
+  if (target?.name === 'plumage') {
+    try { localStorage.setItem(PLUMAGE_KEY, target.value); } catch { /* per-browser convenience */ }
   }
-}
-game.setTimeOfDay(savedTimeOfDay(), true);
-showTimeOfDay(savedTimeOfDay());
-timeOfDayControl.addEventListener('click', event => {
-  const time = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-time]')?.dataset.time;
-  if (!isTimeOfDay(time)) return;
-  game.setTimeOfDay(time);
-  showTimeOfDay(time);
-  try { localStorage.setItem(TIME_OF_DAY_KEY, time); } catch { /* per-browser convenience */ }
-  canvas.focus?.();
+  if (target?.name === 'plumage' || target?.name === 'bird-profile') refreshPreview();
 });
+
 // Layer switches, frame rate and data-source state are working tools, not part of the memorial:
 // shown only in development or with ?tools in the address.
 if (import.meta.env.DEV || new URLSearchParams(location.search).has('tools')) document.body.dataset.tools = 'on';
@@ -179,7 +181,7 @@ buildingPresentation.addEventListener('change', () => {
 visitorForm.addEventListener('submit', event => {
   event.preventDefault();
   const kind = new FormData(visitorForm).get('flower-kind');
-  const result = readVisitorForm(visitorName.value, visitorMessage.value, kind);
+  const result = readVisitorForm(visitorName.value, '', kind);
   visitorError.hidden = !result.error;
   visitorError.textContent = result.error ?? '';
   if (!result.visitor) return;
@@ -193,8 +195,12 @@ googleMapsButton.addEventListener('click', () => void openGoogleMapsContext());
 googleMapsCloseButton.addEventListener('click', closeGoogleMapsContext);
 googleMapsButton.hidden = !googleMapsConfigured;
 
-canvas.addEventListener('click', () => {
-  if (currentScreen === 'game') void canvas.requestPointerLock();
+canvas.addEventListener('click', event => {
+  if (currentScreen !== 'game') return;
+  // A click on a flower opens its words; with the pointer locked, the flower at the centre of the view.
+  const locked = document.pointerLockElement === canvas;
+  if (openWorld.pickFlowerAt(locked ? window.innerWidth / 2 : event.clientX, locked ? window.innerHeight / 2 : event.clientY)) return;
+  void canvas.requestPointerLock();
 });
 
 document.addEventListener('mousemove', event => {
@@ -305,6 +311,8 @@ async function beginFlight(): Promise<void> {
     const region = getFlightRegion(selectedRegionId());
     const birdProfile = selectedBirdProfileId();
     game.setBirdProfile(birdProfile);
+    game.setBirdPlumage(selectedPlumageId());
+    birdPreview.dispose();
     mapStateValue.textContent = `${region.englishLabel} · CSDI LIVE`;
     await Promise.all([
       game.loadWorld(region.id, updateLoading),
@@ -411,10 +419,11 @@ function showScreen(screen: ScreenName): void {
   currentScreen = screen;
   app.dataset.screen = screen;
   for (const [name, element] of Object.entries(screens)) element.hidden = name !== screen;
+  if (screen === 'menu') birdPreview.start();
+  else birdPreview.stop();
   const inGame = screen === 'game';
   gameHud.hidden = !inGame;
   controlsHint.hidden = !inGame;
-  timeOfDayControl.hidden = !inGame;
   worldPanel.element.hidden = !inGame;
   openWorld.setVisible(inGame);
   touchControls.setVisible(inGame && !worldPanel.element.open);
@@ -462,6 +471,11 @@ function delay(milliseconds: number): Promise<void> {
 function selectedRegionId(): FlightRegionId {
   const selected = document.querySelector<HTMLInputElement>('input[name="flight-region"]:checked');
   return getFlightRegion(selected?.value).id;
+}
+
+function selectedPlumageId(): PlumageId {
+  const selected = document.querySelector<HTMLInputElement>('input[name="plumage"]:checked');
+  return getPlumage(selected?.value).id;
 }
 
 function selectedBirdProfileId(): BirdProfileId {

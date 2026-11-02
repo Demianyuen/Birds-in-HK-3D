@@ -26,19 +26,20 @@
           <fieldset class="flower-picker">
             <legend>帶一朵花</legend>
             <label><input type="radio" name="flower-kind" value="white-chrysanthemum" checked /><span>白菊</span></label>
-            <label><input type="radio" name="flower-kind" value="yellow-chrysanthemum" /><span>黃菊</span></label>
             <label><input type="radio" name="flower-kind" value="lily" /><span>白百合</span></label>
+            <label><input type="radio" name="flower-kind" value="white-rose" /><span>白玫瑰</span></label>
+            <label><input type="radio" name="flower-kind" value="white-carnation" /><span>白康乃馨</span></label>
+            <label><input type="radio" name="flower-kind" value="ginger-lily" /><span>姜花</span></label>
+            <label><input type="radio" name="flower-kind" value="white-lotus" /><span>白蓮</span></label>
+            <label><input type="radio" name="flower-kind" value="white-orchid" /><span>白蝴蝶蘭</span></label>
+            <label><input type="radio" name="flower-kind" value="yellow-chrysanthemum" /><span>黃菊</span></label>
             <label><input type="radio" name="flower-kind" value="lantern" /><span>紙燈</span></label>
           </fieldset>
-          <label class="visitor-field">
-            <span>想留下的話（可以留空）</span>
-            <textarea id="visitor-message" name="message" maxlength="200" rows="3" placeholder="寫給宏福苑的一句話"></textarea>
-          </label>
           <p id="visitor-error" class="visitor-error" role="alert" hidden></p>
           <div class="visitor-actions">
             <button id="continue-button" class="primary-button" type="submit">帶著花出發</button>
           </div>
-          <p class="visitor-privacy">名字和花會即時讓其他人看到；留言會先由管理員看過，才與大家分享。請不要寫電話、地址或他人私隱。</p>
+          <p class="visitor-privacy">名字和花會即時讓其他人看到。降落在宏福苑放花時，可以再寫下想說的話。</p>
         </form>
         <p class="source-credit">3D：地政總署 CSDI · 地面：OpenStreetMap · 高程：AWS Terrarium</p>
       </section>
@@ -46,13 +47,19 @@
       <section id="menu-screen" class="screen menu-screen" aria-labelledby="menu-title" hidden>
         <div class="menu-content">
           <p class="place-name">OFFICIAL 3D HONG KONG</p>
-          <h2 id="menu-title">選擇飛行地區</h2>
+          <h2 id="menu-title">你的小鳥</h2>
           <fieldset class="bird-picker">
             <legend>選擇雀鳥</legend>
             <label><input type="radio" name="bird-profile" value="pigeon" checked /><span><strong>香港白鴿</strong><small>灰鴿 · 拍翼與滑翔交替</small></span></label>
             <label><input type="radio" name="bird-profile" value="dove" /><span><strong>白鴿</strong><small>和平白鴿 · 輕盈穩定</small></span></label>
             <label><input type="radio" name="bird-profile" value="eagle" /><span><strong>麻鷹</strong><small>長翼 · 高空盤旋滑翔</small></span></label>
           </fieldset>
+          <div class="bird-customise">
+            <canvas id="bird-preview" class="bird-preview" aria-hidden="true"></canvas>
+            <fieldset id="plumage-picker" class="plumage-picker">
+              <legend>羽色</legend>
+            </fieldset>
+          </div>
           <fieldset class="region-picker">
             <legend>飛行地區</legend>
             <label>
@@ -142,10 +149,6 @@
         <p id="google-maps-status" class="google-maps-status"></p>
       </aside>
 
-      <div id="time-of-day" class="time-of-day" role="group" aria-label="時段" hidden>
-        <button type="button" data-time="day" aria-pressed="true">日光</button>
-        <button type="button" data-time="dusk" aria-pressed="false">黃昏</button>
-      </div>
       <div id="controls-hint" class="controls-hint" hidden>
         <span>游標指向</span> 轉向 · <span>點一下畫面</span> 鎖定滑鼠（Esc 釋放）· <span>WASD</span> 方向 · <span>Shift</span> 加速 · <span>Space</span> 拍翼／離牆 · 落地後 <span>W / S</span> 行走 · 停下時<span>移動滑鼠</span>環顧四周 · 撞牆後 <span>W / S</span> 攀爬 · <span>F</span> 放花 · <span>Enter</span> 說話
       </div>

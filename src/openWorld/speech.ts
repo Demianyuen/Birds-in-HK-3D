@@ -1,5 +1,4 @@
 import { CHAT_MAX } from './contentRules';
-import { createWordChips } from './wordChips';
 
 /** A line stays over the bird for 15 seconds at most; a newer line replaces it at once. */
 export const BUBBLE_SECONDS = 15;
@@ -88,11 +87,7 @@ export class SpeechInput {
     this.input.enterKeyHint = 'send';
     this.input.placeholder = '說一句話… Enter 說出 · Esc 取消';
     this.input.setAttribute('aria-label', '說一句話，按 Enter 說出，Esc 取消');
-    const chips = createWordChips(words => {
-      this.close();
-      this.onSay(words);
-    }, '一按說出');
-    this.element.append(chips, this.input);
+    this.element.append(this.input);
     this.element.addEventListener('submit', event => {
       event.preventDefault();
       const text = this.input.value.trim();

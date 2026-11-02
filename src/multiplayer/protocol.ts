@@ -8,6 +8,8 @@ export interface WorldPlayer {
   position: Position;
   quaternion: Rotation;
   perched: boolean;
+  /** Feather colour the visitor chose (see PLUMAGES); absent means natural. */
+  plumage?: string;
 }
 export type ServerMessage =
   | { type: 'welcome'; id: string; room: string; protocol: 2; resumeToken?: string; resumed?: boolean; player?: WorldPlayer }

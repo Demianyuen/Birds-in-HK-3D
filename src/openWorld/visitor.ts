@@ -16,6 +16,11 @@ const ID_KEY = 'birds-in-hk:visitor-id';
 
 export const FLOWER_LABELS: Readonly<Record<FlowerKind, string>> = Object.freeze({
   'white-chrysanthemum': '白菊',
+  'white-rose': '白玫瑰',
+  'white-carnation': '白康乃馨',
+  'ginger-lily': '姜花',
+  'white-lotus': '白蓮',
+  'white-orchid': '白蝴蝶蘭',
   'yellow-chrysanthemum': '黃菊',
   lily: '白百合',
   lantern: '紙燈',

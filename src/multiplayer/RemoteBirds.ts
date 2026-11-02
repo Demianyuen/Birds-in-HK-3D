@@ -1,6 +1,7 @@
-import { Group, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Vector3, SphereGeometry, ConeGeometry, BufferGeometry, DynamicDrawUsage } from 'three';
+import { Color, Group, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Vector3, SphereGeometry, ConeGeometry, BufferGeometry, DynamicDrawUsage } from 'three';
 import { WORLD_PLAYER_LIMIT, type WorldPlayer } from './protocol';
 import { WALK_SCALE } from '../game/BirdController';
+import { getPlumage } from '../game/birdProfiles';
 
 interface RemoteBird {
   position: Vector3;
@@ -14,12 +15,14 @@ interface RemoteBird {
   name: string;
   /** Pose already smoothed by the caller: draw it as given. */
   direct: boolean;
+  /** Feather colour (linear), from the plumage the visitor chose. */
+  colour: Color;
 }
 
 export class RemoteBirds {
   readonly group = new Group();
   private readonly birds = new Map<string, RemoteBird>();
-  private readonly batches: Array<{ mesh: InstancedMesh; local: Matrix4; wing: number }> = [];
+  private readonly batches: Array<{ mesh: InstancedMesh; local: Matrix4; wing: number; tinted: boolean }> = [];
   private readonly geometries = new Set<BufferGeometry>();
   private readonly materials = new Set<MeshStandardMaterial>();
   private readonly transform = new Matrix4();
@@ -68,7 +71,8 @@ export class RemoteBirds {
     mesh.frustumCulled = false;
     this.group.add(mesh);
     const local = new Matrix4().compose(new Vector3().fromArray(position), new Quaternion(), new Vector3().fromArray(size));
-    this.batches.push({ mesh, local, wing });
+    const tinted = !['beak', 'eye-left', 'eye-right'].includes(name);
+    this.batches.push({ mesh, local, wing, tinted });
   }
 
   sync(players: readonly WorldPlayer[], direct = false): void {
@@ -89,6 +93,7 @@ export class RemoteBirds {
           size: player.perched ? WALK_SCALE : 1,
           name: player.name,
           direct,
+          colour: plumageColour(player.plumage),
         };
         this.birds.set(player.id, bird);
       }
@@ -97,6 +102,7 @@ export class RemoteBirds {
       bird.perched = player.perched;
       bird.name = player.name;
       bird.direct = direct;
+      if (player.plumage !== undefined) bird.colour = plumageColour(player.plumage);
     }
     this.update(0);
   }
@@ -124,12 +130,14 @@ export class RemoteBirds {
           this.combined.multiply(this.localWing);
         }
         batch.mesh.setMatrixAt(index, this.combined);
+        if (batch.tinted) batch.mesh.setColorAt(index, bird.colour);
       }
       index++;
     }
     for (const batch of this.batches) {
       batch.mesh.count = index;
       batch.mesh.instanceMatrix.needsUpdate = true;
+      if (batch.mesh.instanceColor) batch.mesh.instanceColor.needsUpdate = true;
     }
   }
 
@@ -148,4 +156,12 @@ export class RemoteBirds {
     this.group.clear();
     this.group.removeFromParent();
   }
+}
+
+const NATURAL_REMOTE = '#b4bac2';
+
+/** Feather colour for another visitor's bird (instanced colours multiply the near-white material). */
+function plumageColour(id: string | undefined): Color {
+  const plumage = getPlumage(id);
+  return new Color(plumage.main || NATURAL_REMOTE);
 }

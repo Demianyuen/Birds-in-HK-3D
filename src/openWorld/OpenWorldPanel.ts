@@ -12,6 +12,7 @@ import { FLOWER_LABELS, type Visitor } from './visitor';
 import { WorldLabels, type WorldLabel } from './WorldLabels';
 import { findSpeaker, SpeechBubbles, SpeechInput } from './speech';
 import { createWordChips } from './wordChips';
+import { RadarMap } from './RadarMap';
 
 const FLOWER_REFRESH_MS = 30_000;
 /** Flowers waiting to reach the shared service are offered again this often. */
@@ -21,10 +22,14 @@ const LOCAL_FLOWERS_KEY = 'birds-in-hk:my-flowers';
 const LOCAL_FLOWER_CAP = 300;
 /** Last flower total seen, so the count is there at once on the next visit. */
 const FLOWER_TOTAL_KEY = 'birds-in-hk:flower-total';
-/** Words left with flowers show when the bird is this close (m, across the ground). */
-const FLOWER_LABEL_RADIUS = 12;
-/** ...and no more than this far above or below them (m). */
-const FLOWER_LABEL_HEIGHT = 10;
+/** Flowers can be clicked to read their words from this close (m, across the ground)... */
+const FLOWER_PICK_RADIUS = 60;
+/** ...and the words close again once the bird is this far away. */
+const FLOWER_LABEL_KEEP = 80;
+/** A click this close to a flower on screen (px) picks it. */
+const FLOWER_PICK_PIXELS = 42;
+/** The hint to click a flower shows when the bird is this close to one (m). */
+const FLOWER_HINT_RADIUS = 14;
 /** Words this visitor left with their own flowers, kept so they can read them before approval. */
 const OWN_WORDS_KEY = 'birds-in-hk:my-words';
 const OWN_WORDS_CAP = 60;
@@ -54,6 +59,13 @@ export class OpenWorldPanel {
   private readonly speech: SpeechInput;
   private readonly speakButton = document.createElement('button');
   private readonly bubbles = new SpeechBubbles();
+  /** Round map in the corner that turns with the bird. */
+  private readonly radar = new RadarMap();
+  /** The flower whose words are open (clicked), if any. */
+  private selectedFlower: string | null = null;
+  private readonly screenPoint = new Vector3();
+  private viewWidth = 1;
+  private viewHeight = 1;
   private visitor: Visitor | null = null;
   private placing = false;
   private flowerTimer = 0;
@@ -139,7 +151,7 @@ export class OpenWorldPanel {
     try {
       const { LiveWorld: Live } = await import('./LiveWorld');
       if (this.liveWorld) return;
-      const live = new Live(config, { id: visitor.id, name: visitor.name }, {
+      const live = new Live(config, { id: visitor.id, name: visitor.name, plumage: this.game.birdPlumage }, {
         onStatus: status => this.showStatus(status),
         onChat: line => this.appendChat(line),
       });
@@ -157,6 +169,7 @@ export class OpenWorldPanel {
     this.labels.element.hidden = !visible;
     this.danmaku.setVisible(visible);
     this.speakButton.hidden = !visible;
+    this.radar.setVisible(visible);
     if (!visible) {
       this.speech.close();
       this.prompt.hidden = true;
@@ -195,6 +208,19 @@ export class OpenWorldPanel {
     }
     this.danmaku.update(deltaSeconds);
     this.game.flowers.showGuide(Boolean(this.visitor && !this.visitor.placed));
+    this.viewWidth = width;
+    this.viewHeight = height;
+    this.radar.setStreets(this.game.streetData);
+    const position = this.game.birdPosition;
+    this.radar.draw({
+      x: position.x,
+      z: position.z,
+      yaw: this.game.birdYaw,
+      grounded: Boolean(this.game.birdGroundPoint),
+      peers: this.game.remoteBirdLabels.map(remote => ({ x: remote.position.x, z: remote.position.z })),
+      court: MEMORIAL_CENTRE,
+      carrying: Boolean(this.visitor && !this.visitor.placed),
+    });
     this.updatePrompt();
     this.labels.render(this.collectLabels(), this.game.viewCamera, width, height);
     if (this.speech.open) this.speech.place(this.labels.project(this.ownHead(), this.game.viewCamera, width, height));
@@ -203,6 +229,38 @@ export class OpenWorldPanel {
   /** Flowers at the memorial: what is loaded now, or the last total seen while loading. */
   public get flowerTotal(): number {
     return Math.max(this.game.flowers.count, readFlowerTotal());
+  }
+
+  /**
+   * A click in the world: open the words of the flower under (or nearest to) the click.
+   * Returns true when the click was used (a flower opened, or the open words closed).
+   */
+  public pickFlowerAt(clientX: number, clientY: number): boolean {
+    if (!this.active) return false;
+    const camera = this.game.viewCamera;
+    const bird = this.game.birdPosition;
+    let best: string | null = null;
+    let bestPixels = FLOWER_PICK_PIXELS;
+    for (const { flower } of this.game.flowers.nearest(bird, FLOWER_PICK_RADIUS, 400, FLOWER_PICK_RADIUS)) {
+      this.screenPoint.set(flower.x, this.game.flowers.displayY(flower) + 0.2, flower.z).project(camera);
+      if (this.screenPoint.z > 1) continue;
+      const x = (this.screenPoint.x * 0.5 + 0.5) * this.viewWidth;
+      const y = (-this.screenPoint.y * 0.5 + 0.5) * this.viewHeight;
+      const pixels = Math.hypot(x - clientX, y - clientY);
+      if (pixels < bestPixels) {
+        best = flower.id;
+        bestPixels = pixels;
+      }
+    }
+    if (best) {
+      this.selectedFlower = best === this.selectedFlower ? null : best;
+      return true;
+    }
+    if (this.selectedFlower) {
+      this.selectedFlower = null;
+      return true;
+    }
+    return false;
   }
 
   /** F key. */
@@ -246,13 +304,14 @@ export class OpenWorldPanel {
     this.element.remove();
     this.speech.element.remove();
     this.speakButton.remove();
+    this.radar.element.remove();
     this.prompt.remove();
     this.placeButton.remove();
   }
 
   /** Attach the floating prompt and button to the game container. */
   public mount(container: HTMLElement): void {
-    container.append(this.labels.element, this.danmaku.element, this.danmaku.toggleButton, this.prompt, this.placeButton, this.card, this.element, this.speakButton, this.speech.element);
+    container.append(this.labels.element, this.danmaku.element, this.danmaku.toggleButton, this.prompt, this.placeButton, this.card, this.element, this.speakButton, this.speech.element, this.radar.element);
   }
 
   private buildCard(): void {
@@ -365,6 +424,9 @@ export class OpenWorldPanel {
       }
       this.placeButton.textContent = `放下${flower}（F）`;
     }
+    if (!text && !canPlace && !this.selectedFlower && this.game.flowers.nearest(this.game.birdPosition, FLOWER_HINT_RADIUS, 1, 8).length > 0) {
+      text = '點一下花朵，可以讀到留下的話。';
+    }
     if (!this.card.hidden && !canPlace) this.card.hidden = true;
     this.prompt.textContent = text;
     this.prompt.hidden = !text || !this.card.hidden;
@@ -431,13 +493,16 @@ export class OpenWorldPanel {
     const now = performance.now();
     const bird = this.game.birdPosition;
     const own = readOwnWords();
-    for (const { flower } of this.game.flowers.nearest(bird, FLOWER_LABEL_RADIUS, 3, FLOWER_LABEL_HEIGHT)) {
+    const selected = this.selectedFlower ? this.game.flowers.get(this.selectedFlower) : null;
+    if (selected && Math.hypot(selected.x - bird.x, selected.z - bird.z) > FLOWER_LABEL_KEEP) this.selectedFlower = null;
+    else if (selected) {
+      const flower = selected;
       const title = flower.name ? `${flower.name} · ${FLOWER_LABELS[flower.kind]}` : `一朵${FLOWER_LABELS[flower.kind]}`;
       const mine = !flower.message && own[flower.id];
       labels.push({
         id: `flower-${flower.id}`,
         title,
-        body: flower.message || (mine ? `${mine}\n（暫時只有你看得到）` : undefined),
+        body: flower.message || (mine ? `${mine}\n（暫時只有你看得到）` : '（沒有留下文字）'),
         position: new Vector3(flower.x, this.game.flowers.displayY(flower) + 0.45, flower.z),
         tone: 'flower',
       });

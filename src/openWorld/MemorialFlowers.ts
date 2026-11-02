@@ -106,7 +106,7 @@ export class MemorialFlowers {
     });
     this.disposables.push(petals, lanternMaterial);
     for (const kind of FLOWER_KINDS) {
-      const geometry = kind === 'lantern' ? lanternGeometry() : kind === 'lily' ? lilyGeometry() : chrysanthemumGeometry(kind);
+      const geometry = flowerGeometry(kind);
       this.disposables.push(geometry);
       const mesh = new InstancedMesh(geometry, kind === 'lantern' ? lanternMaterial : petals, CAPACITY);
       mesh.name = `Memorial ${kind}`;
@@ -306,6 +306,10 @@ export class MemorialFlowers {
     }
   }
 
+  public get(id: string): MemorialFlower | null {
+    return this.flowers.get(id) ?? null;
+  }
+
   /** Every flower shown now. */
   public get all(): MemorialFlower[] {
     return [...this.flowers.values()];
@@ -464,7 +468,7 @@ export class MemorialFlowers {
 
 /** A single flower for the bird to carry in its beak (owned and disposed by the caller). */
 export function createCarriedFlower(kind: FlowerKind): Group {
-  const geometry = kind === 'lantern' ? lanternGeometry() : kind === 'lily' ? lilyGeometry() : chrysanthemumGeometry(kind);
+  const geometry = flowerGeometry(kind);
   const material = new MeshStandardMaterial({
     vertexColors: true, flatShading: true, roughness: 0.75, metalness: 0,
     // A little light of its own so the white bloom reads against the sky from behind the bird.
@@ -533,6 +537,174 @@ function stem(height: number): BufferGeometry[] {
   leafB.rotateY(Math.PI);
   leafB.translate(0, height * 0.12, 0);
   return [paint(shaft, '#4f7a3a'), paint(leafA, '#58873f'), paint(leafB, '#58873f')];
+}
+
+/** The model for each kind of flower: real size (about 0.3 m), stem along +y, standing at the origin. */
+export function flowerGeometry(kind: FlowerKind): BufferGeometry {
+  switch (kind) {
+    case 'lantern': return lanternGeometry();
+    case 'lily': return lilyGeometry();
+    case 'white-rose': return roseGeometry();
+    case 'white-carnation': return carnationGeometry();
+    case 'ginger-lily': return gingerLilyGeometry();
+    case 'white-lotus': return lotusGeometry();
+    case 'white-orchid': return orchidGeometry();
+    default: return chrysanthemumGeometry(kind);
+  }
+}
+
+/** White rose: a cupped spiral of petals around a closed heart. */
+function roseGeometry(): BufferGeometry {
+  const height = 0.27;
+  const parts = stem(height);
+  const top = height + 0.02;
+  const bud = new SphereGeometry(1, 7, 5);
+  bud.scale(0.022, 0.03, 0.022);
+  bud.translate(0, top + 0.012, 0);
+  parts.push(paint(bud, '#ece6d4'));
+  const rings = [{ count: 5, r: 0.014, tilt: 0.25, size: 0.026 }, { count: 5, r: 0.024, tilt: 0.55, size: 0.032 }, { count: 6, r: 0.032, tilt: 0.9, size: 0.036 }];
+  rings.forEach((ring, level) => {
+    for (let index = 0; index < ring.count; index += 1) {
+      const petal = new SphereGeometry(1, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+      petal.scale(ring.size, ring.size * 0.9, ring.size * 0.28);
+      petal.rotateX(-Math.PI / 2 + ring.tilt);
+      petal.translate(0, 0, ring.r);
+      petal.rotateY((index / ring.count) * Math.PI * 2 + level * 0.5);
+      petal.translate(0, top + 0.004 * (2 - level), 0);
+      parts.push(paint(petal, level === 0 ? '#f1ece0' : '#f8f6ef'));
+    }
+  });
+  for (let index = 0; index < 5; index += 1) {
+    const sepal = new ConeGeometry(0.006, 0.03, 3);
+    sepal.rotateZ(-Math.PI / 2 - 0.6);
+    sepal.translate(0.018, 0, 0);
+    sepal.rotateY((index / 5) * Math.PI * 2);
+    sepal.translate(0, top - 0.012, 0);
+    parts.push(paint(sepal, '#4f7a3a'));
+  }
+  return mergeGeometries(parts)!;
+}
+
+/** White carnation: a ruffled dome of frilled petals on a green calyx. */
+function carnationGeometry(): BufferGeometry {
+  const height = 0.29;
+  const parts = stem(height);
+  const calyx = new CylinderGeometry(0.014, 0.009, 0.035, 6);
+  calyx.translate(0, height + 0.005, 0);
+  parts.push(paint(calyx, '#5e8b45'));
+  const top = height + 0.03;
+  for (let index = 0; index < 22; index += 1) {
+    const ring = index < 9 ? 0 : index < 17 ? 1 : 2;
+    const angle = index * 2.399;
+    const radius = [0.036, 0.024, 0.01][ring];
+    const frill = new IcosahedronGeometry(1, 0);
+    frill.scale(0.022, 0.009, 0.018);
+    frill.rotateZ(0.5 - ring * 0.25);
+    frill.translate(radius, 0, 0);
+    frill.rotateY(angle);
+    frill.translate(0, top + ring * 0.011, 0);
+    parts.push(paint(frill, ring === 2 ? '#eeeae0' : '#faf9f4'));
+  }
+  return mergeGeometries(parts)!;
+}
+
+/** Ginger lily (姜花), common on Hong Kong hillsides: white butterfly-like flowers on a green spike. */
+function gingerLilyGeometry(): BufferGeometry {
+  const height = 0.3;
+  const parts = stem(height);
+  for (const side of [-1, 1]) {
+    const leaf = new SphereGeometry(1, 6, 3);
+    leaf.scale(0.09, 0.006, 0.022);
+    leaf.rotateZ(side * 0.45);
+    leaf.translate(side * 0.07, height * 0.55, 0);
+    parts.push(paint(leaf, '#4b7d3c'));
+  }
+  const spike = new ConeGeometry(0.018, 0.06, 6);
+  spike.translate(0, height + 0.02, 0);
+  parts.push(paint(spike, '#6f9a4e'));
+  for (let index = 0; index < 4; index += 1) {
+    const angle = (index / 4) * Math.PI * 2 + 0.3;
+    const y = height + 0.03 + (index % 2) * 0.012;
+    for (const wing of [-1, 1]) {
+      const petal = new SphereGeometry(1, 6, 3);
+      petal.scale(0.026, 0.004, 0.02);
+      petal.rotateY(wing * 0.6);
+      petal.rotateZ(0.35);
+      petal.translate(0.038, 0, wing * 0.012);
+      petal.rotateY(angle);
+      petal.translate(0, y, 0);
+      parts.push(paint(petal, '#fbfaf5'));
+    }
+    const lip = new SphereGeometry(1, 5, 3);
+    lip.scale(0.012, 0.004, 0.014);
+    lip.translate(0.052, -0.004, 0);
+    lip.rotateY(angle);
+    lip.translate(0, y, 0);
+    parts.push(paint(lip, '#f4efd9'));
+  }
+  return mergeGeometries(parts)!;
+}
+
+/** White lotus: pointed petals cupped around a golden seed head. */
+function lotusGeometry(): BufferGeometry {
+  const height = 0.2;
+  const shaft = new CylinderGeometry(0.009, 0.011, height, 6);
+  shaft.translate(0, height / 2, 0);
+  const parts = [paint(shaft, '#557f3f')];
+  const top = height + 0.01;
+  const pod = new CylinderGeometry(0.022, 0.016, 0.02, 10);
+  pod.translate(0, top + 0.02, 0);
+  parts.push(paint(pod, '#e3c35a'));
+  [{ count: 8, tilt: 0.85, length: 0.065 }, { count: 7, tilt: 0.45, length: 0.058 }].forEach((ring, level) => {
+    for (let index = 0; index < ring.count; index += 1) {
+      const petal = new SphereGeometry(1, 6, 4);
+      petal.scale(0.022, ring.length * 0.5, 0.008);
+      petal.translate(0, ring.length * 0.5, 0);
+      petal.rotateX(ring.tilt);
+      petal.translate(0, 0, 0.016);
+      petal.rotateY((index / ring.count) * Math.PI * 2 + level * 0.4);
+      petal.translate(0, top, 0);
+      parts.push(paint(petal, level === 0 ? '#f7f1ee' : '#fbf9f6'));
+    }
+  });
+  return mergeGeometries(parts)!;
+}
+
+/** White moth orchid (蝴蝶蘭): an arching stem with three flat flowers. */
+function orchidGeometry(): BufferGeometry {
+  const parts: BufferGeometry[] = [];
+  const points: Array<[number, number]> = [[0, 0], [0.01, 0.12], [0.03, 0.22], [0.07, 0.29], [0.12, 0.32], [0.17, 0.31]];
+  for (let index = 1; index < points.length; index += 1) {
+    const [x0, y0] = points[index - 1];
+    const [x1, y1] = points[index];
+    const length = Math.hypot(x1 - x0, y1 - y0);
+    const piece = new CylinderGeometry(0.005, 0.006, length, 5);
+    piece.rotateZ(-Math.atan2(x1 - x0, y1 - y0));
+    piece.translate((x0 + x1) / 2, (y0 + y1) / 2, 0);
+    parts.push(paint(piece, '#5d7f45'));
+  }
+  const leaf = new SphereGeometry(1, 6, 3);
+  leaf.scale(0.07, 0.008, 0.03);
+  leaf.translate(-0.03, 0.01, 0);
+  parts.push(paint(leaf, '#3f6b33'));
+  for (const [x, y, size] of [[0.07, 0.29, 0.9], [0.12, 0.32, 1], [0.17, 0.3, 0.85]] as const) {
+    const flower: BufferGeometry[] = [];
+    for (const [angle, w, h] of [[0, 0.03, 0.026], [Math.PI, 0.03, 0.026], [Math.PI / 2, 0.014, 0.024], [-Math.PI / 2 - 0.5, 0.012, 0.022], [-Math.PI / 2 + 0.5, 0.012, 0.022]] as const) {
+      const petal = new SphereGeometry(1, 6, 3);
+      petal.scale(w * size, h * size, 0.004);
+      petal.translate(0, h * size * 0.8, 0);
+      petal.rotateZ(angle - Math.PI / 2);
+      flower.push(paint(petal, '#fdfcf8'));
+    }
+    const lip = new SphereGeometry(1, 5, 3);
+    lip.scale(0.008 * size, 0.012 * size, 0.006);
+    lip.translate(0, -0.008 * size, 0.004);
+    flower.push(paint(lip, '#e9c46a'));
+    const merged = mergeGeometries(flower)!;
+    merged.translate(x, y - 0.02, 0.012);
+    parts.push(merged);
+  }
+  return mergeGeometries(parts)!;
 }
 
 /** Chrysanthemum: a dense ball of thin petals on a stem. */

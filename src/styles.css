@@ -732,25 +732,36 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
 .speech-compose .word-chips { justify-content: center; margin: 0 0 8px; width: min(300px, calc(100vw - 48px)); }
 .speech-compose .word-chip { background: rgba(8, 20, 26, 0.72); border-color: rgba(255, 255, 255, 0.3); color: #f5f8f6; }
 
-/* Time of day: a quiet two-way switch, top right. */
-.time-of-day {
+
+/* Radar: a round map in the top-right corner that turns with the bird. */
+.radar-map {
   position: absolute;
   top: 16px;
   right: 16px;
   z-index: 7;
-  display: flex;
-  padding: 3px;
-  border-radius: 999px;
-  background: rgba(5, 16, 22, 0.55);
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
 }
-.time-of-day button {
-  padding: 5px 12px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: #dfe9e6;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
+.radar-map canvas { display: block; width: 100%; height: 100%; }
+@media (max-width: 720px) {
+  .radar-map { width: 112px; height: 112px; top: 10px; right: 10px; }
 }
-.time-of-day button[aria-pressed='true'] { background: rgba(255, 236, 206, 0.9); color: #2a2620; }
+
+/* Your bird: a turning preview and feather colours. */
+.bird-customise { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: center; margin: 4px 0; }
+.bird-preview { width: 100%; height: 170px; display: block; }
+.plumage-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; border: 0; }
+.plumage-picker legend { grid-column: 1 / -1; margin-bottom: 2px; color: #a9b9b7; font-size: 10px; font-weight: 800; }
+.plumage-picker label { position: relative; display: grid; justify-items: center; gap: 4px; cursor: pointer; }
+.plumage-picker input { position: absolute; opacity: 0; pointer-events: none; }
+.plumage-swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.25); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25); }
+.plumage-picker small { color: #cfdcda; font-size: 11px; }
+.plumage-picker input:checked + .plumage-swatch { border-color: #f1d39a; box-shadow: 0 0 0 3px rgba(241, 211, 154, 0.35); }
+.plumage-picker input:focus-visible + .plumage-swatch { outline: 2px solid #f1d39a; outline-offset: 2px; }
+@media (max-width: 720px) {
+  .bird-customise { grid-template-columns: 1fr; }
+  .bird-preview { height: 130px; }
+}

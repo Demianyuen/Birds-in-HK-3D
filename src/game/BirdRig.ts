@@ -15,7 +15,7 @@ import {
   SphereGeometry,
   BoxGeometry,
 } from 'three';
-import type { BirdProfileId } from './birdProfiles';
+import { getPlumage, PLUMAGES, type BirdProfileId, type Plumage, type PlumageId } from './birdProfiles';
 import {
   blendPoses,
   flapFrequency,
@@ -82,6 +82,35 @@ const PALETTES: Readonly<Record<BirdProfileId, Palette>> = Object.freeze({
   },
 });
 
+const FEATHER_KEYS = ['body', 'breast', 'rump', 'head', 'coverts', 'secondaries', 'tail'] as const;
+const DARK_KEYS = ['primaries', 'tailTip'] as const;
+
+/**
+ * The species palette recoloured to a chosen plumage: each feather area keeps its
+ * light or shade relative to the body, so the bird still reads as itself.
+ */
+export function applyPlumage(palette: Palette, plumage: Plumage): Palette {
+  if (!plumage.main) return palette;
+  const main = new Color(plumage.main);
+  const dark = new Color(plumage.dark);
+  const bodyLight = luminance(new Color(palette.body)) || 1;
+  const result: Palette = { ...palette };
+  for (const key of FEATHER_KEYS) {
+    const ratio = Math.min(1.18, Math.max(0.78, luminance(new Color(palette[key])) / bodyLight));
+    result[key] = `#${main.clone().multiplyScalar(ratio).getHexString()}`;
+  }
+  for (const key of DARK_KEYS) result[key] = `#${dark.getHexString()}`;
+  if (palette.wingBar) result.wingBar = `#${dark.getHexString()}`;
+  if (palette.primaryPatch) result.primaryPatch = `#${main.clone().lerp(new Color('#ffffff'), 0.35).getHexString()}`;
+  result.neck = `#${main.clone().lerp(new Color(palette.neck), 0.3).getHexString()}`;
+  result.neckSheen = `#${main.clone().lerp(new Color(palette.neckSheen), 0.35).getHexString()}`;
+  return result;
+}
+
+function luminance(colour: Color): number {
+  return colour.r * 0.2126 + colour.g * 0.7152 + colour.b * 0.0722;
+}
+
 const SHAPES: Readonly<Record<BirdProfileId, Shape3>> = Object.freeze({
   pigeon: { wingspan: 1, forkedTail: false, scale: 0.82 },
   dove: { wingspan: 1.04, forkedTail: false, scale: 0.8 },
@@ -125,6 +154,7 @@ export class BirdRig {
     vertexColors: true, flatShading: true, roughness: 0.38, metalness: 0.32,
   });
   private profileId: BirdProfileId = 'pigeon';
+  private plumage: Plumage = PLUMAGES[0];
   private shape: Shape3 = SHAPES.pigeon;
 
   private phase = 0;
@@ -164,6 +194,18 @@ export class BirdRig {
   public setProfile(profileId: BirdProfileId): void {
     if (profileId === this.profileId && this.wings.length) return;
     this.build(profileId);
+  }
+
+  /** Feather colours chosen by the visitor ('natural' for the species' own). */
+  public setPlumage(id: PlumageId): void {
+    const plumage = getPlumage(id);
+    if (plumage.id === this.plumage.id && this.wings.length) return;
+    this.plumage = plumage;
+    this.build(this.profileId);
+  }
+
+  public get plumageId(): PlumageId {
+    return this.plumage.id;
   }
 
   /** Something carried in the beak (a flower on the way to Wang Fuk Court), or null. */
@@ -283,7 +325,7 @@ export class BirdRig {
     this.clearMeshes();
     this.profileId = profileId;
     this.shape = SHAPES[profileId];
-    const palette = PALETTES[profileId];
+    const palette = applyPlumage(PALETTES[profileId], this.plumage);
     this.root.scale.setScalar(this.shape.scale);
 
     const part = (geometry: BufferGeometry, colour: string, parent: Object3D, sheen = false): Mesh => {

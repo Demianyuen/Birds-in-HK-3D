@@ -36,7 +36,7 @@ import { CinematicPost } from './CinematicPost';
 import { PhotoMeshTiles, type PhotoMeshMetrics } from './PhotoMeshTiles';
 import { RoadNetwork, type RoadNetworkMetrics } from './RoadNetwork';
 import { StreetLife } from './StreetLife';
-import { getBirdProfile, type BirdProfileId } from './birdProfiles';
+import { getBirdProfile, type BirdProfileId, type PlumageId } from './birdProfiles';
 import { evaluateWorldReadiness } from './worldReadiness';
 import { stylizedGroundUniforms } from './StylizedGround';
 import { DynamicResolution } from './DynamicResolution';
@@ -47,7 +47,7 @@ import { wangFukLocalMarkers } from './wangFukLocations';
 import { CourtPlacer, type CourtMetrics } from '../wangFuk/CourtPlacer';
 import { Grove } from '../wangFuk/grove';
 import { WangFukCourt } from '../wangFuk/WangFukCourt';
-import { inAnyWater } from './streetData';
+import { inAnyWater, type StreetData } from './streetData';
 import { RemoteBirds } from '../multiplayer/RemoteBirds';
 import { createCarriedFlower, disposeCarriedFlower, MemorialFlowers } from '../openWorld/MemorialFlowers';
 import { MEMORIAL_APPROACH, MEMORIAL_CENTRE, type FlowerKind } from '../openWorld/contentRules';
@@ -338,12 +338,31 @@ export class BirdsInHkGame {
     this.bird.setBirdProfile(profileId);
   }
 
+  public setBirdPlumage(plumage: PlumageId): void {
+    this.bird.setPlumage(plumage);
+  }
+
+  public get birdPlumage(): PlumageId {
+    return this.bird.rig.plumageId;
+  }
+
   /** Show (or stop showing) a flower in the bird's beak. */
   public holdFlower(kind: FlowerKind | null): void {
     if (this.carried) disposeCarriedFlower(this.carried);
     this.carried = kind ? createCarriedFlower(kind) : null;
     this.bird.rig.holdInBeak(this.carried);
   }
+
+  /** Roads, paths and water read from the map (for the radar). */
+  public get streetData(): Readonly<StreetData> {
+    return this.roads.streetData;
+  }
+
+  /** Which way the bird faces, as a yaw angle (0 = north, positive turns west). */
+  public get birdYaw(): number {
+    return this.yawEuler.setFromQuaternion(this.bird.object.quaternion, 'YXZ').y;
+  }
+  private readonly yawEuler = new Euler();
 
   /** Where the bird's feet are while on the ground, or null in the air. */
   public get birdGroundPoint(): Vector3 | null {

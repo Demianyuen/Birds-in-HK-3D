@@ -28,6 +28,7 @@ interface ZoneChannel {
   /** Ids present in this channel (including ourselves once tracked). */
   members: Set<string>;
   names: Map<string, string>;
+  plumages: Map<string, string>;
   tracked: boolean;
 }
 
@@ -70,7 +71,7 @@ export class LiveWorld {
 
   public constructor(
     config: OpenWorldConfig,
-    private readonly self: { id: string; name: string },
+    private readonly self: { id: string; name: string; plumage?: string },
     private readonly events: {
       onStatus: (status: LiveStatus) => void;
       onChat: (line: ChatLine) => void;
@@ -129,7 +130,7 @@ export class LiveWorld {
     for (const peer of this.peers.values()) {
       const pose = peer.buffer.sample(now);
       if (!pose) continue;
-      players.push({ id: peer.id, name: this.nameOf(peer.id), position: pose.position, quaternion: pose.quaternion, perched: pose.perched });
+      players.push({ id: peer.id, name: this.nameOf(peer.id), position: pose.position, quaternion: pose.quaternion, perched: pose.perched, plumage: this.plumageOf(peer.id) });
     }
     return players;
   }
@@ -260,7 +261,7 @@ export class LiveWorld {
   private async track(entry: ZoneChannel): Promise<void> {
     if (entry.tracked) return;
     entry.tracked = true;
-    await entry.channel.track({ name: this.self.name || '訪客' });
+    await entry.channel.track({ name: this.self.name || '訪客', plumage: this.self.plumage ?? 'natural' });
   }
 
   private openChannel(zone: string, room: number): Promise<ZoneChannel | null> {
@@ -268,7 +269,7 @@ export class LiveWorld {
       const channel = this.client.channel(channelName(zone, room), {
         config: { presence: { key: this.self.id }, broadcast: { self: false, ack: false } },
       });
-      const entry: ZoneChannel = { zone, room, channel, members: new Set(), names: new Map(), tracked: false };
+      const entry: ZoneChannel = { zone, room, channel, members: new Set(), names: new Map(), plumages: new Map(), tracked: false };
       let settled = false;
       const settle = (value: ZoneChannel | null): void => {
         if (settled) return;
@@ -278,9 +279,12 @@ export class LiveWorld {
       channel.on('presence', { event: 'sync' }, () => {
         entry.members = new Set(Object.keys(channel.presenceState()));
         entry.names.clear();
-        for (const [id, metas] of Object.entries(channel.presenceState<{ name?: string }>())) {
+        entry.plumages.clear();
+        for (const [id, metas] of Object.entries(channel.presenceState<{ name?: string; plumage?: string }>())) {
           const checked = checkName(metas[0]?.name);
           entry.names.set(id, checked.ok && checked.text ? checked.text : '訪客');
+          const plumage = metas[0]?.plumage;
+          if (typeof plumage === 'string' && /^[a-z]{1,16}$/.test(plumage)) entry.plumages.set(id, plumage);
         }
         for (const [id] of this.peers) if (!this.isPresent(id)) this.peers.delete(id);
         settle(entry);
@@ -326,6 +330,14 @@ export class LiveWorld {
       if (name) return name;
     }
     return '訪客';
+  }
+
+  private plumageOf(id: string): string | undefined {
+    for (const entry of this.zoneChannels.values()) {
+      const plumage = entry.plumages.get(id);
+      if (plumage) return plumage;
+    }
+    return undefined;
   }
 
   private receivePose(payload: unknown): void {

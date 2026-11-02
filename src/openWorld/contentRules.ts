@@ -12,8 +12,14 @@ export const NAME_MAX = 24;
 export const MESSAGE_MAX = 200;
 export const CHAT_MAX = 120;
 
-export type FlowerKind = 'white-chrysanthemum' | 'yellow-chrysanthemum' | 'lily' | 'lantern';
-export const FLOWER_KINDS: readonly FlowerKind[] = ['white-chrysanthemum', 'yellow-chrysanthemum', 'lily', 'lantern'];
+/** Flowers of remembrance, mostly white. The database accepts exactly these (migration 0003). */
+export type FlowerKind =
+  | 'white-chrysanthemum' | 'lily' | 'white-rose' | 'white-carnation' | 'ginger-lily'
+  | 'white-lotus' | 'white-orchid' | 'yellow-chrysanthemum' | 'lantern';
+export const FLOWER_KINDS: readonly FlowerKind[] = [
+  'white-chrysanthemum', 'lily', 'white-rose', 'white-carnation', 'ginger-lily',
+  'white-lotus', 'white-orchid', 'yellow-chrysanthemum', 'lantern',
+];
 
 /**
  * Memorial ground: a circle around Wang Fuk Court in the Tai Po local frame

@@ -9,7 +9,7 @@ import {
   Vector3,
 } from 'three';
 import { BirdRig, type BirdMotion } from './BirdRig';
-import { getBirdProfile, type BirdProfile, type BirdProfileId } from './birdProfiles';
+import { getBirdProfile, type BirdProfile, type BirdProfileId, type PlumageId } from './birdProfiles';
 import type { WorldPlayer } from '../multiplayer/protocol';
 
 const FORWARD = new Vector3(0, 0, -1);
@@ -195,6 +195,11 @@ export class BirdController {
     this.flightProfile = getBirdProfile(profileId);
     this.rig.setProfile(this.flightProfile.id);
     this.speed = this.flightProfile.cruiseSpeed;
+  }
+
+  /** Feather colours chosen on the start screen. */
+  public setPlumage(id: PlumageId): void {
+    this.rig.setPlumage(id);
   }
 
   public get profileId(): BirdProfileId {
