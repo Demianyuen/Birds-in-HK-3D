@@ -1,0 +1,16 @@
+# Birds in HK · shared-sky relay. Deploy: see relay/README.md
+name = "birds-in-hk-sky"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://birds-in-hk-3d.vercel.app,http://localhost:5173,http://127.0.0.1:5173"
+
+[[durable_objects.bindings]]
+name = "SKY_ROOM"
+class_name = "SkyRoom"
+
+# SQLite-backed Durable Objects are the ones the Workers Free plan allows.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SkyRoom"]

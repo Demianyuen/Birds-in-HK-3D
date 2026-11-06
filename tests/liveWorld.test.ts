@@ -63,7 +63,7 @@ describe('LiveWorld zones and rooms', () => {
   let world: LiveWorld;
 
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date', 'performance'] });
     client = new FakeClient('me');
   });
   afterEach(() => {
@@ -83,7 +83,7 @@ describe('LiveWorld zones and rooms', () => {
     expect(world.homeZone).toBe(COURT_ZONE);
     const home = client.byName(channelName(COURT_ZONE, 1))!;
     expect(home.tracked).toEqual({ name: '訪客甲', plumage: 'natural' });
-    vi.setSystemTime(Date.now() + 1_000);
+    vi.advanceTimersByTime(1_000);
     world.sendPose([MEMORIAL_CENTRE.x + 60, 200, MEMORIAL_CENTRE.z], identity, false);
     expect(home.sent).toHaveLength(1);
     // Neighbouring zones are only listened to, never announced in.
@@ -125,7 +125,7 @@ describe('LiveWorld zones and rooms', () => {
     await flush();
     const first = world.homeZone;
     expect(first).not.toBe(COURT_ZONE);
-    vi.setSystemTime(Date.now() + 2_000);
+    vi.advanceTimersByTime(2_000);
     world.sendPose([2_000 + ZONE_CELL * 3, 200, 2_000], identity, false);
     await flush();
     expect(world.homeZone).not.toBe(first);

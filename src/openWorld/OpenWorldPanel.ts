@@ -2,12 +2,12 @@ import { Vector3 } from 'three';
 import type { BirdsInHkGame } from '../game/BirdsInHkGame';
 import type { WorldPlayer } from '../multiplayer/protocol';
 import { WORLD_PLAYER_LIMIT } from '../multiplayer/protocol';
-import { openWorldConfig } from './config';
+import { openWorldConfig, skyRelayUrl } from './config';
 import { playLayingChime } from './chime';
 import { Danmaku } from './Danmaku';
 import { checkChat, checkMessage, insideMemorialGround, MEMORIAL_CENTRE, MESSAGE_MAX, rejectReasonText } from './contentRules';
 import { FlowerRefused, fetchFlowers, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
-import type { ChatLine, LiveStatus, LiveWorld } from './LiveWorld';
+import type { ChatLine, LiveStatus, SkyLink } from './skyLink';
 import { FLOWER_LABELS, type Visitor } from './visitor';
 import { WorldLabels, type WorldLabel } from './WorldLabels';
 import { findSpeaker, SpeechBubbles, SpeechInput } from './speech';
@@ -149,12 +149,18 @@ export class OpenWorldPanel {
     if (!config || this.liveWorld) return;
     this.status.textContent = '正在連線…';
     try {
-      const { LiveWorld: Live } = await import('./LiveWorld');
+      const self = { id: visitor.id, name: visitor.name, plumage: this.game.birdPlumage };
+      const events = { onStatus: (status: LiveStatus) => this.showStatus(status), onChat: (line: ChatLine) => this.appendChat(line) };
+      const relay = skyRelayUrl();
+      let live: SkyLink;
+      if (relay) {
+        const { SkyRelay } = await import('./SkyRelay');
+        live = new SkyRelay(relay, self, events);
+      } else {
+        const { LiveWorld } = await import('./LiveWorld');
+        live = new LiveWorld(config, self, events);
+      }
       if (this.liveWorld) return;
-      const live = new Live(config, { id: visitor.id, name: visitor.name, plumage: this.game.birdPlumage }, {
-        onStatus: status => this.showStatus(status),
-        onChat: line => this.appendChat(line),
-      });
       this.liveWorld = live;
       live.connect();
     } catch {
@@ -162,7 +168,7 @@ export class OpenWorldPanel {
     }
   }
 
-  private liveWorld: LiveWorld | null = null;
+  private liveWorld: SkyLink | null = null;
 
   public setVisible(visible: boolean): void {
     this.element.hidden = !visible;
@@ -289,7 +295,10 @@ export class OpenWorldPanel {
     if (!openWorldConfig()) return;
     const bird = this.game.birdPosition;
     try {
-      await sendChat({ name: this.visitor?.name ?? '', body: checked.text, x: bird.x, z: bird.z, speaker: this.visitor?.id ?? '' });
+      await sendChat({
+        name: this.visitor?.name ?? '', body: checked.text, x: bird.x, z: bird.z, speaker: this.visitor?.id ?? '',
+        zone: this.liveWorld?.homeZone || undefined, room: this.liveWorld?.currentRoom,
+      });
     } catch (error) {
       this.bubbles.forget('self');
       this.showNotice(error instanceof Error ? error.message : '訊息未能送出。', 5_000);

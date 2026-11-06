@@ -18,7 +18,7 @@ export const JOIN_RADIUS = 350;
 export const LEAVE_RADIUS = 500;
 /** Birds drawn per room; a full room sends the next arrival to the next room. */
 export const ROOM_CAP = 24;
-export const MAX_ROOMS = 6;
+export const MAX_ROOMS = 12;
 
 export function zoneOf(x: number, z: number): string {
   if (Math.hypot(x - MEMORIAL_CENTRE.x, z - MEMORIAL_CENTRE.z) <= COURT_ZONE_RADIUS) return COURT_ZONE;

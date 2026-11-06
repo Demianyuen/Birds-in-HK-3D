@@ -5,18 +5,9 @@ import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 import { PoseBuffer } from './PoseBuffer';
 import { channelName, MAX_ROOMS, pickRoom, poseIntervalMs, ROOM_CAP, ZoneWatch, zoneLabel } from './zones';
 
-export interface ChatLine {
-  id: number;
-  name: string;
-  body: string;
-  x: number;
-  z: number;
-  /** Id of the bird that said it (empty on rows from before ids were stored). */
-  speaker: string;
-  createdAt: string;
-}
+import type { ChatLine, LiveStatus, SkyLink } from './skyLink';
 
-export type LiveStatus = 'connecting' | 'online' | 'offline';
+export type { ChatLine, LiveStatus } from './skyLink';
 
 /** The slice of the Supabase client used here (so tests can supply a stand-in). */
 export type LiveClient = Pick<SupabaseClient, 'channel' | 'removeChannel' | 'from'>;
@@ -51,7 +42,7 @@ const PRESENCE_WAIT_MS = 2_000;
  * - Chat lines are written by the Vercel API (filtered, rate-limited) and arrive
  *   here as database inserts, so nobody can bypass the filter.
  */
-export class LiveWorld {
+export class LiveWorld implements SkyLink {
   private readonly client: LiveClient;
   private readonly zoneChannels = new Map<string, ZoneChannel>();
   private chatChannel: RealtimeChannel | null = null;

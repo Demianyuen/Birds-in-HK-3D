@@ -56,8 +56,31 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
       if (!speaker) throw error;
       await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: row });
     }
+    await tellTheSky(body.zone, body.room, { speaker, name: name.text || '訪客', body: line.text, x, z });
     sendJson(res, 201, { ok: true });
   } catch (error) {
     sendError(res, error);
+  }
+}
+
+/**
+ * With our own sky relay (relay/), the filtered line is shown over the speaker's bird
+ * to everyone in their zone room. Best effort: the line is already stored either way.
+ */
+async function tellTheSky(zone: unknown, room: unknown, line: { speaker: string; name: string; body: string; x: number; z: number }): Promise<void> {
+  const base = process.env.SKY_RELAY_HTTP_URL;
+  const secret = process.env.SKY_RELAY_SECRET;
+  if (!base || !secret || !line.speaker) return;
+  if (typeof zone !== 'string' || !/^(court|c-?\d{1,2}_-?\d{1,2})$/.test(zone)) return;
+  if (typeof room !== 'number' || !Number.isInteger(room) || room < 1 || room > 12) return;
+  try {
+    await fetch(`${base.replace(/\/+$/, '')}/say/${zone}/${room}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-relay-secret': secret },
+      body: JSON.stringify(line),
+      signal: AbortSignal.timeout(2_000),
+    });
+  } catch {
+    // the relay is down or slow: the line is still stored
   }
 }

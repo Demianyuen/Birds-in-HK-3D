@@ -80,7 +80,7 @@ export async function placeFlower(input: {
   return { flower: { ...flower, name: input.name }, messageStatus: data.messageStatus === 'pending' || data.messageStatus === 'approved' ? data.messageStatus : 'none' };
 }
 
-export async function sendChat(input: { name: string; body: string; x: number; z: number; speaker?: string }): Promise<void> {
+export async function sendChat(input: { name: string; body: string; x: number; z: number; speaker?: string; zone?: string; room?: number }): Promise<void> {
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
