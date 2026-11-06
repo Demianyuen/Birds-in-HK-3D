@@ -1,4 +1,5 @@
 import {
+  DoubleSide,
   AdditiveBlending,
   BufferGeometry,
   CanvasTexture,
@@ -82,6 +83,7 @@ export class MemorialFlowers {
   /** A faint column of light over Wang Fuk Court while the visitor still carries a flower. */
   private readonly guide: Mesh;
   private guideWanted = false;
+  private readonly windTime = { value: 0 };
   /** Flowers and lanterns glow more as the light falls. */
   private glowStrength = 1;
   /**
@@ -99,7 +101,21 @@ export class MemorialFlowers {
 
   public constructor() {
     this.group.name = 'Memorial flowers';
-    const petals = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.75, metalness: 0 });
+    const petals = new MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0, side: DoubleSide });
+    // Laid flowers move a little in the wind: stems bend more towards the bloom, each flower out of step.
+    petals.onBeforeCompile = shader => {
+      shader.uniforms.uWindTime = this.windTime;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uWindTime;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 rootAt = instanceMatrix[3].xyz;
+          float sway = pow(clamp(position.y / 0.3, 0.0, 1.2), 2.0);
+          float phase = rootAt.x * 0.9 + rootAt.z * 1.7;
+          transformed.x += sway * (0.012 * sin(uWindTime * 1.7 + phase) + 0.006 * sin(uWindTime * 3.1 + phase * 2.3));
+          transformed.z += sway * 0.009 * sin(uWindTime * 1.3 + phase * 1.4);
+        #endif`);
+    };
     const lanternMaterial = new MeshStandardMaterial({
       vertexColors: true, flatShading: true, roughness: 0.6, metalness: 0,
       emissive: new Color('#ffb15a'), emissiveIntensity: 0.9,
@@ -332,6 +348,7 @@ export class MemorialFlowers {
   /** Per frame: ceremonies, light motes, distance glow, then (when changed) the instanced flowers. */
   public update(deltaSeconds = 0, cameraPosition?: Vector3): void {
     this.clock += deltaSeconds;
+    this.windTime.value = this.clock;
     this.updateCeremonies(deltaSeconds);
     this.updateMotes();
     if (cameraPosition) {
@@ -470,14 +487,14 @@ export class MemorialFlowers {
 export function createCarriedFlower(kind: FlowerKind): Group {
   const geometry = flowerGeometry(kind);
   const material = new MeshStandardMaterial({
-    vertexColors: true, flatShading: true, roughness: 0.75, metalness: 0,
+    vertexColors: true, roughness: 0.7, metalness: 0, side: DoubleSide,
     // A little light of its own so the white bloom reads against the sky from behind the bird.
     emissive: new Color(kind === 'lantern' ? '#ffb15a' : '#fff6e0'),
     emissiveIntensity: kind === 'lantern' ? 0.9 : 0.22,
   });
   const mesh = new Mesh(geometry, material);
   // Rig units: the bloom is about as big as the bird's head, so it reads from the follow camera.
-  const scale = kind === 'lantern' ? 2.6 : 4.4;
+  const scale = kind === 'lantern' ? 2.6 : 5.2;
   mesh.scale.setScalar(scale);
   const holder = new Group();
   holder.name = 'Carried flower';
@@ -527,16 +544,97 @@ function paint(geometry: BufferGeometry, colour: string): BufferGeometry {
 }
 
 function stem(height: number): BufferGeometry[] {
-  const shaft = new CylinderGeometry(0.008, 0.01, height, 5);
+  const shaft = new CylinderGeometry(0.0045, 0.006, height, 7);
   shaft.translate(0, height / 2, 0);
-  const leafA = new SphereGeometry(1, 5, 3);
-  leafA.scale(0.05, 0.008, 0.02);
-  leafA.rotateZ(0.5);
-  leafA.translate(0.035, height * 0.35, 0);
-  const leafB = leafA.clone();
-  leafB.rotateY(Math.PI);
-  leafB.translate(0, height * 0.12, 0);
-  return [paint(shaft, '#4f7a3a'), paint(leafA, '#58873f'), paint(leafB, '#58873f')];
+  const leaf = { length: 0.075, width: 0.024, cup: 0.5, curl: -0.6, point: 0.9, base: '#3f6b2f', tip: '#6b9b4b' };
+  const leafA = petal(leaf);
+  leafA.rotateX(-0.9);
+  leafA.rotateY(Math.PI / 2);
+  leafA.translate(0.004, height * 0.33, 0);
+  const leafB = petal({ ...leaf, length: 0.065 });
+  leafB.rotateX(-0.8);
+  leafB.rotateY(-Math.PI / 2 + 0.3);
+  leafB.translate(-0.004, height * 0.5, 0);
+  return [paint(shaft, '#4f7a3a'), leafA, leafB];
+}
+
+interface PetalShape {
+  length: number;
+  width: number;
+  /** How much the two edges lift (0 flat, 1 a deep spoon). */
+  cup: number;
+  /** Bend along the length in radians: positive arches up and in, negative curls back. */
+  curl: number;
+  /** 0 = rounded tip, 1 = pointed. */
+  point: number;
+  base: string;
+  tip: string;
+}
+
+/**
+ * One petal as a smooth curved surface (not a squashed ball): narrow at the base,
+ * widest about a third of the way out, cupped across and arched along its length,
+ * shading from `base` to `tip`. Lies along +z with its face up (+y), base at the origin.
+ */
+function petal(shape: PetalShape): BufferGeometry {
+  const along = 7;
+  const across = 4;
+  const positions: number[] = [];
+  const colours: number[] = [];
+  const baseColour = new Color(shape.base);
+  const tipColour = new Color(shape.tip);
+  const mixed = new Color();
+  let spineY = 0;
+  let spineZ = 0;
+  const step = shape.length / along;
+  for (let i = 0; i <= along; i += 1) {
+    const u = i / along;
+    const angle = shape.curl * u;
+    if (i > 0) {
+      const previous = shape.curl * ((i - 0.5) / along);
+      spineZ += Math.cos(previous) * step;
+      spineY += Math.sin(previous) * step;
+    }
+    const width = shape.width * (0.22 + 0.78 * Math.sin(Math.PI * Math.min(1, u ** 0.8 * 0.92 + 0.04))) * (1 - shape.point * u ** 3 * 0.85);
+    // Normal of the spine in the (z, y) plane.
+    const ny = Math.cos(angle);
+    const nz = -Math.sin(angle);
+    mixed.copy(baseColour).lerp(tipColour, Math.min(1, u * 1.2));
+    for (let j = 0; j <= across; j += 1) {
+      const v = (j / across) * 2 - 1;
+      const lift = shape.cup * v * v * width * 0.5;
+      positions.push(v * width * 0.5, spineY + ny * lift, spineZ + nz * lift);
+      colours.push(mixed.r, mixed.g, mixed.b);
+    }
+  }
+  const indices: number[] = [];
+  for (let i = 0; i < along; i += 1) {
+    for (let j = 0; j < across; j += 1) {
+      const a = i * (across + 1) + j;
+      const b = a + across + 1;
+      indices.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new Float32BufferAttribute(colours, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry.toNonIndexed();
+}
+
+/** Place petals in a ring: each raised by `tilt` from flat, spread evenly, at height y. */
+function ring(count: number, shape: PetalShape, tilt: number, y: number, offset = 0, start = 0.004): BufferGeometry[] {
+  const parts: BufferGeometry[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const geometry = petal(shape);
+    geometry.rotateX(-tilt);
+    geometry.translate(0, 0, start);
+    geometry.rotateY((index / count) * Math.PI * 2 + offset);
+    geometry.translate(0, y, 0);
+    parts.push(geometry);
+  }
+  return parts;
 }
 
 /** The model for each kind of flower: real size (about 0.3 m), stem along +y, standing at the origin. */
@@ -557,29 +655,19 @@ export function flowerGeometry(kind: FlowerKind): BufferGeometry {
 function roseGeometry(): BufferGeometry {
   const height = 0.27;
   const parts = stem(height);
-  const top = height + 0.02;
-  const bud = new SphereGeometry(1, 7, 5);
-  bud.scale(0.022, 0.03, 0.022);
-  bud.translate(0, top + 0.012, 0);
-  parts.push(paint(bud, '#ece6d4'));
-  const rings = [{ count: 5, r: 0.014, tilt: 0.25, size: 0.026 }, { count: 5, r: 0.024, tilt: 0.55, size: 0.032 }, { count: 6, r: 0.032, tilt: 0.9, size: 0.036 }];
-  rings.forEach((ring, level) => {
-    for (let index = 0; index < ring.count; index += 1) {
-      const petal = new SphereGeometry(1, 6, 4, 0, Math.PI * 2, 0, Math.PI / 2);
-      petal.scale(ring.size, ring.size * 0.9, ring.size * 0.28);
-      petal.rotateX(-Math.PI / 2 + ring.tilt);
-      petal.translate(0, 0, ring.r);
-      petal.rotateY((index / ring.count) * Math.PI * 2 + level * 0.5);
-      petal.translate(0, top + 0.004 * (2 - level), 0);
-      parts.push(paint(petal, level === 0 ? '#f1ece0' : '#f8f6ef'));
-    }
-  });
+  const y = height + 0.012;
+  const base = '#ece6d2';
+  const tip = '#fbf9f2';
+  // Broad rounded petals wrapped around a closed heart, opening outward ring by ring.
+  parts.push(...ring(5, { length: 0.028, width: 0.03, cup: 1.4, curl: 1.4, point: 0, base, tip }, 1.35, y + 0.006, 0, 0.001));
+  parts.push(...ring(5, { length: 0.036, width: 0.038, cup: 1.2, curl: 1.0, point: 0, base, tip }, 1.05, y + 0.003, 0.6, 0.004));
+  parts.push(...ring(6, { length: 0.044, width: 0.044, cup: 0.9, curl: 0.5, point: 0, base, tip }, 0.7, y, 0.25, 0.008));
   for (let index = 0; index < 5; index += 1) {
-    const sepal = new ConeGeometry(0.006, 0.03, 3);
-    sepal.rotateZ(-Math.PI / 2 - 0.6);
-    sepal.translate(0.018, 0, 0);
+    const sepal = new ConeGeometry(0.005, 0.03, 3);
+    sepal.rotateZ(-Math.PI / 2 - 0.7);
+    sepal.translate(0.016, 0, 0);
     sepal.rotateY((index / 5) * Math.PI * 2);
-    sepal.translate(0, top - 0.012, 0);
+    sepal.translate(0, y - 0.008, 0);
     parts.push(paint(sepal, '#4f7a3a'));
   }
   return mergeGeometries(parts)!;
@@ -651,22 +739,13 @@ function lotusGeometry(): BufferGeometry {
   const shaft = new CylinderGeometry(0.009, 0.011, height, 6);
   shaft.translate(0, height / 2, 0);
   const parts = [paint(shaft, '#557f3f')];
-  const top = height + 0.01;
-  const pod = new CylinderGeometry(0.022, 0.016, 0.02, 10);
-  pod.translate(0, top + 0.02, 0);
+  const y = height + 0.008;
+  const pod = new CylinderGeometry(0.02, 0.014, 0.018, 12);
+  pod.translate(0, y + 0.016, 0);
   parts.push(paint(pod, '#e3c35a'));
-  [{ count: 8, tilt: 0.85, length: 0.065 }, { count: 7, tilt: 0.45, length: 0.058 }].forEach((ring, level) => {
-    for (let index = 0; index < ring.count; index += 1) {
-      const petal = new SphereGeometry(1, 6, 4);
-      petal.scale(0.022, ring.length * 0.5, 0.008);
-      petal.translate(0, ring.length * 0.5, 0);
-      petal.rotateX(ring.tilt);
-      petal.translate(0, 0, 0.016);
-      petal.rotateY((index / ring.count) * Math.PI * 2 + level * 0.4);
-      petal.translate(0, top, 0);
-      parts.push(paint(petal, level === 0 ? '#f7f1ee' : '#fbf9f6'));
-    }
-  });
+  const shape = { length: 0.07, width: 0.036, cup: 1.1, curl: 0.55, point: 0.75, base: '#f8f2ec', tip: '#f6e4e6' };
+  parts.push(...ring(8, shape, 0.75, y, 0, 0.012));
+  parts.push(...ring(7, { ...shape, length: 0.062, curl: 0.8, tip: '#fbf6f4' }, 1.05, y + 0.004, 0.4, 0.01));
   return mergeGeometries(parts)!;
 }
 
@@ -709,47 +788,47 @@ function orchidGeometry(): BufferGeometry {
 
 /** Chrysanthemum: a dense ball of thin petals on a stem. */
 function chrysanthemumGeometry(kind: FlowerKind): BufferGeometry {
-  const petalColour = kind === 'yellow-chrysanthemum' ? '#f2c94c' : '#f6f4ec';
-  const innerColour = kind === 'yellow-chrysanthemum' ? '#e0a92a' : '#e6e2cf';
+  const yellow = kind === 'yellow-chrysanthemum';
+  const base = yellow ? '#d49a1c' : '#e4e0cc';
+  const tip = yellow ? '#f7d65e' : '#fcfbf6';
   const height = 0.26;
   const parts = stem(height);
-  const bloom = new IcosahedronGeometry(0.055, 1);
-  bloom.scale(1, 0.7, 1);
-  bloom.translate(0, height + 0.02, 0);
-  parts.push(paint(bloom, innerColour));
-  for (let ring = 0; ring < 2; ring += 1) {
-    const petals = ring === 0 ? 14 : 10;
-    for (let index = 0; index < petals; index += 1) {
-      const petal = new ConeGeometry(0.012, 0.075 - ring * 0.02, 3);
-      petal.rotateZ(-Math.PI / 2 + 0.35 + ring * 0.5);
-      petal.translate(0.04 - ring * 0.01, 0, 0);
-      petal.rotateY((index / petals) * Math.PI * 2 + ring * 0.2);
-      petal.translate(0, height + 0.02 + ring * 0.015, 0);
-      parts.push(paint(petal, petalColour));
-    }
-  }
+  const y = height + 0.012;
+  const heart = new IcosahedronGeometry(0.016, 1);
+  heart.scale(1, 0.7, 1);
+  heart.translate(0, y + 0.012, 0);
+  parts.push(paint(heart, yellow ? '#c7891a' : '#ddd6b8'));
+  // Many narrow, spooned petals in rings, the inner ones standing up and curling in.
+  parts.push(...ring(20, { length: 0.05, width: 0.011, cup: 0.9, curl: 0.5, point: 0.2, base, tip }, 0.12, y, 0));
+  parts.push(...ring(16, { length: 0.042, width: 0.011, cup: 1, curl: 0.8, point: 0.2, base, tip }, 0.55, y + 0.004, 0.2));
+  parts.push(...ring(12, { length: 0.032, width: 0.01, cup: 1, curl: 1.1, point: 0.2, base, tip }, 1.0, y + 0.008, 0.45));
+  parts.push(...ring(8, { length: 0.022, width: 0.009, cup: 1, curl: 1.3, point: 0.2, base, tip }, 1.3, y + 0.012, 0.7, 0.002));
   return mergeGeometries(parts)!;
 }
 
 /** White lily: six petals curling out of a trumpet. */
 function lilyGeometry(): BufferGeometry {
-  const height = 0.3;
+  const height = 0.29;
   const parts = stem(height);
-  const trumpet = new ConeGeometry(0.03, 0.07, 6, 1, true);
-  trumpet.rotateX(Math.PI);
-  trumpet.translate(0, height + 0.03, 0);
-  parts.push(paint(trumpet, '#f3f1e6'));
+  const y = height + 0.01;
+  // Six long pointed petals: they rise as a trumpet, then curl back at the tips.
+  const shape = { length: 0.085, width: 0.03, cup: 0.6, curl: -1.6, point: 0.9, base: '#e9efd8', tip: '#fdfcf6' };
+  parts.push(...ring(3, shape, 1.05, y, 0));
+  parts.push(...ring(3, { ...shape, width: 0.026 }, 1.15, y + 0.003, Math.PI / 3));
   for (let index = 0; index < 6; index += 1) {
-    const petal = new SphereGeometry(1, 5, 3);
-    petal.scale(0.06, 0.006, 0.022);
-    petal.rotateZ(0.55);
-    petal.translate(0.05, height + 0.07, 0);
-    petal.rotateY((index / 6) * Math.PI * 2);
-    parts.push(paint(petal, '#fbfaf3'));
+    const filament = new CylinderGeometry(0.0012, 0.0012, 0.055, 3);
+    filament.rotateX(0.25);
+    filament.translate(0, 0.028, 0.006);
+    filament.rotateY((index / 6) * Math.PI * 2);
+    filament.translate(0, y, 0);
+    parts.push(paint(filament, '#dfe6c8'));
+    const anther = new SphereGeometry(1, 5, 3);
+    anther.scale(0.0035, 0.002, 0.007);
+    anther.translate(0, 0.056, 0.013);
+    anther.rotateY((index / 6) * Math.PI * 2);
+    anther.translate(0, y, 0);
+    parts.push(paint(anther, '#b8742e'));
   }
-  const stamens = new CylinderGeometry(0.004, 0.004, 0.06, 4);
-  stamens.translate(0, height + 0.07, 0);
-  parts.push(paint(stamens, '#c9873d'));
   return mergeGeometries(parts)!;
 }
 

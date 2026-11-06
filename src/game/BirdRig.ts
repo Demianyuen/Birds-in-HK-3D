@@ -170,6 +170,10 @@ export class BirdRig {
   private nextGlance = 1.5;
   private flapImpulse = 0;
   private heldItem: Object3D | null = null;
+  private swayPitch = 0;
+  private swayPitchVelocity = 0;
+  private swayRoll = 0;
+  private swayRollVelocity = 0;
   private walkWeight = 0;
   private walkPace = 0;
   private walkPhase = 0;
@@ -259,6 +263,40 @@ export class BirdRig {
       [perchedPose(), this.perchWeight],
     ]);
     this.applyPose(dt, grounded);
+    this.swayHeldItem(dt, flightWeight);
+  }
+
+  /**
+   * The flower in the beak is not glued on: its bloom lags behind the head and swings
+   * on its stem. Each wing beat jolts it, gliding lets it settle into a slow drift,
+   * walking nods it with every step. A soft spring (a little under-damped) does the rest.
+   */
+  private swayHeldItem(dt: number, flightWeight: number): void {
+    const item = this.heldItem;
+    if (!item || dt <= 0) return;
+    const beat = Math.sin(2 * Math.PI * this.phase);
+    const step = Math.sin(4 * Math.PI * this.walkPhase);
+    const drift = Math.sin(this.time * 1.3) * 0.09 + Math.sin(this.time * 2.9) * 0.035;
+    const targetPitch = flightWeight * this.flapWeight * this.flapIntensity * 0.42 * beat + step * 0.16 * this.walkWeight + drift;
+    const targetRoll = Math.sin(this.time * 0.9) * 0.12 + flightWeight * this.flapWeight * 0.1 * Math.cos(2 * Math.PI * this.phase);
+    const stiffness = 55;
+    const damping = 5.5;
+    this.swayPitchVelocity += ((targetPitch - this.swayPitch) * stiffness - this.swayPitchVelocity * damping) * dt;
+    this.swayRollVelocity += ((targetRoll - this.swayRoll) * stiffness - this.swayRollVelocity * damping) * dt;
+    this.swayPitch += this.swayPitchVelocity * dt;
+    this.swayRoll += this.swayRollVelocity * dt;
+    if (item.userData.hang === true) {
+      // A lantern swings from the beak like a pendulum.
+      item.rotation.set(this.swayPitch * 1.4, 0, this.swayRoll * 1.4);
+    } else {
+      // A flower bends at the stem, where the beak holds it.
+      item.children[0]?.rotation.set(this.swayPitch, 0, this.swayRoll);
+    }
+  }
+
+  /** How far the held flower is swung out right now (radians), for tests and tuning. */
+  public get heldSway(): { pitch: number; roll: number } {
+    return { pitch: this.swayPitch, roll: this.swayRoll };
   }
 
   public dispose(): void {
