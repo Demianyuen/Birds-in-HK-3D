@@ -40,6 +40,7 @@ import { getBirdProfile, type BirdProfileId, type PlumageId } from './birdProfil
 import { evaluateWorldReadiness } from './worldReadiness';
 import { stylizedGroundUniforms } from './StylizedGround';
 import { DynamicResolution } from './DynamicResolution';
+import { deviceTier } from './deviceTier';
 import { StylizedClouds } from './StylizedClouds';
 import { StylizedTrees } from './StylizedTrees';
 import { setBuildingGroundHeight, setMemorialSites, type BuildingPresentation } from './BuildingMaterial';
@@ -89,7 +90,7 @@ export class BirdsInHkGame {
   /** LandsD aerial photo mesh, loaded the first time the visitor picks that view. */
   private readonly photoMesh = new PhotoMeshTiles();
   /** Cars, buses, people and boats moving through Tai Po. */
-  private readonly streetLife = new StreetLife();
+  private readonly streetLife = new StreetLife(deviceTier().streetDensity);
   private worldPresentation: WorldPresentation = 'preservation';
   private readonly post: CinematicPost;
   private slowFrames = 0;
@@ -118,8 +119,8 @@ export class BirdsInHkGame {
   private readonly grove = new Grove(420);
   private courtPlacer: CourtPlacer | null = null;
   private readonly resolution = new DynamicResolution({
-    maximum: Math.min(window.devicePixelRatio || 1, 1.5),
-    minimum: 0.65,
+    maximum: deviceTier().maxPixelRatio,
+    minimum: deviceTier().phone ? 0.6 : 0.65,
   });
   private frameIndex = 0;
 
@@ -131,7 +132,7 @@ export class BirdsInHkGame {
     this.camera.position.set(0, 145, 430);
     this.camera.lookAt(0, 100, 0);
 
-    this.renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new WebGLRenderer({ canvas, antialias: deviceTier().antialias, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(this.resolution.current);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = SRGBColorSpace;
@@ -147,7 +148,7 @@ export class BirdsInHkGame {
     this.scene.add(this.hemisphere);
     this.sun.position.set(-450, 850, 420);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2_048, 2_048);
+    this.sun.shadow.mapSize.set(deviceTier().shadowMapSize, deviceTier().shadowMapSize);
     this.sun.shadow.camera.left = -700;
     this.sun.shadow.camera.right = 700;
     this.sun.shadow.camera.top = 700;
@@ -161,6 +162,7 @@ export class BirdsInHkGame {
     this.configureEnvironment();
     this.post = new CinematicPost(this.renderer, this.scene, this.camera);
     this.post.setPixelRatio(this.resolution.current);
+    if (!deviceTier().bloom) this.post.setBloom(false);
     this.scene.add(this.bird.object);
     this.scene.add(this.remoteBirds.group);
     this.scene.add(this.aerialGround.group);
@@ -678,7 +680,7 @@ export class BirdsInHkGame {
       // Still slow at the lowest resolution: drop the glow; bring it back when there is headroom.
       this.slowFrames = this.smoothedFrameMilliseconds > 26 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 2);
       if (this.post.bloomEnabled && this.slowFrames > 180) this.post.setBloom(false);
-      else if (!this.post.bloomEnabled && this.slowFrames === 0 && this.smoothedFrameMilliseconds < 14) this.post.setBloom(true);
+      else if (deviceTier().bloom && !this.post.bloomEnabled && this.slowFrames === 0 && this.smoothedFrameMilliseconds < 14) this.post.setBloom(true);
     }
     stylizedGroundUniforms.uSgTime.value = this.elapsed;
     this.clouds.update(this.elapsed);

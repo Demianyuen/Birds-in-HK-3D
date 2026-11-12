@@ -330,7 +330,7 @@ export class OpenWorldPanel {
     this.cardTitle.id = 'flower-card-title';
     const label = document.createElement('label');
     const caption = document.createElement('span');
-    caption.textContent = '想留下的話（可以留空）';
+    caption.textContent = '想留下的話';
     this.cardMessage.maxLength = MESSAGE_MAX;
     this.cardMessage.rows = 4;
     this.cardMessage.placeholder = '寫給宏福苑的一句話';

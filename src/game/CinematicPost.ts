@@ -1,3 +1,4 @@
+import { deviceTier } from './deviceTier';
 import { HalfFloatType, ShaderMaterial, Vector2, WebGLRenderTarget, type Camera, type Scene, type WebGLRenderer } from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
@@ -54,7 +55,7 @@ export class CinematicPost {
 
   public constructor(renderer: WebGLRenderer, scene: Scene, camera: Camera) {
     const size = renderer.getSize(new Vector2());
-    const target = new WebGLRenderTarget(size.x, size.y, { type: HalfFloatType, samples: 4 });
+    const target = new WebGLRenderTarget(size.x, size.y, { type: HalfFloatType, samples: deviceTier().antialias ? 4 : 0 });
     this.composer = new EffectComposer(renderer, target);
     this.composer.addPass(new RenderPass(scene, camera));
     this.bloom = new UnrealBloomPass(new Vector2(size.x / 2, size.y / 2), 0.38, 0.72, 0.8);

@@ -765,3 +765,8 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
   .bird-customise { grid-template-columns: 1fr; }
   .bird-preview { height: 130px; }
 }
+
+/* Phones: the map credits line at the bottom already names the sources; do not print them twice on top of each other. */
+@media (max-width: 700px) {
+  .boot-screen .source-credit { display: none; }
+}

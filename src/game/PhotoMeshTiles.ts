@@ -1,3 +1,4 @@
+import { deviceTier } from './deviceTier';
 import type { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin, LoadRegionPlugin, ReorientationPlugin, SphereRegion } from '3d-tiles-renderer/plugins';
 import { Color, DoubleSide, Group, MathUtils, Mesh, MeshBasicMaterial, Sphere, Vector4, type Material, type MeshStandardMaterial, type Object3D, type PerspectiveCamera, type WebGLRenderer } from 'three';
@@ -52,7 +53,9 @@ export class PhotoMeshTiles {
     const tiles = new Renderer(new URL('/landsd-3dvis/tileset.json', window.location.href).toString());
     this.tiles = tiles;
     tiles.registerPlugin({ name: 'LANDSD_PROXY', preprocessURL: (uri: string | URL) => landsdProxyUrl(uri, window.location.origin) } as never);
-    tiles.errorTarget = 12;
+    tiles.errorTarget = deviceTier().photoMeshError;
+    tiles.lruCache.maxBytesSize = deviceTier().tileCacheBytes;
+    tiles.lruCache.minBytesSize = deviceTier().tileCacheBytes * 0.75;
     tiles.loadAncestors = true;
     tiles.setCamera(camera);
     tiles.setResolutionFromRenderer(camera, renderer);

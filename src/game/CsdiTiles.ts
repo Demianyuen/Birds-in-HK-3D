@@ -1,3 +1,4 @@
+import { deviceTier } from './deviceTier';
 import type { TilesRenderer } from '3d-tiles-renderer/three';
 import {
   GLTFExtensionsPlugin,
@@ -84,7 +85,9 @@ export class CsdiTiles {
       .detectSupport(renderer);
     this.tiles = tiles;
     this.ktx2Loader = ktx2Loader;
-    tiles.errorTarget = 16;
+    tiles.errorTarget = deviceTier().csdiError;
+    tiles.lruCache.maxBytesSize = deviceTier().tileCacheBytes;
+    tiles.lruCache.minBytesSize = deviceTier().tileCacheBytes * 0.75;
     tiles.loadAncestors = true;
     tiles.displayActiveTiles = true;
     tiles.setCamera(camera);

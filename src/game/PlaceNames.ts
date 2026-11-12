@@ -56,6 +56,29 @@ const LANDMARK_RULES: Readonly<Record<string, AreaRule>> = Object.freeze({
   place_of_worship: { category: '廟宇・教堂', radius: 35, maxAltitude: 120 },
   library: { category: '圖書館', radius: 40, maxAltitude: 120 },
   town_hall: { category: '社區會堂', radius: 35, maxAltitude: 110 },
+  // Buildings people know by name.
+  school: { category: '學校', radius: 45, maxAltitude: 120 },
+  college: { category: '院校', radius: 55, maxAltitude: 130 },
+  hospital: { category: '醫院', radius: 65, maxAltitude: 150 },
+  stadium: { category: '運動場', radius: 70, maxAltitude: 150 },
+  swimming_pool: { category: '泳池', radius: 45, maxAltitude: 120 },
+  cinema: { category: '戲院', radius: 35, maxAltitude: 110 },
+  theatre: { category: '劇院', radius: 40, maxAltitude: 110 },
+  fire_station: { category: '消防局', radius: 35, maxAltitude: 110 },
+  police: { category: '警署', radius: 35, maxAltitude: 110 },
+  post: { category: '郵政局', radius: 30, maxAltitude: 100 },
+  lodging: { category: '酒店', radius: 40, maxAltitude: 120 },
+  ferry_terminal: { category: '碼頭', radius: 50, maxAltitude: 130 },
+});
+
+/** Classes with many small entries (every shop, every bus stop): only these kinds are announced. */
+const LANDMARK_SUBCLASS_ONLY: Readonly<Record<string, Readonly<Record<string, AreaRule>>>> = Object.freeze({
+  shop: {
+    mall: { category: '商場', radius: 60, maxAltitude: 140 },
+    department_store: { category: '商場', radius: 45, maxAltitude: 120 },
+    marketplace: { category: '街市', radius: 45, maxAltitude: 120 },
+  },
+  bus: { bus_station: { category: '巴士總站', radius: 45, maxAltitude: 120 } },
 });
 
 const SUBCLASS_CATEGORY: Readonly<Record<string, string>> = Object.freeze({
@@ -138,9 +161,10 @@ export function extractPlaceNames(tile: VectorTile, frame: TileFrame): PlaceName
   });
   read('mountain_peak', properties => (text(properties.class) === 'peak' ? { ...PEAK_RULE, tone: 'area' } : null));
   read('poi', properties => {
-    const rule = LANDMARK_RULES[text(properties.class)];
+    const subclass = text(properties.subclass);
+    const rule = LANDMARK_SUBCLASS_ONLY[text(properties.class)]?.[subclass] ?? LANDMARK_RULES[text(properties.class)];
     if (!rule) return null;
-    const category = SUBCLASS_CATEGORY[text(properties.subclass)] ?? rule.category;
+    const category = SUBCLASS_CATEGORY[subclass] ?? rule.category;
     return { ...rule, category, tone: 'landmark' };
   });
   return places;

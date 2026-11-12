@@ -1,14 +1,12 @@
 import {
   AdditiveBlending,
-  BoxGeometry,
   BufferGeometry,
   CanvasTexture,
   Color,
-  CylinderGeometry,
   Euler,
   DynamicDrawUsage,
-  Float32BufferAttribute,
   Group,
+  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
   MeshBasicMaterial,
@@ -16,11 +14,14 @@ import {
   PlaneGeometry,
   Quaternion,
   Raycaster,
-  SphereGeometry,
   Vector3,
   type Object3D,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  block, contactShadowTexture, pedestrianGeometry, VEHICLE_FOOTPRINT, VEHICLE_KINDS, vehicleGeometry,
+  WALK_VERTEX_BODY, WALK_VERTEX_HEAD, type VehicleKind,
+} from './streetModels';
 import { clearWaterLine, inAnyWater, type LaneClass, type StreetData, type StreetLine } from './streetData';
 
 /**
@@ -30,8 +31,6 @@ import { clearWaterLine, inAnyWater, type LaneClass, type StreetData, type Stree
  * instanced and kept near the bird so it costs little on a laptop GPU.
  */
 
-type VehicleKind = 'car' | 'taxiGreen' | 'taxiRed' | 'minibusGreen' | 'minibusRed' | 'bus' | 'van' | 'lorry';
-const VEHICLE_KINDS: readonly VehicleKind[] = ['car', 'taxiGreen', 'taxiRed', 'minibusGreen', 'minibusRed', 'bus', 'van', 'lorry'];
 /** Kinds whose colours are built in (the instance colour stays white). */
 const FIXED_COLOUR = new Set<VehicleKind>(['taxiGreen', 'taxiRed', 'minibusGreen', 'minibusRed']);
 type BoatKind = 'sampan' | 'ferry' | 'trawler';
@@ -39,6 +38,8 @@ const BOAT_KINDS: readonly BoatKind[] = ['sampan', 'ferry', 'trawler'];
 
 const VEHICLE_COUNT = 240;
 const PEDESTRIAN_COUNT = 150;
+/** Steps per second ×π: how fast the legs swing. */
+const STEP_RATE = 7;
 const BOAT_COUNT = 18;
 const VEHICLE_KEEP_RADIUS = 1_700;
 const VEHICLE_SPAWN_RADIUS = 1_300;
@@ -46,6 +47,10 @@ const PEDESTRIAN_KEEP_RADIUS = 420;
 const PEDESTRIAN_SPAWN_RADIUS = 320;
 const BOAT_KEEP_RADIUS = 4_200;
 const GRID = 40;
+/** People and vehicles this close to the bird are checked against the real surface. */
+const SURFACE_CHECK_RADIUS = 450;
+const DOWN = new Vector3(0, -1, 0);
+const PERSON_FOOTPRINT: readonly [number, number] = [0.6, 0.6];
 
 const SPEED: Readonly<Record<LaneClass, number>> = {
   motorway: 21, trunk: 18, primary: 13, secondary: 11, tertiary: 9, minor: 6.5, service: 4, path: 1.3,
@@ -86,6 +91,11 @@ interface Mover {
   kind: number;
   phase: number;
   active: boolean;
+  /** Where it stands now, and how far the surface under it is from the terrain estimate (measured, eased). */
+  x: number;
+  z: number;
+  lift: number;
+  liftTarget: number;
 }
 
 interface Boat {
@@ -113,6 +123,12 @@ export class StreetLife {
   private readonly boatMeshes = new Map<BoatKind, InstancedMesh>();
   private readonly people: InstancedMesh;
   private readonly wakes: InstancedMesh;
+  private readonly shadows: InstancedMesh;
+  private readonly steps: InstancedBufferAttribute;
+  private shadowCount = 0;
+  private surfaceCursor = 0;
+  private readonly vehicleLimit: number;
+  private readonly pedestrianLimit: number;
   private readonly vehicles: Mover[] = [];
   private readonly pedestrians: Mover[] = [];
   private readonly boats: Boat[] = [];
@@ -133,10 +149,20 @@ export class StreetLife {
   private clock = 0;
   private readonly disposables: Array<{ dispose: () => void }> = [];
 
-  public constructor() {
+  /** `density` (0–1) thins the traffic and the crowd on phones. */
+  public constructor(density = 1) {
     this.group.name = 'Street life';
-    const material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.15, flatShading: true });
-    this.disposables.push(material);
+    this.vehicleLimit = Math.round(VEHICLE_COUNT * density);
+    this.pedestrianLimit = Math.round(PEDESTRIAN_COUNT * density);
+    // Paint with a little shine, so the sky shows on roofs and bonnets.
+    const material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.28, flatShading: true });
+    const peopleMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
+    peopleMaterial.onBeforeCompile = shader => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\n${WALK_VERTEX_HEAD}`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>\n${WALK_VERTEX_BODY}`);
+    };
+    this.disposables.push(material, peopleMaterial);
     for (const kind of VEHICLE_KINDS) {
       const geometry = vehicleGeometry(kind);
       this.disposables.push(geometry);
@@ -150,12 +176,32 @@ export class StreetLife {
     }
     const personGeometry = pedestrianGeometry();
     this.disposables.push(personGeometry);
-    this.people = new InstancedMesh(personGeometry, material, PEDESTRIAN_COUNT);
+    this.steps = new InstancedBufferAttribute(new Float32Array(PEDESTRIAN_COUNT), 1);
+    this.steps.setUsage(DynamicDrawUsage);
+    personGeometry.setAttribute('aStep', this.steps);
+    this.people = new InstancedMesh(personGeometry, peopleMaterial, PEDESTRIAN_COUNT);
     this.people.name = 'Pedestrians';
     this.people.count = 0;
     this.people.frustumCulled = false;
     this.people.instanceMatrix.setUsage(DynamicDrawUsage);
     this.group.add(this.people);
+
+    // One soft dark patch under every vehicle and person: without it they look pasted on.
+    const shadowGeometry = new PlaneGeometry(1, 1);
+    shadowGeometry.rotateX(-Math.PI / 2);
+    const shadowTexture = contactShadowTexture();
+    const shadowMaterial = new MeshBasicMaterial({
+      color: '#000000', alphaMap: shadowTexture, transparent: true, opacity: 0.5, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    this.disposables.push(shadowGeometry, shadowTexture, shadowMaterial);
+    this.shadows = new InstancedMesh(shadowGeometry, shadowMaterial, VEHICLE_COUNT + PEDESTRIAN_COUNT);
+    this.shadows.name = 'Contact shadows';
+    this.shadows.count = 0;
+    this.shadows.frustumCulled = false;
+    this.shadows.renderOrder = 1;
+    this.shadows.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.group.add(this.shadows);
 
     const boatMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.05, flatShading: true });
     this.disposables.push(boatMaterial);
@@ -223,10 +269,14 @@ export class StreetLife {
 
   public update(deltaSeconds: number, focus: Vector3): void {
     this.clock += deltaSeconds;
+    this.shadowCount = 0;
     if (this.data.roads.length > 0) this.updateMovers(this.vehicles, deltaSeconds, focus, true);
     if (this.data.paths.length > 0) this.updateMovers(this.pedestrians, deltaSeconds, focus, false);
+    this.shadows.count = this.shadowCount;
+    this.shadows.instanceMatrix.needsUpdate = true;
     if (this.data.water.length > 0) this.updateBoats(deltaSeconds, focus);
-    this.refineHeights(1.2);
+    this.refineHeights(0.6);
+    this.standOnSurface(focus, 1.0);
   }
 
   // ---- roads and paths -------------------------------------------------------------------
@@ -235,13 +285,20 @@ export class StreetLife {
     const keep = driving ? VEHICLE_KEEP_RADIUS : PEDESTRIAN_KEEP_RADIUS;
     const counts = new Map<number, number>();
     let spawned = 0;
-    for (const mover of movers) {
+    const limit = driving ? this.vehicleLimit : this.pedestrianLimit;
+    for (let slot = 0; slot < movers.length; slot += 1) {
+      const mover = movers[slot];
+      if (slot >= limit) {
+        mover.active = false;
+        continue;
+      }
       if (!mover.active && spawned < 6) {
         if (this.spawn(mover, focus, driving)) spawned += 1;
       }
       if (!mover.active) continue;
       this.advance(mover, mover.speed * deltaSeconds, driving);
       if (!mover.active) continue;
+      mover.lift += (mover.liftTarget - mover.lift) * Math.min(1, deltaSeconds * 5);
       const point = this.place(mover, this.position);
       if (Math.hypot(point.x - focus.x, point.z - focus.z) > keep) {
         mover.active = false;
@@ -250,13 +307,27 @@ export class StreetLife {
       const { dx, dz } = this.direction(mover);
       const heading = Math.atan2(dx, dz);
       this.quaternion.setFromAxisAngle(this.up, heading);
+      // The soft shadow, flat on the ground under it.
+      const [wide, long] = driving ? VEHICLE_FOOTPRINT[VEHICLE_KINDS[mover.kind]] : PERSON_FOOTPRINT;
+      this.scale.set(wide * 1.35, 1, long * 1.2);
+      point.y += 0.05;
+      this.matrix.compose(point, this.quaternion, this.scale);
+      this.shadows.setMatrixAt(this.shadowCount, this.matrix);
+      this.shadowCount += 1;
+      point.y -= 0.05;
+      this.scale.set(1, 1, 1);
+      const index = counts.get(driving ? mover.kind : 0) ?? 0;
       if (!driving) {
-        // A gentle step bob.
-        point.y += Math.abs(Math.sin(this.clock * 7 + mover.phase)) * 0.05;
+        // People differ a little in height; legs and arms swing in time with a gentle bob.
+        const step = this.clock * STEP_RATE * (mover.speed / 1.3) + mover.phase;
+        point.y += Math.abs(Math.sin(step)) * 0.035;
+        const height = 0.92 + (mover.phase % 1) * 0.16;
+        this.scale.set(height, height, height);
+        this.steps.setX(index, step % (Math.PI * 2));
       }
       this.matrix.compose(point, this.quaternion, this.scale);
+      this.scale.set(1, 1, 1);
       const mesh = driving ? this.vehicleMeshes.get(VEHICLE_KINDS[mover.kind])! : this.people;
-      const index = counts.get(mover.kind) ?? 0;
       if (driving) counts.set(mover.kind, index + 1);
       else counts.set(0, index + 1);
       mesh.setMatrixAt(index, this.matrix);
@@ -272,6 +343,7 @@ export class StreetLife {
     } else {
       this.people.count = counts.get(0) ?? 0;
       this.people.instanceMatrix.needsUpdate = true;
+      this.steps.needsUpdate = true;
       if (this.people.instanceColor) this.people.instanceColor.needsUpdate = true;
     }
   }
@@ -311,6 +383,8 @@ export class StreetLife {
         mover.colour.set(pick(CLOTHES));
       }
       mover.phase = Math.random() * 10;
+      mover.lift = 0;
+      mover.liftTarget = 0;
       mover.active = true;
       return true;
     }
@@ -402,6 +476,13 @@ export class StreetLife {
     const { dx, dz } = this.direction(mover);
     const x = a.x + (b.x - a.x) * mover.t + dz * mover.offset;
     const z = a.z + (b.z - a.z) * mover.t - dx * mover.offset;
+    mover.x = x;
+    mover.z = z;
+    if (!mover.line.bridge) {
+      // The ground right under it (not a straight line between two far-apart road points,
+      // which leaves people in the air over a dip or buried in a rise).
+      return out.set(x, this.ground(x, z) + mover.lift, z);
+    }
     const ya = this.vertexHeight(mover.line, mover.seg);
     const yb = this.vertexHeight(mover.line, mover.seg + 1);
     return out.set(x, ya + (yb - ya) * mover.t, z);
@@ -447,6 +528,35 @@ export class StreetLife {
       }
       const cache = this.heightCache.get(line);
       if (cache) cache[index] = best ?? estimate;
+    }
+  }
+
+  /**
+   * Measures the real surface under each person and vehicle near the bird, a few every frame,
+   * so they follow slopes, kerbs and the photo mesh as its detail changes.
+   */
+  private standOnSurface(focus: Vector3, budgetMilliseconds: number): void {
+    if (this.roots.length === 0) return;
+    const start = performance.now();
+    const total = this.pedestrians.length + this.vehicles.length;
+    this.raycaster.near = 0;
+    this.raycaster.far = 60;
+    for (let tried = 0; tried < total && performance.now() - start < budgetMilliseconds; tried += 1) {
+      this.surfaceCursor = (this.surfaceCursor + 1) % total;
+      const mover = this.surfaceCursor < this.pedestrians.length
+        ? this.pedestrians[this.surfaceCursor]
+        : this.vehicles[this.surfaceCursor - this.pedestrians.length];
+      if (!mover.active || mover.line.bridge) continue;
+      if (Math.hypot(mover.x - focus.x, mover.z - focus.z) > SURFACE_CHECK_RADIUS) continue;
+      const estimate = this.ground(mover.x, mover.z);
+      this.raycaster.set(this.position.set(mover.x, estimate + 30, mover.z), DOWN);
+      let best: number | null = null;
+      for (const hit of this.raycaster.intersectObjects(this.roots, true)) {
+        // The surface nearest the terrain estimate: the street, not a roof or a canopy above it.
+        if (Math.abs(hit.point.y - estimate) > 8) continue;
+        if (best === null || Math.abs(hit.point.y - estimate) < Math.abs(best - estimate)) best = hit.point.y;
+      }
+      mover.liftTarget = best === null ? 0 : best + 0.03 - estimate;
     }
   }
 
@@ -564,7 +674,7 @@ export class StreetLife {
   }
 
   public dispose(): void {
-    for (const mesh of [...this.vehicleMeshes.values(), ...this.boatMeshes.values(), this.people, this.wakes]) mesh.dispose();
+    for (const mesh of [...this.vehicleMeshes.values(), ...this.boatMeshes.values(), this.people, this.wakes, this.shadows]) mesh.dispose();
     for (const item of this.disposables) item.dispose();
     this.group.removeFromParent();
   }
@@ -573,7 +683,7 @@ export class StreetLife {
 // ---- helpers ------------------------------------------------------------------------------
 
 function emptyMover(): Mover {
-  return { line: { points: [], laneClass: 'minor', oneway: 0, bridge: false }, seg: 0, t: 0, dir: 1, speed: 0, offset: 0, colour: new Color(), kind: 0, phase: 0, active: false };
+  return { line: { points: [], laneClass: 'minor', oneway: 0, bridge: false }, seg: 0, t: 0, dir: 1, speed: 0, offset: 0, colour: new Color(), kind: 0, phase: 0, active: false, x: 0, z: 0, lift: 0, liftTarget: 0 };
 }
 
 function cellKey(x: number, z: number): string {
@@ -584,100 +694,7 @@ function pick<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)];
 }
 
-/** A coloured box; white parts take the instance colour, other colours tint it. */
-function block(width: number, height: number, length: number, x: number, y: number, z: number, colour: string): BufferGeometry {
-  const geometry = new BoxGeometry(width, height, length).toNonIndexed();
-  geometry.translate(x, y, z);
-  return paint(geometry, colour);
-}
-
-function paint(geometry: BufferGeometry, colour: string): BufferGeometry {
-  const target = geometry.index ? geometry.toNonIndexed() : geometry;
-  const value = new Color(colour);
-  const colours = new Float32Array(target.attributes.position.count * 3);
-  for (let index = 0; index < target.attributes.position.count; index += 1) colours.set([value.r, value.g, value.b], index * 3);
-  target.setAttribute('color', new Float32BufferAttribute(colours, 3));
-  target.deleteAttribute('uv');
-  return target;
-}
-
 const GLASS = '#1d2a33';
-const TYRE = '#151515';
-const LIGHT = '#fff3d0';
-const TAIL = '#7a1010';
-
-function wheels(length: number, width: number, radius = 0.33): BufferGeometry[] {
-  const parts: BufferGeometry[] = [];
-  for (const z of [length * 0.32, -length * 0.32]) {
-    for (const x of [width / 2 - 0.12, -width / 2 + 0.12]) {
-      const wheel = new CylinderGeometry(radius, radius, 0.24, 10).toNonIndexed();
-      wheel.rotateZ(Math.PI / 2);
-      wheel.translate(x, radius, z);
-      parts.push(paint(wheel, TYRE));
-    }
-  }
-  return parts;
-}
-
-/** Vehicles face +z, sit on y = 0, at real size (m). */
-function vehicleGeometry(kind: VehicleKind): BufferGeometry {
-  const parts: BufferGeometry[] = [];
-  if (kind === 'car' || kind === 'taxiGreen' || kind === 'taxiRed') {
-    const taxi = kind !== 'car';
-    const length = taxi ? 4.6 : 4.5;
-    // Hong Kong taxis: green with a white roof (New Territories), red with a silver roof (urban).
-    const body = kind === 'taxiGreen' ? '#2f8a4c' : kind === 'taxiRed' ? '#c8312b' : '#ffffff';
-    const roof = kind === 'taxiGreen' ? '#f2f2ee' : kind === 'taxiRed' ? '#c9cbcc' : '#ffffff';
-    parts.push(block(1.78, 0.7, length, 0, 0.62, 0, body));
-    parts.push(block(1.6, 0.58, 2.4, 0, 1.24, -0.25, roof));
-    parts.push(block(1.62, 0.44, 2.3, 0, 1.25, -0.25, GLASS));
-    parts.push(block(0.5, 0.12, 0.05, 0.55, 0.72, length / 2, LIGHT), block(0.5, 0.12, 0.05, -0.55, 0.72, length / 2, LIGHT));
-    parts.push(block(0.4, 0.12, 0.05, 0.6, 0.72, -length / 2, TAIL), block(0.4, 0.12, 0.05, -0.6, 0.72, -length / 2, TAIL));
-    if (taxi) parts.push(block(0.62, 0.16, 0.26, 0, 1.6, -0.1, '#f7f7f2'));
-    parts.push(...wheels(length, 1.78));
-  } else if (kind === 'minibusGreen' || kind === 'minibusRed') {
-    // Public light bus: cream body with a green (fixed route) or red roof band.
-    parts.push(block(2.05, 1.65, 6.9, 0, 1.3, 0, '#efe8d2'));
-    parts.push(block(2.07, 0.42, 6.9, 0, 2.3, 0, kind === 'minibusGreen' ? '#2e7d4f' : '#b8312d'));
-    parts.push(block(2.08, 0.62, 5.2, 0, 1.75, -0.6, GLASS));
-    parts.push(block(1.9, 0.7, 0.05, 0, 1.7, 3.45, GLASS));
-    parts.push(...wheels(6.9, 2.05, 0.36));
-  } else if (kind === 'bus') {
-    // Double-decker, generic colours (no operator livery).
-    parts.push(block(2.5, 4.0, 11.8, 0, 2.25, 0, '#ffffff'));
-    parts.push(block(2.52, 0.9, 10.6, 0, 1.75, -0.3, GLASS));
-    parts.push(block(2.52, 0.9, 11.2, 0, 3.45, 0, GLASS));
-    parts.push(block(2.3, 1.6, 0.05, 0, 2.3, 5.9, GLASS));
-    parts.push(block(2.52, 0.18, 11.82, 0, 4.25, 0, '#e8e8e8'));
-    parts.push(...wheels(11.8, 2.5, 0.5));
-  } else if (kind === 'van') {
-    parts.push(block(1.9, 1.85, 5.1, 0, 1.25, 0, '#ffffff'));
-    parts.push(block(1.92, 0.6, 1.1, 0, 1.75, 1.9, GLASS));
-    parts.push(...wheels(5.1, 1.9));
-  } else {
-    // Light lorry: cab plus a covered box.
-    parts.push(block(2.2, 2.2, 1.9, 0, 1.55, 2.6, '#f2f2f2'));
-    parts.push(block(2.22, 0.7, 1.0, 0, 2.05, 3.1, GLASS));
-    parts.push(block(2.3, 2.6, 5.2, 0, 2.05, -1.0, '#ffffff'));
-    parts.push(...wheels(7.2, 2.2, 0.48));
-  }
-  return mergeGeometries(parts)!;
-}
-
-/** A person about 1.65 m tall, facing +z; the shirt takes the instance colour. */
-function pedestrianGeometry(): BufferGeometry {
-  const parts: BufferGeometry[] = [];
-  parts.push(block(0.15, 0.82, 0.18, 0.1, 0.41, 0, '#2b2f36'), block(0.15, 0.82, 0.18, -0.1, 0.41, 0, '#2b2f36'));
-  parts.push(block(0.44, 0.6, 0.24, 0, 1.12, 0, '#ffffff'));
-  parts.push(block(0.1, 0.55, 0.12, 0.28, 1.1, 0, '#ffffff'), block(0.1, 0.55, 0.12, -0.28, 1.1, 0, '#ffffff'));
-  const head = new SphereGeometry(0.12, 8, 6).toNonIndexed();
-  head.translate(0, 1.53, 0);
-  parts.push(paint(head, '#c99f80'));
-  const hair = new SphereGeometry(0.125, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).toNonIndexed();
-  hair.translate(0, 1.55, -0.01);
-  parts.push(paint(hair, '#1b1714'));
-  return mergeGeometries(parts)!;
-}
 
 /** Boats face +z with the waterline at y = 0. */
 function boatGeometry(kind: BoatKind): BufferGeometry {
