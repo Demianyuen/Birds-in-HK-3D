@@ -1,3 +1,4 @@
+import { readKind } from './_lib/flowerKinds.js';
 import type { ServerResponse } from 'node:http';
 import {
   ApiError,
@@ -33,9 +34,10 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
       }
       const response = await rest(
         config,
-        'memorial_flowers?select=id,created_at,name,message,kind,hidden&message_status=eq.pending&order=created_at.asc&limit=200',
+        'memorial_flowers?select=id,created_at,name,message,kind,hidden,sender_hash&message_status=eq.pending&order=created_at.asc&limit=200',
       );
-      sendJson(res, 200, { pending: await response.json() });
+      const rows = (await response.json()) as Array<Record<string, unknown>>;
+      sendJson(res, 200, { pending: rows.map(({ sender_hash: _hash, ...row }) => ({ ...row, kind: readKind({ kind: row.kind, sender_hash: _hash }) })) });
       return;
     }
     if (req.method !== 'POST') {

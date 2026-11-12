@@ -19,6 +19,7 @@ import {
   supabaseConfig,
   type ApiRequest,
 } from './_lib/openWorld.js';
+import { readKind, senderFilter, storeKind } from './_lib/flowerKinds.js';
 
 /** Per visitor: at most 3 flowers in 10 minutes. Whole site: 300 in 10 minutes. */
 const PER_SENDER_LIMIT = 3;
@@ -34,11 +35,24 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
   try {
     const config = supabaseConfig();
     if (req.method === 'GET') {
+      // Read with the service role (the table itself is closed to visitors) and pass on only
+      // what the public may see: visible flowers, and words only once they are approved.
       const response = await rest(
         config,
-        'memorial_flowers_public?select=id,created_at,name,message,kind,x,y,z&order=created_at.desc&limit=3000',
+        'memorial_flowers?select=id,created_at,name,message,message_status,kind,x,y,z,sender_hash&hidden=eq.false&order=created_at.desc&limit=3000',
       );
-      sendJson(res, 200, { flowers: await response.json() }, 10);
+      const rows = (await response.json()) as Array<Record<string, unknown>>;
+      const flowers = rows.map(row => ({
+        id: row.id,
+        created_at: row.created_at,
+        name: row.name,
+        message: row.message_status === 'approved' ? row.message : '',
+        kind: readKind(row),
+        x: row.x,
+        y: row.y,
+        z: row.z,
+      }));
+      sendJson(res, 200, { flowers }, 10);
       return;
     }
     if (req.method !== 'POST') {
@@ -60,7 +74,7 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
     const sender = senderHash(req);
     const since = encodeURIComponent(isoSecondsAgo(WINDOW_SECONDS));
     const [mine, everyone] = await Promise.all([
-      countRows(config, 'memorial_flowers', `sender_hash=eq.${sender}&created_at=gte.${since}`),
+      countRows(config, 'memorial_flowers', `${senderFilter(sender)}&created_at=gte.${since}`),
       countRows(config, 'memorial_flowers', `created_at=gte.${since}`),
     ]);
     if (mine >= PER_SENDER_LIMIT) throw new ApiError(429, '你剛剛已經放了幾朵花，請稍後再放。');
@@ -75,15 +89,14 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
         name: name.text,
         message: message.text,
         message_status: messageStatus,
-        kind: body.kind,
+        ...storeKind(body.kind, sender),
         x: Math.round((body.x as number) * 100) / 100,
         z: Math.round((body.z as number) * 100) / 100,
         y: Math.round((body.y as number) * 100) / 100,
-        sender_hash: sender,
       },
     });
     const [row] = (await response.json()) as Array<Record<string, unknown>>;
-    sendJson(res, 201, { flower: { ...row, name: name.text, message: messageStatus === 'approved' ? message.text : '' }, messageStatus });
+    sendJson(res, 201, { flower: { ...row, kind: body.kind, name: name.text, message: messageStatus === 'approved' ? message.text : '' }, messageStatus });
   } catch (error) {
     sendError(res, error);
   }

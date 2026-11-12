@@ -98,11 +98,45 @@ describe('flowers API', () => {
     expect((await done).status).toBe(429);
   });
 
-  it('lists flowers from the public view only', async () => {
+  it('lists only visible flowers, hides words that are not approved, and never passes on the sender hash', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify([
+        { id: 'a', created_at: 't', name: '甲', message: '想念你', message_status: 'pending', kind: 'lily', x: 1, y: 2, z: 3, sender_hash: 'abc' },
+        { id: 'b', created_at: 't', name: '乙', message: '一路好走', message_status: 'approved', kind: 'white-chrysanthemum', x: 1, y: 2, z: 3, sender_hash: 'abc~white-rose' },
+      ]), { status: 200 });
+    }));
     const { res, done } = response();
     await flowers(request('GET', '/api/flowers'), res);
-    expect((await done).status).toBe(200);
-    expect(calls[0].url).toContain('/memorial_flowers_public?');
+    const result = await done;
+    expect(result.status).toBe(200);
+    expect(calls[0].url).toContain('/memorial_flowers?');
+    expect(calls[0].url).toContain('hidden=eq.false');
+    expect(result.body.flowers).toEqual([
+      { id: 'a', created_at: 't', name: '甲', message: '', kind: 'lily', x: 1, y: 2, z: 3 },
+      { id: 'b', created_at: 't', name: '乙', message: '一路好走', kind: 'white-rose', x: 1, y: 2, z: 3 },
+    ]);
+  });
+
+  it('stores a later white flower in a form the first table accepts, and still counts it for the sender', async () => {
+    const { res, done } = response();
+    await flowers(request('POST', '/api/flowers', { name: '甲', kind: 'white-rose', x: 10, y: 6, z: 20 }), res);
+    const result = await done;
+    expect(result.status).toBe(201);
+    expect((result.body.flower as Record<string, unknown>).kind).toBe('white-rose');
+    const insert = calls.find(call => call.init.method === 'POST')!;
+    const sent = JSON.parse(insert.init.body as string) as Record<string, string>;
+    expect(sent.kind).toBe('white-chrysanthemum');
+    expect(sent.sender_hash).toMatch(/^[0-9a-f]{32}~white-rose$/);
+    expect(calls[0].url).toContain('sender_hash=like.');
+    // A first-table kind is stored as it is.
+    calls.length = 0;
+    const lily = response();
+    await flowers(request('POST', '/api/flowers', { kind: 'lily', x: 10, y: 6, z: 20 }), lily.res);
+    await lily.done;
+    const plain = JSON.parse(calls.find(call => call.init.method === 'POST')!.init.body as string) as Record<string, string>;
+    expect(plain.kind).toBe('lily');
+    expect(plain.sender_hash).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it('reports a clear error when storage is not configured', async () => {
