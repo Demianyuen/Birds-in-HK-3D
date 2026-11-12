@@ -163,11 +163,15 @@ function selectedPresentation(): WorldPresentation {
   const value = buildingPresentation.value;
   return value === 'reference' || value === 'preservation' ? value : 'photo';
 }
-try {
-  const saved = localStorage.getItem(PRESENTATION_KEY);
-  if (saved === 'photo' || saved === 'reference' || saved === 'preservation') buildingPresentation.value = saved;
-} catch {
-  // storage blocked: keep the default
+// Visitors always see the aerial photo model. A layer chosen earlier is only
+// remembered while the working tools are shown (otherwise there is no way to switch back).
+if (document.body.dataset.tools === 'on') {
+  try {
+    const saved = localStorage.getItem(PRESENTATION_KEY);
+    if (saved === 'photo' || saved === 'reference' || saved === 'preservation') buildingPresentation.value = saved;
+  } catch {
+    // storage blocked: keep the default
+  }
 }
 buildingPresentationNote.textContent = PRESENTATION_NOTES[selectedPresentation()];
 buildingPresentation.addEventListener('change', () => {
