@@ -28,7 +28,7 @@ import {
   Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { FLOWER_KINDS, MEMORIAL_CENTRE, type FlowerKind } from './contentRules';
+import { FLOWER_KINDS, MEMORIAL_PLAZA, type FlowerKind } from './contentRules';
 import type { MemorialFlower } from './flowerApi';
 
 const CAPACITY = 4_000;
@@ -192,7 +192,7 @@ export class MemorialFlowers {
     this.disposables.push(guideGeometry, guideMaterial, guideMaterial.map!);
     this.guide = new Mesh(guideGeometry, guideMaterial);
     this.guide.name = 'Memorial guide light';
-    this.guide.position.set(MEMORIAL_CENTRE.x, 0, MEMORIAL_CENTRE.z);
+    this.guide.position.set(MEMORIAL_PLAZA.x, 0, MEMORIAL_PLAZA.z);
     this.guide.renderOrder = 1;
     this.guide.visible = false;
     this.group.add(this.guide);

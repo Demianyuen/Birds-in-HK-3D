@@ -105,6 +105,16 @@ export class PhotoMeshTiles {
           old.dispose();
           mesh.castShadow = false;
           mesh.receiveShadow = false;
+          // What is cut away out of sight cannot be landed on or bumped into either.
+          const cutouts = this.cutouts;
+          const count = this.cutoutCount;
+          mesh.raycast = function raycastOutsideCutouts(raycaster, intersects) {
+            const before = intersects.length;
+            Mesh.prototype.raycast.call(this, raycaster, intersects);
+            for (let index = intersects.length - 1; index >= before; index -= 1) {
+              if (insideCutouts(intersects[index].point, cutouts.value, count.value)) intersects.splice(index, 1);
+            }
+          };
         });
         if (!settled) {
           settled = true;
@@ -202,4 +212,13 @@ for (int i = 0; i < ${MAX_CUTOUTS}; i++) {
     this.loading = null;
     this.group.clear();
   }
+}
+
+/** True where the photo mesh is hidden: inside one of the first `count` circles (x, z, radius, minY) and above its minY. */
+export function insideCutouts(point: { x: number; y: number; z: number }, circles: readonly Vector4[], count: number): boolean {
+  for (let index = 0; index < Math.min(count, circles.length); index += 1) {
+    const circle = circles[index];
+    if (point.y > circle.w && Math.hypot(point.x - circle.x, point.z - circle.y) < circle.z) return true;
+  }
+  return false;
 }

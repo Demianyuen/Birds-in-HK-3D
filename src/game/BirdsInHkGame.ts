@@ -51,7 +51,8 @@ import { WangFukCourt } from '../wangFuk/WangFukCourt';
 import { inAnyWater, type StreetData } from './streetData';
 import { RemoteBirds } from '../multiplayer/RemoteBirds';
 import { createCarriedFlower, disposeCarriedFlower, MemorialFlowers } from '../openWorld/MemorialFlowers';
-import { MEMORIAL_APPROACH, MEMORIAL_CENTRE, type FlowerKind } from '../openWorld/contentRules';
+import { MEMORIAL_APPROACH, MEMORIAL_PLAZA, type FlowerKind } from '../openWorld/contentRules';
+import { MemorialPlaza } from '../wangFuk/MemorialPlaza';
 import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 
 type GameMode = 'attract' | 'loading' | 'playing';
@@ -117,6 +118,7 @@ export class BirdsInHkGame {
   /** Hand-built Wang Fuk Court towers and the trees around them, placed once measured in the photo mesh. */
   private readonly court = new WangFukCourt(this.sunDirection);
   private readonly grove = new Grove(420);
+  private readonly plaza = new MemorialPlaza();
   private courtPlacer: CourtPlacer | null = null;
   private readonly resolution = new DynamicResolution({
     maximum: deviceTier().maxPixelRatio,
@@ -176,6 +178,7 @@ export class BirdsInHkGame {
     this.scene.add(this.photoMesh.group);
     this.scene.add(this.court.group);
     this.scene.add(this.grove.mesh);
+    this.scene.add(this.plaza.group);
     this.scene.add(this.streetLife.group);
 
     const harbour = new Mesh(
@@ -299,7 +302,8 @@ export class BirdsInHkGame {
           canGrowTree: (x, z) => !inAnyWater(this.roads.streetData.water, x, z),
         },
         () => {
-          this.photoMesh.setCutouts(this.court.cutouts());
+          this.plaza.setTowerBases(this.court.blocks.map(block => block.baseY));
+          this.refreshCutouts();
           this.applyWorldPresentation();
         },
       )
@@ -332,7 +336,7 @@ export class BirdsInHkGame {
   public startFlight(): void {
     this.mode = 'playing';
     this.renderVerified = false;
-    this.bird.beginAt(MEMORIAL_APPROACH, MEMORIAL_CENTRE);
+    this.bird.beginAt(MEMORIAL_APPROACH, MEMORIAL_PLAZA);
     this.bird.setEnabled(true);
   }
 
@@ -406,6 +410,13 @@ export class BirdsInHkGame {
     this.trees.group.visible = !photo;
     this.court.setVisible(photo);
     this.grove.setVisible(photo);
+    this.plaza.setVisible(photo);
+  }
+
+  /** Hide the photo mesh where the hand-built towers and the memorial square stand. */
+  private refreshCutouts(): void {
+    const plaza = this.plaza.cutout();
+    this.photoMesh.setCutouts([...(plaza ? [plaza] : []), ...this.court.cutouts()]);
   }
 
   /** How many towers have been measured and built, and the measurements (for checking placement). */
@@ -420,7 +431,7 @@ export class BirdsInHkGame {
   /** What the bird can hit: the photo mesh when shown, else the stylised ground and CSDI models. */
   private collisionRoots(): Object3D[] {
     return this.worldPresentation === 'photo' && this.photoMesh.ready
-      ? [this.photoMesh.group, this.court.group]
+      ? [this.photoMesh.group, this.court.group, ...(this.plaza.group.visible ? [this.plaza.group] : [])]
       : [this.aerialGround.group, this.officialWorldRoot];
   }
 
@@ -433,7 +444,7 @@ export class BirdsInHkGame {
   }
 
   public resetFlight(): void {
-    this.bird.beginAt(MEMORIAL_APPROACH, MEMORIAL_CENTRE);
+    this.bird.beginAt(MEMORIAL_APPROACH, MEMORIAL_PLAZA);
     this.bird.updateCamera(this.camera, 1);
   }
 
@@ -485,6 +496,7 @@ export class BirdsInHkGame {
     this.flowers.dispose();
     this.court.dispose();
     this.grove.dispose();
+    this.plaza.dispose();
     this.holdFlower(null);
     this.remoteBirds.dispose();
     this.renderer.dispose();
@@ -624,6 +636,18 @@ export class BirdsInHkGame {
     throw new Error(`Hong Kong loaded but failed the runtime readiness gate: ${lastBlockers.join(' ')}`);
   }
 
+  /** Once the photo mesh is detailed near the court, find the ground level for the memorial square. */
+  private measurePlaza(): void {
+    if (this.plaza.level !== null || this.region?.id !== 'tai-po') return;
+    if (this.worldPresentation !== 'photo' || !this.photoMesh.ready) return;
+    const bird = this.bird.object.position;
+    if (Math.hypot(bird.x - MEMORIAL_PLAZA.x, bird.z - MEMORIAL_PLAZA.z) > 400) return;
+    if (this.plaza.measure([this.photoMesh.group], this.aerialGround.getElevationAtWorld(MEMORIAL_PLAZA.x, MEMORIAL_PLAZA.z))) {
+      this.refreshCutouts();
+      this.applyWorldPresentation();
+    }
+  }
+
   private readonly animate = (): void => {
     this.animationFrame = requestAnimationFrame(this.animate);
     const deltaSeconds = Math.min(this.clock.getDelta(), 0.05);
@@ -642,6 +666,7 @@ export class BirdsInHkGame {
       this.bird.updateCamera(this.camera, deltaSeconds);
       this.remoteBirds.update(deltaSeconds);
       this.courtPlacer?.update(deltaSeconds, this.bird.object.position, this.worldPresentation === 'photo' && this.photoMesh.ready);
+      this.measurePlaza();
       this.streetLife.setSurface((x, z) => this.aerialGround.getElevationAtWorld(x, z) + 0.2, this.collisionRoots());
       this.streetLife.update(deltaSeconds, this.bird.object.position);
       const position = this.bird.object.position;

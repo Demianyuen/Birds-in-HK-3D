@@ -5,13 +5,12 @@ import { WORLD_PLAYER_LIMIT } from '../multiplayer/protocol';
 import { openWorldConfig, skyRelayUrl } from './config';
 import { playLayingChime } from './chime';
 import { Danmaku } from './Danmaku';
-import { checkChat, checkMessage, insideMemorialGround, MEMORIAL_CENTRE, MESSAGE_MAX, rejectReasonText } from './contentRules';
+import { checkChat, checkMessage, insideMemorialGround, MEMORIAL_PLAZA, MESSAGE_MAX, rejectReasonText } from './contentRules';
 import { FlowerRefused, fetchFlowers, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
 import type { ChatLine, LiveStatus, SkyLink } from './skyLink';
 import { FLOWER_LABELS, type Visitor } from './visitor';
 import { WorldLabels, type WorldLabel } from './WorldLabels';
 import { findSpeaker, SpeechBubbles, SpeechInput } from './speech';
-import { createWordChips } from './wordChips';
 import { RadarMap } from './RadarMap';
 
 const FLOWER_REFRESH_MS = 30_000;
@@ -224,7 +223,7 @@ export class OpenWorldPanel {
       yaw: this.game.birdYaw,
       grounded: Boolean(this.game.birdGroundPoint),
       peers: this.game.remoteBirdLabels.map(remote => ({ x: remote.position.x, z: remote.position.z })),
-      court: MEMORIAL_CENTRE,
+      court: MEMORIAL_PLAZA,
       carrying: Boolean(this.visitor && !this.visitor.placed),
     });
     this.updatePrompt();
@@ -328,17 +327,11 @@ export class OpenWorldPanel {
     this.card.hidden = true;
     this.card.setAttribute('aria-labelledby', 'flower-card-title');
     this.cardTitle.id = 'flower-card-title';
-    const label = document.createElement('label');
-    const caption = document.createElement('span');
-    caption.textContent = '想留下的話';
+    // Only the box for words: no ready-made lines, no explanations.
     this.cardMessage.maxLength = MESSAGE_MAX;
     this.cardMessage.rows = 4;
     this.cardMessage.placeholder = '寫給宏福苑的一句話';
-    label.append(caption, this.cardMessage);
-    const chips = createWordChips(words => {
-      this.cardMessage.value = words;
-      this.cardError.hidden = true;
-    });
+    this.cardMessage.setAttribute('aria-label', '想留下的話');
     const note = this.cardNote;
     note.className = 'flower-card-note';
     this.cardError.className = 'flower-card-error';
@@ -356,7 +349,7 @@ export class OpenWorldPanel {
     cancel.textContent = '取消';
     cancel.addEventListener('click', () => this.closeCard());
     actions.append(confirm, cancel);
-    this.card.append(this.cardTitle, chips, label, note, this.cardError, actions);
+    this.card.append(this.cardTitle, this.cardMessage, note, this.cardError, actions);
     this.card.addEventListener('submit', event => {
       event.preventDefault();
       const checked = checkMessage(this.cardMessage.value);
@@ -386,9 +379,9 @@ export class OpenWorldPanel {
     if (!visitor || visitor.placed || this.placing || !ground || !insideMemorialGround(ground.x, ground.z)) return;
     this.cardTitle.textContent = `在這裡放下${FLOWER_LABELS[visitor.kind]}`;
     this.cardMessage.value = visitor.message;
-    this.cardNote.textContent = openWorldConfig()
-      ? '花和名字會即時讓所有人看到，會一直留在這裡。你的話你走近就能讀到；管理員看過後，大家走近花旁也能讀到。'
-      : '共享服務尚未開放：這朵花和留言暫時只保留在你的畫面上。';
+    // Said only when the flower cannot be shared at the moment.
+    this.cardNote.hidden = Boolean(openWorldConfig());
+    this.cardNote.textContent = this.cardNote.hidden ? '' : '共享服務尚未開放：這朵花和留言暫時只保留在你的畫面上。';
     this.cardError.hidden = true;
     this.card.hidden = false;
     this.game.clearControls();
@@ -421,7 +414,7 @@ export class OpenWorldPanel {
       const flower = FLOWER_LABELS[this.visitor.kind];
       const ground = this.game.birdGroundPoint;
       const bird = this.game.birdPosition;
-      const away = Math.round(Math.hypot(bird.x - MEMORIAL_CENTRE.x, bird.z - MEMORIAL_CENTRE.z));
+      const away = Math.round(Math.hypot(bird.x - MEMORIAL_PLAZA.x, bird.z - MEMORIAL_PLAZA.z));
       if (this.placing) text = `正在放下${flower}…`;
       else if (!ground && insideMemorialGround(bird.x, bird.z)) text = `已到宏福苑。降落在屋苑地面，就可以放下${flower}。`;
       else if (!ground) text = `帶著${flower}飛向遠處那道光柱——宏福苑在約 ${away} 米外。`;

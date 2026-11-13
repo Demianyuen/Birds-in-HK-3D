@@ -4,6 +4,7 @@ import {
   BLOCK_RADIUS, fitBlock, planToWorld, probeDirections, STOREYS, STOREY_HEIGHT, type BlockFit, type ProfileSample,
 } from './plan';
 import { ROOF_CAP_HEIGHT, type WangFukCourt } from './WangFukCourt';
+import { MEMORIAL_PLAZA } from '../openWorld/contentRules';
 
 export interface CourtMarker {
   block: string;
@@ -145,7 +146,8 @@ export class CourtPlacer {
       radius: 120,
       count: 360,
       wallClearance: 0,
-      allowed: (x, z) => this.markers.every(marker => Math.hypot(x - marker.x, z - marker.z) > circle)
+      allowed: (x, z) => Math.hypot(x - MEMORIAL_PLAZA.x, z - MEMORIAL_PLAZA.z) > MEMORIAL_PLAZA.radius + 4
+        && this.markers.every(marker => Math.hypot(x - marker.x, z - marker.z) > circle)
         && (this.world.canGrowTree ? this.world.canGrowTree(x, z) : true),
     });
     this.grove.add(spots);
