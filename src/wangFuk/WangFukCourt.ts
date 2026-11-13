@@ -1,11 +1,11 @@
 import {
-  BufferAttribute, BufferGeometry, BoxGeometry, Color, SRGBColorSpace, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial,
-  ShapeUtils, Vector2, Vector3,
+  BufferAttribute, BufferGeometry, BoxGeometry, Color, DoubleSide, SRGBColorSpace, Float32BufferAttribute, Group, Mesh,
+  MeshStandardMaterial, ShapeUtils, Vector2, Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { BLOCK_OUTLINE, BLOCK_RADIUS, STOREYS, type BlockPose } from './plan';
 
-/** Height of the brown-red lift motor room on the roof (m). */
+/** Height of the lift motor room on the roof (m). */
 export const ROOF_CAP_HEIGHT = 4.2;
 
 /**
@@ -60,7 +60,7 @@ export function buildBlockGeometry(height: number): BufferGeometry {
   return geometry;
 }
 
-/** Brown-red lift motor room with a small grey service box on top, baked-shaded vertex colours. */
+/** Weathered concrete lift motor room with a water tank on top, baked-shaded vertex colours. */
 export function buildRoofCaps(height: number): BufferGeometry {
   const parts: BufferGeometry[] = [];
   const addBox = (width: number, boxHeight: number, depth: number, y: number, colour: Color): void => {
@@ -76,11 +76,69 @@ export function buildRoofCaps(height: number): BufferGeometry {
     box.setAttribute('color', new BufferAttribute(colours, 3));
     parts.push(box);
   };
-  addBox(9.2, ROOF_CAP_HEIGHT, 6.8, height, new Color().setRGB(0.45, 0.22, 0.16, SRGBColorSpace));
-  addBox(4.4, 1.6, 3.2, height + ROOF_CAP_HEIGHT, new Color().setRGB(0.52, 0.5, 0.46, SRGBColorSpace));
+  addBox(9.2, ROOF_CAP_HEIGHT, 6.8, height, new Color().setRGB(0.63, 0.6, 0.55, SRGBColorSpace));
+  addBox(9.6, 0.25, 7.2, height + ROOF_CAP_HEIGHT, new Color().setRGB(0.55, 0.53, 0.5, SRGBColorSpace));
+  addBox(4.4, 1.6, 3.2, height + ROOF_CAP_HEIGHT + 0.25, new Color().setRGB(0.78, 0.78, 0.76, SRGBColorSpace));
+  // Parapet round the roof edge, broken into short runs on each arm of the plan.
+  for (const [x, z, w, d] of [[0, -12.7, 11, 0.3], [0, 12.7, 11, 0.3], [12.6, 0, 0.3, 13], [-12.6, 0, 0.3, 13]] as const) {
+    const parapet = new BoxGeometry(w, 1.1, d).toNonIndexed();
+    parapet.translate(x, height + 0.55, z);
+    const normal = parapet.getAttribute('normal');
+    const colours = new Float32Array(normal.count * 3);
+    const tone = new Color().setRGB(0.66, 0.62, 0.56, SRGBColorSpace);
+    for (let index = 0; index < normal.count; index += 1) colours.set([tone.r, tone.g, tone.b], index * 3);
+    parapet.setAttribute('color', new BufferAttribute(colours, 3));
+    parts.push(parapet);
+  }
   const merged = mergeGeometries(parts, false);
   parts.forEach(part => part.dispose());
   return merged ?? new BufferGeometry();
+}
+
+/**
+ * A thin concrete ledge round the tower at every floor slab, standing proud of
+ * the wall so it catches the light and throws a line of shadow, as real slabs do.
+ */
+export function buildLedgeGeometry(height: number, floorHeight = height / STOREYS, out = 0.22, thick = 0.18): BufferGeometry {
+  const outline = BLOCK_OUTLINE.map(([x, z]) => new Vector2(x, z));
+  let area = 0;
+  outline.forEach((point, index) => {
+    const next = outline[(index + 1) % outline.length];
+    area += point.x * next.y - next.x * point.y;
+  });
+  const sign = area > 0 ? 1 : -1;
+  const normalOf = (a: Vector2, b: Vector2): Vector2 => new Vector2((b.y - a.y) * sign, -(b.x - a.x) * sign).normalize();
+  const grown = outline.map((point, index) => {
+    const previous = outline[(index + outline.length - 1) % outline.length];
+    const next = outline[(index + 1) % outline.length];
+    const n1 = normalOf(previous, point);
+    const n2 = normalOf(point, next);
+    const miter = n1.clone().add(n2);
+    return point.clone().addScaledVector(miter, out / Math.max(0.3, 1 + n1.dot(n2)));
+  });
+  const positions: number[] = [];
+  const quad = (a: Vector3, b: Vector3, c: Vector3, d: Vector3): void => {
+    for (const p of [a, b, c, a, c, d]) positions.push(p.x, p.y, p.z);
+  };
+  for (let floor = 1; floor < STOREYS; floor += 1) {
+    const y = floor * floorHeight;
+    for (let index = 0; index < outline.length; index += 1) {
+      const a = outline[index];
+      const b = outline[(index + 1) % outline.length];
+      const ga = grown[index];
+      const gb = grown[(index + 1) % outline.length];
+      const top = y + thick / 2;
+      const bottom = y - thick / 2;
+      quad(new Vector3(ga.x, bottom, ga.y), new Vector3(gb.x, bottom, gb.y), new Vector3(gb.x, top, gb.y), new Vector3(ga.x, top, ga.y));
+      quad(new Vector3(a.x, top, a.y), new Vector3(ga.x, top, ga.y), new Vector3(gb.x, top, gb.y), new Vector3(b.x, top, b.y));
+      quad(new Vector3(a.x, bottom, a.y), new Vector3(b.x, bottom, b.y), new Vector3(gb.x, bottom, gb.y), new Vector3(ga.x, bottom, ga.y));
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
 }
 
 const VERTEX_DECLARATIONS = `varying vec3 vObj;
@@ -124,8 +182,11 @@ vec3 curtain(float k) {
   return vec3(0.68, 0.80, 0.64);
 }
 
+float gGlass = 0.0;
+
 vec3 court(vec3 p, vec3 n) {
-  if (n.y > 0.5) return vec3(0.56, 0.55, 0.51);
+  gGlass = 0.0;
+  if (n.y > 0.5) return vec3(0.60, 0.58, 0.54);
   vec2 tangent = normalize(vec2(-n.z, n.x));
   float u = dot(p.xz, tangent);
   float faceId = floor(dot(p.xz, n.xz) * 0.37 + atan(n.z, n.x) * 3.0);
@@ -143,76 +204,100 @@ vec3 court(vec3 p, vec3 n) {
   float r4 = h2(vec2(bay * 1.9 + 71.0, floorIndex * 2.1 + faceId + uSeed));
   bool mainBay = mod(bay, 2.0) < 0.5;
   vec2 cell = vec2(uf, vf);
+  float near = 1.0 - smoothstep(40.0, 160.0, vDist);
 
-  vec3 wall = vec3(0.70, 0.57, 0.42) * (0.94 + 0.08 * r1);
+  // Mosaic-tiled wall: a muted warm beige, each bay and floor a shade apart, fine grout up close.
+  vec3 wall = vec3(0.76, 0.68, 0.57) * (0.95 + 0.06 * r1);
+  vec2 tile = abs(fract(vec2(u, p.y) / 0.24) - 0.5);
+  wall *= 1.0 - 0.07 * near * smoothstep(0.42, 0.5, max(tile.x, tile.y));
+  // Grime: darker at the foot of the tower and towards the roof, where rain runs off.
+  wall *= mix(0.86, 1.0, smoothstep(0.0, 18.0, p.y));
   if (vRecess > 0.5) {
-    // Dark stair and lift shafts: deep recess with narrow slit windows.
-    vec3 shaft = vec3(0.36, 0.29, 0.22);
-    shaft = mix(shaft, vec3(0.20, 0.25, 0.30), box(cell, vec2(0.38, 0.22), vec2(0.62, 0.80), aa));
-    return shaft;
+    // Deep stair and lift shafts: shadowed, with narrow slit windows.
+    vec3 shaft = vec3(0.46, 0.42, 0.37);
+    float slit = box(cell, vec2(0.40, 0.25), vec2(0.60, 0.78), aa);
+    gGlass = slit;
+    return mix(shaft, vec3(0.22, 0.25, 0.28), slit);
   }
-  // Floor slab line and weathering streaks under sills.
-  wall = mix(wall, wall * 0.86, smoothstep(0.12, 0.0, vf));
-  wall = mix(wall, wall * 0.93, box(cell, vec2(0.16, 0.0), vec2(0.84, 0.30), aa) * r2);
+  // Floor slab line, with a soft shadow just under it.
+  wall *= 1.0 - 0.10 * smoothstep(0.10, 0.0, vf) - 0.06 * smoothstep(0.98, 1.0, vf);
 
   if (floorIndex < 1.0) {
-    // Ground storey: lobby glazing, darker.
-    return mix(vec3(0.42, 0.37, 0.32), vec3(0.22, 0.28, 0.32), box(cell, vec2(0.10, 0.18), vec2(0.90, 0.86), aa));
+    // Ground storey: lobby glazing behind a grey stone base.
+    float lobby = box(cell, vec2(0.08, 0.16), vec2(0.92, 0.88), aa);
+    gGlass = lobby;
+    vec3 lobbyGlass = mix(vec3(0.30, 0.33, 0.35), vec3(0.62, 0.58, 0.50), box(cell, vec2(0.2, 0.2), vec2(0.8, 0.6), aa) * 0.5);
+    return mix(vec3(0.55, 0.53, 0.50), lobbyGlass, lobby);
   }
 
-  vec2 lo = mainBay ? vec2(0.17, 0.30) : vec2(0.33, 0.40);
-  vec2 hi = mainBay ? vec2(0.83, 0.78) : vec2(0.67, 0.78);
+  vec2 lo = mainBay ? vec2(0.17, 0.32) : vec2(0.33, 0.42);
+  vec2 hi = mainBay ? vec2(0.83, 0.80) : vec2(0.67, 0.80);
+  // Rain streaks below the sill, faint, each window its own.
+  float streak = box(cell, vec2(lo.x + 0.08, 0.0), vec2(hi.x - 0.08, lo.y), aa) * smoothstep(0.0, lo.y, vf);
+  wall *= 1.0 - 0.07 * streak * (0.4 + r2);
   float frame = box(cell, lo, hi, aa);
-  vec2 glo = lo + vec2(0.045, 0.045);
-  vec2 ghi = hi - vec2(0.045, 0.045);
+  vec2 glo = lo + vec2(0.04, 0.04);
+  vec2 ghi = hi - vec2(0.04, 0.05);
   float glass = box(cell, glo, ghi, aa);
-  vec3 sky = mix(vec3(0.40, 0.52, 0.64), vec3(0.16, 0.23, 0.33), clamp((cell.y - glo.y) / (ghi.y - glo.y), 0.0, 1.0));
-  vec3 inside = sky;
-  if (r2 < 0.55) inside = mix(sky, curtain(r3) * 0.85, r3 > 0.5 ? 0.8 : 0.5 * step(cell.x, 0.5 + (r4 - 0.5) * 0.4) + 0.2);
-  if (r2 > 0.93) inside = r3 > 0.5 ? vec3(0.96, 0.82, 0.54) : vec3(0.14, 0.14, 0.16);
+  // Dark glass that the sky reflects in (see roughness); curtains and blinds behind some.
+  // Base: the sky and the block opposite seen in the glass, lighter at the top of each pane.
+  vec3 inside = mix(vec3(0.16, 0.20, 0.24), vec3(0.42, 0.50, 0.58), smoothstep(glo.y, ghi.y, cell.y) * (0.5 + 0.5 * r4));
+  if (r2 < 0.5) inside = mix(inside, curtain(r3) * 0.55, r3 > 0.5 ? 0.75 : 0.5 * step(cell.x, 0.5 + (r4 - 0.5) * 0.4) + 0.15);
+  if (r2 > 0.95) inside = vec3(0.22, 0.19, 0.15);
+  // Depth: the head of the opening shades the glass below it, the sill catches light.
+  float head = smoothstep(ghi.y, ghi.y - 0.12, cell.y);
+  inside *= mix(0.55, 1.0, head);
   vec3 colour = wall;
-  colour = mix(colour, vec3(0.80, 0.76, 0.68), frame);
+  colour = mix(colour, vec3(0.70, 0.71, 0.72), frame);
+  colour = mix(colour, vec3(0.86, 0.84, 0.80), box(cell, vec2(lo.x - 0.03, lo.y - 0.04), vec2(hi.x + 0.03, lo.y), aa));
   colour = mix(colour, inside, glass);
-  if (mainBay) colour = mix(colour, vec3(0.80, 0.76, 0.68), box(cell, vec2(0.485, glo.y), vec2(0.515, ghi.y), aa) * glass);
+  gGlass = glass;
+  if (mainBay) {
+    float mullion = box(cell, vec2(0.49, glo.y), vec2(0.51, ghi.y), aa) * glass;
+    colour = mix(colour, vec3(0.70, 0.71, 0.72), mullion);
+    gGlass *= 1.0 - mullion;
+  }
 
-  // Air-conditioner box hung under the sill.
-  if (mainBay && r1 < 0.17) {
-    float ac = box(cell, vec2(0.58, 0.07), vec2(0.95, 0.27), aa);
-    colour = mix(colour, vec3(0.93, 0.93, 0.91), ac);
-    colour = mix(colour, vec3(0.50, 0.52, 0.54), ac * box(cell, vec2(0.62, 0.10), vec2(0.91, 0.15), aa));
+  // Window air-conditioners, common in estates of this age, with a drip stain below.
+  if (mainBay && r1 < 0.32) {
+    float ac = box(cell, vec2(0.58, 0.10), vec2(0.92, 0.30), aa);
+    colour = mix(colour, colour * 0.82, box(cell, vec2(0.60, 0.0), vec2(0.90, 0.10), aa));
+    colour = mix(colour, vec3(0.84, 0.84, 0.82), ac);
+    colour = mix(colour, vec3(0.42, 0.44, 0.46), ac * box(cell, vec2(0.62, 0.14), vec2(0.88, 0.18), aa));
+    gGlass *= 1.0 - ac;
   }
-  // Pot plants on the sill.
-  if (r3 < 0.06) {
-    colour = mix(colour, vec3(0.24, 0.46, 0.22), box(cell, vec2(0.22, 0.28), vec2(0.78, 0.44), aa));
-  }
-  // Laundry on a pole, mostly out of the small kitchen windows beside each door.
-  float laundryChance = mainBay ? 0.10 : 0.38;
+  // A few pot plants on sills.
+  if (r3 < 0.04) colour = mix(colour, vec3(0.26, 0.38, 0.22), box(cell, vec2(0.22, 0.30), vec2(0.78, 0.40), aa));
+  // Laundry poles out of the small windows, in faded everyday colours.
+  float laundryChance = mainBay ? 0.04 : 0.22;
   if (r4 < laundryChance) {
-    colour = mix(colour, vec3(0.30, 0.30, 0.32), box(cell, vec2(0.06, 0.885), vec2(0.94, 0.915), aa));
+    colour = mix(colour, vec3(0.34, 0.34, 0.35), box(cell, vec2(0.06, 0.885), vec2(0.94, 0.905), aa));
     for (int i = 0; i < 4; i++) {
       float slot = float(i);
       float hangs = h2(vec2(bay + slot * 5.3 + faceId, floorIndex + uSeed * 1.7));
       float x0 = 0.09 + slot * 0.21;
-      float bottom = 0.52 + hangs * 0.12;
-      colour = mix(colour, clothes(h2(vec2(slot + bay * 2.0, floorIndex * 3.0 + faceId))), box(cell, vec2(x0, bottom), vec2(x0 + 0.15, 0.89), aa) * step(0.25, hangs));
+      float bottom = 0.56 + hangs * 0.12;
+      vec3 cloth = mix(clothes(h2(vec2(slot + bay * 2.0, floorIndex * 3.0 + faceId))), vec3(0.68, 0.66, 0.62), 0.6);
+      float piece = box(cell, vec2(x0, bottom), vec2(x0 + 0.15, 0.89), aa) * step(0.3, hangs);
+      colour = mix(colour, cloth, piece);
+      gGlass *= 1.0 - piece;
     }
   }
-  // From far away the windows blur into the facade tone.
-  float far = smoothstep(180.0, 650.0, vDist);
-  return mix(colour, vec3(0.55, 0.45, 0.34), far * 0.8);
+  // From far away the detail settles into the facade tone.
+  float far = smoothstep(220.0, 750.0, vDist);
+  gGlass *= 1.0 - far;
+  return mix(colour, vec3(0.60, 0.54, 0.46), far * 0.75);
 }`;
 
 const FRAGMENT_MAIN = `vec3 courtAlbedo = court(vObj, normalize(vNrm));
-float sunTerm = dot(normalize(vWorldNormal), uSunDir);
-// Soft wrap lighting, warm on the sunlit side and cool in shade.
-float courtShade = 0.74 + 0.26 * smoothstep(-0.6, 0.8, sunTerm);
-// Ambient occlusion: tree shade and street clutter darken the lower storeys, the shafts stay deep.
-float groundAo = mix(0.62, 1.0, smoothstep(0.0, 26.0, vObj.y));
-float shaftAo = 1.0 - 0.18 * step(0.5, vRecess);
-courtShade *= groundAo * shaftAo;
-vec3 courtTint = mix(vec3(0.93, 0.96, 1.04), vec3(1.06, 1.0, 0.92), smoothstep(-0.3, 0.7, sunTerm));
+// Ambient occlusion: the lower storeys sit among trees and walkways, the shafts stay deep.
+float groundAo = mix(0.7, 1.0, smoothstep(0.0, 24.0, vObj.y));
+float shaftAo = 1.0 - 0.15 * step(0.5, vRecess);
 // Colours above are authored as display (sRGB) values.
-diffuseColor.rgb *= pow(courtAlbedo, vec3(2.2)) * courtShade * courtTint;`;
+diffuseColor.rgb *= pow(courtAlbedo, vec3(2.2)) * groundAo * shaftAo;`;
+
+const ROUGHNESS_MAIN = `#include <roughnessmap_fragment>
+roughnessFactor = mix(roughnessFactor, 0.08, gGlass);`;
 
 export interface CourtMaterialOptions {
   seed: number;
@@ -220,12 +305,15 @@ export interface CourtMaterialOptions {
   sunDirection: Vector3;
 }
 
-export function createFacadeMaterial(options: CourtMaterialOptions): MeshBasicMaterial {
-  const material = new MeshBasicMaterial({ color: 0xffffff });
+/**
+ * Lit like everything else in the scene (sun, shadows, sky reflections): matt
+ * tiled walls, glass that mirrors the sky.
+ */
+export function createFacadeMaterial(options: CourtMaterialOptions): MeshStandardMaterial {
+  const material = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.88, metalness: 0, envMapIntensity: 1.1 });
   const uniforms = {
     uSeed: { value: options.seed },
     uFloorHeight: { value: options.floorHeight },
-    // Shared with the game, so the shading follows the sun when the time of day changes.
     uSunDir: { value: options.sunDirection },
   };
   material.userData.uniforms = uniforms;
@@ -241,9 +329,10 @@ vRecess = aRecess;
 vDist = length((modelViewMatrix * vec4(position, 1.0)).xyz);`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAGMENT_DECLARATIONS}`)
-      .replace('#include <map_fragment>', FRAGMENT_MAIN);
+      .replace('#include <map_fragment>', FRAGMENT_MAIN)
+      .replace('#include <roughnessmap_fragment>', ROUGHNESS_MAIN);
   };
-  material.customProgramCacheKey = () => 'wang-fuk-facade-v2';
+  material.customProgramCacheKey = () => 'wang-fuk-facade-v3';
   return material;
 }
 
@@ -254,15 +343,17 @@ export interface PlacedBlock {
   height: number;
   mesh: Mesh;
   caps: Mesh;
+  ledges: Mesh;
 }
 
 /** The eight towers, placed one by one once their position and rotation are measured. */
 export class WangFukCourt {
   public readonly group = new Group();
   private readonly placed = new Map<string, PlacedBlock>();
-  private readonly geometries = new Map<number, { body: BufferGeometry; caps: BufferGeometry }>();
-  private readonly capMaterial = new MeshBasicMaterial({ vertexColors: true });
-  private readonly tint = new Color('#ffffff');
+  private readonly geometries = new Map<number, { body: BufferGeometry; caps: BufferGeometry; ledges: BufferGeometry }>();
+  private readonly capMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
+  /** Floor-slab ledges: plain painted concrete. */
+  private readonly ledgeMaterial = new MeshStandardMaterial({ color: '#d2c8b8', roughness: 0.9, metalness: 0, side: DoubleSide });
 
   public constructor(private readonly sunDirection: Vector3) {
     this.group.name = 'wang-fuk-court';
@@ -275,15 +366,17 @@ export class WangFukCourt {
     const key = Math.round(height * 10);
     let geometry = this.geometries.get(key);
     if (!geometry) {
-      geometry = { body: buildBlockGeometry(height), caps: buildRoofCaps(height) };
+      geometry = { body: buildBlockGeometry(height), caps: buildRoofCaps(height), ledges: buildLedgeGeometry(height) };
       this.geometries.set(key, geometry);
     }
     const seed = [...block].reduce((sum, char) => sum + char.charCodeAt(0), 0) * 0.137;
     const material = createFacadeMaterial({ seed, floorHeight: height / STOREYS, sunDirection: this.sunDirection });
-    material.color.copy(this.tint);
     const mesh = new Mesh(geometry.body, material);
     const caps = new Mesh(geometry.caps, this.capMaterial);
-    for (const part of [mesh, caps]) {
+    const ledges = new Mesh(geometry.ledges, this.ledgeMaterial);
+    for (const part of [mesh, caps, ledges]) {
+      part.castShadow = true;
+      part.receiveShadow = true;
       part.position.set(pose.x, baseY, pose.z);
       part.rotation.y = pose.yaw;
       part.matrixAutoUpdate = true;
@@ -291,7 +384,7 @@ export class WangFukCourt {
       part.updateMatrixWorld(true);
       this.group.add(part);
     }
-    const placed = { block, pose, baseY, height, mesh, caps };
+    const placed = { block, pose, baseY, height, mesh, caps, ledges };
     this.placed.set(block, placed);
     return placed;
   }
@@ -299,8 +392,8 @@ export class WangFukCourt {
   public remove(block: string): void {
     const existing = this.placed.get(block);
     if (!existing) return;
-    (existing.mesh.material as MeshBasicMaterial).dispose();
-    this.group.remove(existing.mesh, existing.caps);
+    (existing.mesh.material as MeshStandardMaterial).dispose();
+    this.group.remove(existing.mesh, existing.caps, existing.ledges);
     this.placed.delete(block);
   }
 
@@ -321,11 +414,12 @@ export class WangFukCourt {
     return this.blocks.map(item => ({ x: item.pose.x, z: item.pose.z, radius: BLOCK_RADIUS + 3, minY: item.baseY + 1.2 }));
   }
 
-  /** Evening light: warm and dim the towers like the photo mesh around them. */
-  public setTint(tint: Color): void {
-    this.tint.copy(tint);
-    this.capMaterial.color.copy(tint);
-    for (const placed of this.placed.values()) (placed.mesh.material as MeshBasicMaterial).color.copy(tint);
+  /**
+   * The photo mesh is unlit and is warmed and dimmed by hand in the evening; the
+   * towers are lit by the scene's own sun and sky, so they need no extra tint.
+   */
+  public setTint(_tint: Color): void {
+    // Kept for the shared lighting call.
   }
 
   public setVisible(visible: boolean): void {
@@ -334,12 +428,14 @@ export class WangFukCourt {
 
   public dispose(): void {
     for (const block of [...this.placed.keys()]) this.remove(block);
-    for (const { body, caps } of this.geometries.values()) {
+    for (const { body, caps, ledges } of this.geometries.values()) {
       body.dispose();
       caps.dispose();
+      ledges.dispose();
     }
     this.geometries.clear();
     this.capMaterial.dispose();
+    this.ledgeMaterial.dispose();
   }
 }
 

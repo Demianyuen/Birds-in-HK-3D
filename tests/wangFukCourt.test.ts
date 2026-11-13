@@ -61,13 +61,14 @@ describe('Wang Fuk Court tower geometry', () => {
     expect(shaftVertices).toBe(8 * 6);
   });
 
-  it('puts a brown-red machine room on the roof', () => {
+  it('puts a concrete machine room and parapet on the roof', () => {
     const caps = buildRoofCaps(height);
     caps.computeBoundingBox();
     expect(caps.boundingBox!.min.y).toBeCloseTo(height, 3);
     expect(caps.boundingBox!.max.y).toBeGreaterThan(height + ROOF_CAP_HEIGHT);
     const colour = caps.getAttribute('color');
-    expect(colour.getX(0)).toBeGreaterThan(colour.getZ(0));
+    // Weathered grey concrete, not a strong red.
+    expect(colour.getX(0) - colour.getZ(0)).toBeLessThan(0.12);
   });
 });
 
