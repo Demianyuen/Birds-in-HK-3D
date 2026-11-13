@@ -83,6 +83,13 @@ export const PRESET_WORDS: readonly string[] = Object.freeze([
   '多謝消防員和救援人員',
 ]);
 
+/** The only lines said over the birds (Enter / 說話): the same gentle words, nothing typed freely. */
+export const SPEECH_LINES: readonly string[] = PRESET_WORDS;
+
+export function isSpeechLine(text: string): boolean {
+  return SPEECH_LINES.includes(normaliseText(text));
+}
+
 export function isPresetWords(text: string): boolean {
   return PRESET_WORDS.includes(normaliseText(text));
 }

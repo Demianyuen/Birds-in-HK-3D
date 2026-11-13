@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import flowers from '../api/flowers';
 import chat from '../api/chat';
 import moderate from '../api/moderate';
+import settings from '../api/settings';
+import { forgetQuiet } from '../api/_lib/quiet';
 
 interface Captured { status: number; body: Record<string, unknown>; headers: Record<string, string> }
 
@@ -28,6 +30,7 @@ const calls: Array<{ url: string; init: RequestInit }> = [];
 let counts: number[] = [];
 
 beforeEach(() => {
+  forgetQuiet();
   process.env.SUPABASE_URL = 'https://example.supabase.co';
   process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-test-key';
   process.env.MODERATOR_TOKEN = 'moderator-token-0123456789';
@@ -177,21 +180,21 @@ describe('one-tap words', () => {
 describe('chat API', () => {
   it('stores a filtered line', async () => {
     const { res, done } = response();
-    await chat(request('POST', '/api/chat', { name: '阿明', body: '大家好', x: 3, z: 4 }), res);
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '願你們安息', x: 3, z: 4 }), res);
     expect((await done).status).toBe(201);
   });
 
   it('stores which bird said it, so the line can show over that bird', async () => {
     const { res, done } = response();
-    await chat(request('POST', '/api/chat', { name: '阿明', body: '大家好', x: 3, z: 4, speaker: 'abcd1234-ef56' }), res);
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '願你們安息', x: 3, z: 4, speaker: 'abcd1234-ef56' }), res);
     expect((await done).status).toBe(201);
     const insert = calls.find(call => call.init.method === 'POST');
-    expect(JSON.parse(String(insert?.init.body))).toMatchObject({ speaker: 'abcd1234-ef56', body: '大家好' });
+    expect(JSON.parse(String(insert?.init.body))).toMatchObject({ speaker: 'abcd1234-ef56', body: '願你們安息' });
   });
 
   it('ignores a malformed speaker id and still takes the line without it when the column is missing', async () => {
     const { res, done } = response();
-    await chat(request('POST', '/api/chat', { name: '阿明', body: '你好', speaker: '<script>' }), res);
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '一路好走', speaker: '<script>' }), res);
     expect((await done).status).toBe(201);
     expect(JSON.parse(String(calls.find(call => call.init.method === 'POST')?.init.body))).not.toHaveProperty('speaker');
 
@@ -202,11 +205,12 @@ describe('chat API', () => {
       if ((init.headers as Record<string, string>)?.Prefer === 'count=exact') {
         return new Response('[]', { status: 206, headers: { 'content-range': '0-0/0' } });
       }
+      if (init.method !== 'POST') return new Response('[]', { status: 200 });
       posts += 1;
       return posts === 1 ? new Response('{"code":"PGRST204"}', { status: 400 }) : new Response('', { status: 201 });
     }));
     const second = response();
-    await chat(request('POST', '/api/chat', { name: '阿明', body: '再見', speaker: 'abcd1234-ef56' }), second.res);
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '願家人平安', speaker: 'abcd1234-ef56' }), second.res);
     expect((await second.done).status).toBe(201);
     const inserts = calls.filter(call => call.init.method === 'POST').map(call => JSON.parse(String(call.init.body)));
     expect(inserts).toHaveLength(2);
@@ -216,8 +220,62 @@ describe('chat API', () => {
   it('slows down rapid senders', async () => {
     counts = [1, 1];
     const { res, done } = response();
-    await chat(request('POST', '/api/chat', { name: '阿明', body: '大家好' }), res);
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '願你們安息' }), res);
     expect((await done).status).toBe(429);
+  });
+});
+
+describe('ready-made lines and the quiet switch', () => {
+  const moderator = { authorization: 'Bearer moderator-token-0123456789' };
+  const quietOn = (on: boolean): void => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      if ((init.headers as Record<string, string>)?.Prefer === 'count=exact') {
+        return new Response('[]', { status: 206, headers: { 'content-range': '0-0/0' } });
+      }
+      if (url.includes('sender_hash=eq.moderator-quiet-switch')) return new Response(JSON.stringify([{ body: on ? 'quiet:on' : 'quiet:off' }]), { status: 200 });
+      if (url.includes('memorial_flowers?')) {
+        return new Response(JSON.stringify([{ id: 'a', created_at: 't', name: '甲', message: '想念你', message_status: 'approved', kind: 'lily', x: 1, y: 2, z: 3, sender_hash: 'abc' }]), { status: 200 });
+      }
+      return new Response('', { status: 201 });
+    }));
+  };
+
+  it('says only the ready-made lines over the birds', async () => {
+    const { res, done } = response();
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '大家好' }), res);
+    const result = await done;
+    expect(result.status).toBe(422);
+    expect(calls.some(call => call.init.method === 'POST')).toBe(false);
+  });
+
+  it('when quiet, refuses lines and holds back every flower word, but keeps the flowers', async () => {
+    quietOn(true);
+    const said = response();
+    await chat(request('POST', '/api/chat', { name: '阿明', body: '願你們安息' }), said.res);
+    expect((await said.done).status).toBe(423);
+    forgetQuiet();
+    const listed = response();
+    await flowers(request('GET', '/api/flowers'), listed.res);
+    const result = await listed.done;
+    expect(result.body.flowers).toEqual([{ id: 'a', created_at: 't', name: '甲', message: '', kind: 'lily', x: 1, y: 2, z: 3 }]);
+  });
+
+  it('the moderator turns the switch on and off; visitors can read its state', async () => {
+    quietOn(false);
+    const switched = response();
+    await moderate(request('POST', '/api/moderate', { action: 'quiet', on: true }, moderator), switched.res);
+    const result = await switched.done;
+    expect(result.status).toBe(200);
+    expect(result.body.quiet).toBe(true);
+    const insert = JSON.parse(String(calls.find(call => call.init.method === 'POST')!.init.body)) as Record<string, unknown>;
+    expect(insert).toMatchObject({ body: 'quiet:on', hidden: true, sender_hash: 'moderator-quiet-switch' });
+    const read = response();
+    await settings(request('GET', '/api/settings'), read.res);
+    expect((await read.done).body).toEqual({ quiet: true });
+    const refused = response();
+    await moderate(request('POST', '/api/moderate', { action: 'quiet', on: 'yes' }, moderator), refused.res);
+    expect((await refused.done).status).toBe(422);
   });
 });
 

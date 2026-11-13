@@ -1,24 +1,50 @@
 import './moderation.css';
+import { FLOWER_LABELS } from '../openWorld/visitor';
 
 /**
  * Moderator page (/moderate.html). The token is kept for this browser tab only
  * (sessionStorage) and sent as a Bearer token to /api/moderate.
  */
-type View = 'pending' | 'chat';
+type View = 'pending' | 'shared' | 'chat';
 
 interface PendingItem { id: string; created_at: string; name: string; message: string; kind: string }
 interface ChatItem { id: number; created_at: string; name: string; body: string; hidden: boolean }
 
 const TOKEN_KEY = 'birds-in-hk:moderator-token';
-const KIND_LABELS: Record<string, string> = {
-  'white-chrysanthemum': '白菊', 'yellow-chrysanthemum': '黃菊', lily: '白百合', lantern: '紙燈',
-};
+const KIND_LABELS = FLOWER_LABELS as Readonly<Record<string, string>>;
 
 const form = document.getElementById('token-form') as HTMLFormElement;
 const tokenInput = document.getElementById('token') as HTMLInputElement;
 const status = document.getElementById('status') as HTMLElement;
 const tabs = document.getElementById('tabs') as HTMLElement;
 const items = document.getElementById('items') as HTMLOListElement;
+const quietPanel = document.getElementById('quiet-panel') as HTMLElement;
+const quietState = document.getElementById('quiet-state') as HTMLElement;
+const quietToggle = document.getElementById('quiet-toggle') as HTMLButtonElement;
+let quiet = false;
+
+function showQuiet(value: boolean): void {
+  quiet = value;
+  quietPanel.hidden = false;
+  quietPanel.classList.toggle('on', value);
+  quietState.textContent = value
+    ? '已開啟：所有留言暫不公開，鳥頭上不能說話。花朵照常顯示。'
+    : '已關閉：分享了的留言和預設句子照常顯示。有需要時，一按就可以全部收起。';
+  quietToggle.textContent = value ? '關閉安靜模式' : '開啟安靜模式';
+}
+
+quietToggle.addEventListener('click', async () => {
+  quietToggle.disabled = true;
+  try {
+    const data = await call('POST', '', { action: 'quiet', on: !quiet });
+    showQuiet(data.quiet === true);
+    status.textContent = data.quiet === true ? '已開啟安靜模式（約 15 秒內生效）。' : '已關閉安靜模式（約 15 秒內生效）。';
+  } catch (error) {
+    status.textContent = `未能切換：${(error as Error).message}`;
+  } finally {
+    quietToggle.disabled = false;
+  }
+});
 let view: View = 'pending';
 
 function token(): string {
@@ -58,8 +84,10 @@ async function load(): Promise<void> {
     const data = await call('GET', `?view=${view}`);
     form.hidden = true;
     tabs.hidden = false;
+    if (typeof data.quiet === 'boolean') showQuiet(data.quiet);
     items.replaceChildren();
     if (view === 'pending') renderPending((data.pending as PendingItem[]) ?? []);
+    else if (view === 'shared') renderShared((data.shared as PendingItem[]) ?? []);
     else renderChat((data.chat as ChatItem[]) ?? []);
   } catch (error) {
     status.textContent = error instanceof Error && error.message === 'Not authorised.' ? '密碼不正確。' : `未能載入：${(error as Error).message}`;
@@ -68,7 +96,7 @@ async function load(): Promise<void> {
 }
 
 function renderPending(list: PendingItem[]): void {
-  status.textContent = list.length ? `有 ${list.length} 則留言等待審核。` : '目前沒有待審核的留言。';
+  status.textContent = list.length ? `有 ${list.length} 則留言等待分享。` : '目前沒有等待分享的留言。';
   for (const item of list) {
     const row = document.createElement('li');
     const meta = document.createElement('p');
@@ -79,10 +107,27 @@ function renderPending(list: PendingItem[]): void {
     text.textContent = item.message;
     const actions = document.createElement('div');
     actions.append(
-      actionButton('批准', 'approve', item.id, row),
-      actionButton('拒絕留言', 'reject', item.id, row),
+      actionButton('分享', 'approve', item.id, row),
+      actionButton('不分享', 'reject', item.id, row),
       actionButton('隱藏整朵花', 'hide-flower', item.id, row),
     );
+    row.append(meta, text, actions);
+    items.append(row);
+  }
+}
+
+function renderShared(list: PendingItem[]): void {
+  status.textContent = list.length ? `已分享 ${list.length} 則留言（最近的在先）。` : '還沒有已分享的留言。';
+  for (const item of list) {
+    const row = document.createElement('li');
+    const meta = document.createElement('p');
+    meta.className = 'meta';
+    meta.textContent = `${item.name || '（沒有名字）'} · ${KIND_LABELS[item.kind] ?? item.kind} · ${new Date(item.created_at).toLocaleString('zh-HK')}`;
+    const text = document.createElement('p');
+    text.className = 'message';
+    text.textContent = item.message;
+    const actions = document.createElement('div');
+    actions.append(actionButton('收回', 'reject', item.id, row), actionButton('隱藏整朵花', 'hide-flower', item.id, row));
     row.append(meta, text, actions);
     items.append(row);
   }

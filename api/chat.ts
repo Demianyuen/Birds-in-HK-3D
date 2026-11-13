@@ -1,5 +1,6 @@
 import type { ServerResponse } from 'node:http';
-import { checkChat, checkName, rejectReasonText } from '../src/openWorld/contentRules.js';
+import { checkChat, checkName, isSpeechLine, rejectReasonText } from '../src/openWorld/contentRules.js';
+import { readQuiet } from './_lib/quiet.js';
 import {
   ApiError,
   countRows,
@@ -19,7 +20,7 @@ const WINDOW_SECONDS = 600;
 const WINDOW_LIMIT = 20;
 
 /**
- * POST /api/chat { name, body, x, z } → filtered, rate-limited, then stored;
+ * POST /api/chat { name, body, x, z } → one of the ready-made lines only, rate-limited, then stored;
  * other players receive it live through Supabase Realtime. Lines are kept for
  * one day so moderators can review and hide them.
  */
@@ -35,6 +36,9 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
     if (!name.ok) throw new ApiError(422, `名字：${rejectReasonText(name.reason)}`);
     const line = checkChat(body.body);
     if (!line.ok) throw new ApiError(422, rejectReasonText(line.reason));
+    // Only the ready-made lines are said over the birds: nothing is shown before anyone has read it.
+    if (!isSpeechLine(line.text)) throw new ApiError(422, '請從預備的句子中選一句。');
+    if (await readQuiet(config)) throw new ApiError(423, '這段時間，大家安靜地留下花朵。');
     const x = typeof body.x === 'number' && Number.isFinite(body.x) ? Math.max(-5_000, Math.min(5_000, body.x)) : 0;
     const z = typeof body.z === 'number' && Number.isFinite(body.z) ? Math.max(-5_000, Math.min(5_000, body.z)) : 0;
     // Which bird said it, so others can show the line over that bird. Not an identity.

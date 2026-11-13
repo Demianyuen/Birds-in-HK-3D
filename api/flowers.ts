@@ -20,6 +20,7 @@ import {
   type ApiRequest,
 } from './_lib/openWorld.js';
 import { readKind, senderFilter, storeKind } from './_lib/flowerKinds.js';
+import { readQuiet } from './_lib/quiet.js';
 
 /** Per visitor: at most 3 flowers in 10 minutes. Whole site: 300 in 10 minutes. */
 const PER_SENDER_LIMIT = 3;
@@ -42,11 +43,13 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
         'memorial_flowers?select=id,created_at,name,message,message_status,kind,x,y,z,sender_hash&hidden=eq.false&order=created_at.desc&limit=3000',
       );
       const rows = (await response.json()) as Array<Record<string, unknown>>;
+      // The quiet switch holds every word back; the flowers stay.
+      const quiet = await readQuiet(config);
       const flowers = rows.map(row => ({
         id: row.id,
         created_at: row.created_at,
         name: row.name,
-        message: row.message_status === 'approved' ? row.message : '',
+        message: !quiet && row.message_status === 'approved' ? row.message : '',
         kind: readKind(row),
         x: row.x,
         y: row.y,

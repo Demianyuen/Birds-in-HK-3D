@@ -53,6 +53,14 @@ export async function fetchFlowers(signal?: AbortSignal): Promise<MemorialFlower
   return (data.flowers ?? []).map(parseFlower).filter((flower): flower is MemorialFlower => flower !== null);
 }
 
+/** Whether visitors' words are being held back for now (the moderator's quiet switch). */
+export async function fetchQuiet(signal?: AbortSignal): Promise<boolean> {
+  const response = await fetch('/api/settings', { signal });
+  if (!response.ok) return false;
+  const data = (await response.json().catch(() => ({}))) as { quiet?: unknown };
+  return data.quiet === true;
+}
+
 export async function placeFlower(input: {
   name: string;
   message: string;

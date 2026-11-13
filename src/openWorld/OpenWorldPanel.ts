@@ -6,7 +6,7 @@ import { openWorldConfig, skyRelayUrl } from './config';
 import { playLayingChime } from './chime';
 import { Danmaku } from './Danmaku';
 import { checkChat, checkMessage, insideMemorialGround, MEMORIAL_PLAZA, MESSAGE_MAX, rejectReasonText } from './contentRules';
-import { FlowerRefused, fetchFlowers, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
+import { FlowerRefused, fetchFlowers, fetchQuiet, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
 import type { ChatLine, LiveStatus, SkyLink } from './skyLink';
 import { FLOWER_LABELS, type Visitor } from './visitor';
 import { WorldLabels, type WorldLabel } from './WorldLabels';
@@ -168,12 +168,16 @@ export class OpenWorldPanel {
   }
 
   private liveWorld: SkyLink | null = null;
+  /** The moderator's quiet switch: no lines over the birds, no shared words, for now. */
+  private quiet = false;
+  private shown = false;
 
   public setVisible(visible: boolean): void {
     this.element.hidden = !visible;
     this.labels.element.hidden = !visible;
     this.danmaku.setVisible(visible);
-    this.speakButton.hidden = !visible;
+    this.shown = visible;
+    this.speakButton.hidden = !visible || this.quiet;
     this.radar.setVisible(visible);
     if (!visible) {
       this.speech.close();
@@ -228,7 +232,8 @@ export class OpenWorldPanel {
     });
     this.updatePrompt();
     this.labels.render(this.collectLabels(), this.game.viewCamera, width, height);
-    if (this.speech.open) this.speech.place(this.labels.project(this.ownHead(), this.game.viewCamera, width, height));
+    // On a phone the choices wait at the bottom, within reach of a thumb.
+    if (this.speech.open) this.speech.place(width < 720 ? null : this.labels.project(this.ownHead(), this.game.viewCamera, width, height));
   }
 
   /** Flowers at the memorial: what is loaded now, or the last total seen while loading. */
@@ -276,6 +281,10 @@ export class OpenWorldPanel {
   /** Enter key (or the 說話 button): open the line to say something. */
   public openSpeech(): void {
     if (!this.active || !this.card.hidden) return;
+    if (this.quiet) {
+      this.showNotice('這段時間，大家安靜地留下花朵。', 4_000);
+      return;
+    }
     this.speech.show();
   }
 
@@ -397,11 +406,32 @@ export class OpenWorldPanel {
   private async refreshFlowers(): Promise<void> {
     if (!openWorldConfig()) return;
     try {
-      this.game.flowers.setFlowers(await fetchFlowers());
+      const [flowers, quiet] = await Promise.all([fetchFlowers(), fetchQuiet().catch(() => this.quiet)]);
+      this.setQuiet(quiet);
+      this.game.flowers.setFlowers(flowers);
       rememberFlowerTotal(this.game.flowers.count);
+      this.noticeSharedWords(flowers);
     } catch {
       // Flowers are shown again on the next refresh; flying is never blocked.
     }
+  }
+
+  private setQuiet(quiet: boolean): void {
+    if (quiet === this.quiet) return;
+    this.quiet = quiet;
+    if (quiet) this.speech.close();
+    this.speakButton.hidden = !this.shown || quiet;
+  }
+
+  /** Words this visitor left earlier that everyone can now read: say so once, then stop keeping them here. */
+  private noticeSharedWords(flowers: readonly MemorialFlower[]): void {
+    const own = readOwnWords();
+    const shared = flowers.filter(flower => flower.message && own[flower.id]);
+    if (shared.length === 0) return;
+    forgetOwnWords(shared.map(flower => flower.id));
+    this.showNotice(shared.length === 1
+      ? `你之前留下的話，現在大家走近${FLOWER_LABELS[shared[0].kind]}都讀得到了。`
+      : `你之前留下的 ${shared.length} 句話，現在大家走近花旁都讀得到了。`, 9_000);
   }
 
   private updatePrompt(): void {
@@ -462,7 +492,7 @@ export class OpenWorldPanel {
       if (visitor.message && placed.messageStatus === 'pending') rememberOwnWords(placed.flower.id, visitor.message);
       visitor.placed = true;
       this.showNotice(placed.messageStatus === 'pending'
-        ? `你在宏福苑放下了${label}，所有人都看得到。你的話會在管理員看過後，出現在花旁。`
+        ? `你在宏福苑放下了${label}，所有人都看得到。你的話會在稍後和大家分享，過些時候回來看看。`
         : placed.messageStatus === 'approved'
           ? `你在宏福苑放下了${label}，你的話和花一起留在這裡，所有人走近都看得到。`
           : `你在宏福苑放下了${label}，所有人都看得到。`, 10_000);
@@ -504,7 +534,7 @@ export class OpenWorldPanel {
       labels.push({
         id: `flower-${flower.id}`,
         title,
-        body: flower.message || (mine ? `${mine}\n（暫時只有你看得到）` : '（沒有留下文字）'),
+        body: flower.message || (mine ? `${mine}\n（稍後和大家分享）` : '（沒有留下文字）'),
         position: new Vector3(flower.x, this.game.flowers.displayY(flower) + 0.45, flower.z),
         tone: 'flower',
       });
@@ -613,6 +643,14 @@ function rememberOwnWords(flowerId: string, words: string): void {
   try {
     const entries = Object.entries({ ...readOwnWords(), [flowerId]: words }).slice(-OWN_WORDS_CAP);
     localStorage.setItem(OWN_WORDS_KEY, JSON.stringify(Object.fromEntries(entries)));
+  } catch { /* per-browser convenience */ }
+}
+
+function forgetOwnWords(ids: readonly string[]): void {
+  try {
+    const own = readOwnWords();
+    for (const id of ids) delete own[id];
+    localStorage.setItem(OWN_WORDS_KEY, JSON.stringify(own));
   } catch { /* per-browser convenience */ }
 }
 

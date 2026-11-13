@@ -770,3 +770,33 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
 @media (max-width: 700px) {
   .boot-screen .source-credit { display: none; }
 }
+
+/* Saying something: tap one of the ready-made lines (nothing typed freely). */
+.speech-choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 10px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: rgba(255, 252, 244, 0.96);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+}
+.speech-choice {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid #d8d2c2;
+  border-radius: 999px;
+  background: #fff;
+  color: #222823;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.speech-choice:hover, .speech-choice:focus-visible { border-color: #b08a3c; outline: none; background: #fbf4e2; }
+@media (max-width: 720px) {
+  .speech-choices { width: calc(100vw - 32px); }
+  .speech-choice { min-height: 44px; font-size: 15px; }
+}

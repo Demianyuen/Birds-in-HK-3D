@@ -16,3 +16,12 @@ button:hover { border-color: var(--accent); }
 .items .meta { margin: 0; font-size: 13px; }
 .items div { display: flex; flex-wrap: wrap; gap: 8px; }
 .hidden-item { opacity: 0.55; }
+.quiet-panel { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+.quiet-panel p { margin: 4px 0 0; font-size: 13px; }
+.quiet-panel.on { border-color: #b8862e; }
+.quiet-panel button { flex: none; }
+@media (max-width: 560px) {
+  .quiet-panel { flex-direction: column; align-items: stretch; }
+  button { min-height: 44px; }
+  .tabs { flex-wrap: wrap; }
+}
