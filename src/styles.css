@@ -800,3 +800,29 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
   .speech-choices { width: calc(100vw - 32px); }
   .speech-choice { min-height: 44px; font-size: 15px; }
 }
+
+/* Phones, upright or on their side: the bird screen scrolls, nothing overlaps the map credits. */
+@media (max-width: 900px), (max-height: 520px) {
+  .menu-screen { overflow-y: auto; -webkit-overflow-scrolling: touch; align-items: flex-start; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .menu-meta { display: none; }
+  /* Only one place to fly for now; its name is already on the first screen. */
+  .menu-screen .region-picker { display: none; }
+  .map-attribution { font-size: 9px; padding-bottom: env(safe-area-inset-bottom); }
+}
+@media (max-height: 520px) {
+  .menu-screen h2 { font-size: 28px; margin-bottom: 8px; }
+  .menu-screen .place-name { display: none; }
+  .bird-customise { gap: 12px; }
+}
+@media (max-width: 900px), (max-height: 520px) {
+  /* Leave room under 開始飛行 for the map credits, which stay fixed at the bottom. */
+  .menu-screen { padding-bottom: calc(132px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 600px) {
+  /* Three birds side by side instead of three tall cards. */
+  .menu-screen .bird-picker { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .menu-screen .bird-picker legend { grid-column: 1 / -1; }
+  .menu-screen .bird-picker label span { padding: 12px 8px; min-height: 0; }
+  .menu-screen .bird-picker label small { display: none; }
+  .menu-screen h2 { font-size: 36px; }
+}
