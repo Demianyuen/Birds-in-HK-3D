@@ -41,6 +41,7 @@ import { evaluateWorldReadiness } from './worldReadiness';
 import { stylizedGroundUniforms } from './StylizedGround';
 import { DynamicResolution } from './DynamicResolution';
 import { deviceTier } from './deviceTier';
+import { QualityLadder } from './QualityLadder';
 import { StylizedClouds } from './StylizedClouds';
 import { StylizedTrees } from './StylizedTrees';
 import { setBuildingGroundHeight, setMemorialSites, type BuildingPresentation } from './BuildingMaterial';
@@ -94,7 +95,6 @@ export class BirdsInHkGame {
   private readonly streetLife = new StreetLife(deviceTier().streetDensity);
   private worldPresentation: WorldPresentation = 'preservation';
   private readonly post: CinematicPost;
-  private slowFrames = 0;
   private region: FlightRegion | null = null;
   private carried: ReturnType<typeof createCarriedFlower> | null = null;
   private readonly sun = new DirectionalLight('#ffd9a6', 3.0);
@@ -112,6 +112,7 @@ export class BirdsInHkGame {
   private animationFrame = 0;
   private elapsed = 0;
   private smoothedFrameMilliseconds = 16.7;
+  private readonly quality = new QualityLadder();
   private renderVerified = false;
   private paused = false;
   private readonly sunDirection = new Vector3();
@@ -419,6 +420,18 @@ export class BirdsInHkGame {
     this.plaza.setVisible(photo);
   }
 
+  private applyQuality(level: number): void {
+    this.post.setBloom(level < 1 && deviceTier().bloom);
+    this.post.setEnabled(level < 2);
+    const light = level < 3;
+    if (this.sun.castShadow !== light) {
+      this.sun.castShadow = light;
+      this.renderer.shadowMap.needsUpdate = true;
+    }
+    this.streetLife.setDensity(deviceTier().streetDensity * (light ? 1 : 0.35));
+    this.photoMesh.setDetail(light ? 1 : 1.8);
+  }
+
   /** Hide the photo mesh where the hand-built towers and the memorial square stand. */
   private refreshCutouts(): void {
     const plaza = this.plaza.cutout();
@@ -657,7 +670,10 @@ export class BirdsInHkGame {
 
   private readonly animate = (): void => {
     this.animationFrame = requestAnimationFrame(this.animate);
-    const deltaSeconds = Math.min(this.clock.getDelta(), 0.05);
+    // Up to 0.15 s of real time per frame is played out, so a slow computer flies at
+    // the right speed (in steps of at most 0.05 s for the bird); longer stalls are skipped.
+    const realSeconds = Math.min(this.clock.getDelta(), 0.15);
+    const deltaSeconds = Math.min(realSeconds, 0.05);
     this.smoothedFrameMilliseconds += (deltaSeconds * 1_000 - this.smoothedFrameMilliseconds) * 0.08;
     this.elapsed += deltaSeconds;
     this.city.update(this.camera, this.renderer);
@@ -669,7 +685,8 @@ export class BirdsInHkGame {
     if (this.mode === 'playing' && this.paused) {
       this.bird.updateCamera(this.camera, 1);
     } else if (this.mode === 'playing') {
-      this.bird.update(deltaSeconds, this.collisionRoots());
+      const roots = this.collisionRoots();
+      for (let left = realSeconds; left > 1e-4; left -= 0.05) this.bird.update(Math.min(0.05, left), roots);
       this.bird.updateCamera(this.camera, deltaSeconds);
       this.remoteBirds.update(deltaSeconds);
       this.courtPlacer?.update(deltaSeconds, this.bird.object.position, this.worldPresentation === 'photo' && this.photoMesh.ready);
@@ -709,10 +726,9 @@ export class BirdsInHkGame {
         this.renderer.setPixelRatio(ratio);
         this.post.setPixelRatio(ratio);
       }
-      // Still slow at the lowest resolution: drop the glow; bring it back when there is headroom.
-      this.slowFrames = this.smoothedFrameMilliseconds > 26 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 2);
-      if (this.post.bloomEnabled && this.slowFrames > 180) this.post.setBloom(false);
-      else if (deviceTier().bloom && !this.post.bloomEnabled && this.slowFrames === 0 && this.smoothedFrameMilliseconds < 14) this.post.setBloom(true);
+      // Still slow: step the costly parts down (judged on real time, so very slow machines are noticed too).
+      const level = this.quality.update(performance.now());
+      if (level !== null) this.applyQuality(level);
     }
     stylizedGroundUniforms.uSgTime.value = this.elapsed;
     this.clouds.update(this.elapsed);

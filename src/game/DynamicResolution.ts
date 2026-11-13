@@ -39,7 +39,8 @@ export class DynamicResolution {
   /** Feed one frame; returns the new pixel ratio when it changes, otherwise null. */
   public update(frameMs: number, nowMs: number): number | null {
     // Ignore hitches (tab switches, shader compiles, tile parsing); they are not steady-state cost.
-    if (frameMs > 250) return null;
+    // Frames up to 0.6 s still count, so a computer drawing two frames a second is noticed.
+    if (frameMs > 600) return null;
     if (this.windowStart < 0) this.windowStart = nowMs;
     this.frames += 1;
     this.windowMs += frameMs;

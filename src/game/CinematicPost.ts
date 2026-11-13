@@ -51,9 +51,11 @@ export class CinematicPost {
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
   private bloomWanted = true;
+  /** Off: draw straight to the screen (no multisampled half-float buffer, no grade): for weak GPUs. */
+  private enabled = true;
   private readonly grade: ShaderPass;
 
-  public constructor(renderer: WebGLRenderer, scene: Scene, camera: Camera) {
+  public constructor(private readonly renderer: WebGLRenderer, private readonly scene: Scene, private readonly camera: Camera) {
     const size = renderer.getSize(new Vector2());
     const target = new WebGLRenderTarget(size.x, size.y, { type: HalfFloatType, samples: deviceTier().antialias ? 4 : 0 });
     this.composer = new EffectComposer(renderer, target);
@@ -81,6 +83,14 @@ export class CinematicPost {
     this.bloom.enabled = enabled;
   }
 
+  public setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
+  public get isEnabled(): boolean {
+    return this.enabled;
+  }
+
   public get bloomEnabled(): boolean {
     return this.bloomWanted;
   }
@@ -94,7 +104,8 @@ export class CinematicPost {
   }
 
   public render(deltaSeconds?: number): void {
-    this.composer.render(deltaSeconds);
+    if (this.enabled) this.composer.render(deltaSeconds);
+    else this.renderer.render(this.scene, this.camera);
   }
 
   public dispose(): void {

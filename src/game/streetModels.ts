@@ -60,7 +60,7 @@ function profile(points: ReadonlyArray<readonly [number, number]>, width: number
   const shape = new Shape(points.map(([z, y]) => new Vector2(-z, y)));
   const depth = Math.max(0.01, width - bevel * 2);
   const geometry = new ExtrudeGeometry(shape, {
-    depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelOffset: -bevel, bevelSegments: 2, curveSegments: 4,
+    depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelOffset: -bevel, bevelSegments: 1, curveSegments: 2,
   });
   geometry.translate(0, 0, -depth / 2);
   geometry.rotateY(Math.PI / 2);
@@ -83,7 +83,7 @@ function rounded(width: number, height: number, length: number, x: number, y: nu
   shape.absarc(-w + r, r, r, Math.PI, Math.PI * 1.5, false);
   const bevel = Math.min(0.08, r);
   const geometry = new ExtrudeGeometry(shape, {
-    depth: length - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelOffset: -bevel, bevelSegments: 2, curveSegments: 3,
+    depth: length - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelOffset: -bevel, bevelSegments: 1, curveSegments: 2,
   });
   geometry.translate(x, y, z - length / 2 + bevel);
   return paint(geometry, colour);
@@ -94,11 +94,11 @@ function wheels(positions: readonly number[], width: number, radius = 0.33): Buf
   for (const z of positions) {
     for (const side of [1, -1]) {
       const x = side * (width / 2 - 0.13);
-      const tyre = new CylinderGeometry(radius, radius, 0.26, 14).toNonIndexed();
+      const tyre = new CylinderGeometry(radius, radius, 0.26, 8).toNonIndexed();
       tyre.rotateZ(Math.PI / 2);
       tyre.translate(x, radius, z);
       parts.push(paint(tyre, TYRE));
-      const hub = new CylinderGeometry(radius * 0.58, radius * 0.58, 0.04, 10).toNonIndexed();
+      const hub = new CylinderGeometry(radius * 0.58, radius * 0.58, 0.04, 6).toNonIndexed();
       hub.rotateZ(Math.PI / 2);
       hub.translate(x + side * 0.13, radius, z);
       parts.push(paint(hub, HUB));
@@ -205,7 +205,7 @@ function limb(geometry: BufferGeometry, swing: number, pivot: number): BufferGeo
 }
 
 function capsule(radius: number, length: number, x: number, y: number, z: number, colour: string): BufferGeometry {
-  const geometry = new CapsuleGeometry(radius, length, 3, 8);
+  const geometry = new CapsuleGeometry(radius, length, 1, 5);
   geometry.translate(x, y, z);
   return paint(geometry, colour);
 }
@@ -226,22 +226,22 @@ export function pedestrianGeometry(): BufferGeometry {
     const forearm = capsule(0.042, 0.26, side * 0.255, 0.92, 0, skin);
     parts.push(limb(sleeve, -side, SHOULDER), limb(forearm, -side, SHOULDER));
   }
-  const torso = new CylinderGeometry(0.2, 0.165, 0.6, 10);
+  const torso = new CylinderGeometry(0.2, 0.165, 0.6, 7);
   torso.scale(1, 1, 0.62);
   torso.translate(0, 1.14, 0);
   parts.push(limb(paint(torso, WHITE), 0, 0));
-  const shoulders = new SphereGeometry(0.2, 10, 6);
+  const shoulders = new SphereGeometry(0.2, 7, 3);
   shoulders.scale(1, 0.32, 0.62);
   shoulders.translate(0, 1.44, 0);
   parts.push(limb(paint(shoulders, WHITE), 0, 0));
-  const neck = new CylinderGeometry(0.05, 0.055, 0.1, 8);
+  const neck = new CylinderGeometry(0.05, 0.055, 0.1, 5);
   neck.translate(0, 1.5, 0);
   parts.push(limb(paint(neck, skin), 0, 0));
-  const head = new SphereGeometry(0.105, 12, 9);
+  const head = new SphereGeometry(0.105, 8, 6);
   head.scale(0.94, 1.12, 1);
   head.translate(0, 1.6, 0.005);
   parts.push(limb(paint(head, skin), 0, 0));
-  const hair = new SphereGeometry(0.112, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  const hair = new SphereGeometry(0.112, 8, 3, 0, Math.PI * 2, 0, Math.PI * 0.55);
   hair.scale(0.96, 1.12, 1.02);
   hair.translate(0, 1.605, -0.012);
   parts.push(limb(paint(hair, '#1b1714'), 0, 0));

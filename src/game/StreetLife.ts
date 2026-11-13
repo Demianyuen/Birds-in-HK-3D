@@ -47,6 +47,8 @@ const PEDESTRIAN_KEEP_RADIUS = 420;
 const PEDESTRIAN_SPAWN_RADIUS = 320;
 const BOAT_KEEP_RADIUS = 4_200;
 const GRID = 40;
+/** Above this height over the ground the crowd is not drawn. */
+const PEOPLE_VISIBLE_ALTITUDE = 150;
 /** People and vehicles this close to the bird are checked against the real surface. */
 const SURFACE_CHECK_RADIUS = 450;
 const DOWN = new Vector3(0, -1, 0);
@@ -127,8 +129,8 @@ export class StreetLife {
   private readonly steps: InstancedBufferAttribute;
   private shadowCount = 0;
   private surfaceCursor = 0;
-  private readonly vehicleLimit: number;
-  private readonly pedestrianLimit: number;
+  private vehicleLimit: number;
+  private pedestrianLimit: number;
   private readonly vehicles: Mover[] = [];
   private readonly pedestrians: Mover[] = [];
   private readonly boats: Boat[] = [];
@@ -267,11 +269,20 @@ export class StreetLife {
     }
   }
 
+  /** Share of the traffic and the crowd drawn (0–1); lowered on slow computers. */
+  public setDensity(density: number): void {
+    this.vehicleLimit = Math.round(VEHICLE_COUNT * density);
+    this.pedestrianLimit = Math.round(PEDESTRIAN_COUNT * density);
+  }
+
   public update(deltaSeconds: number, focus: Vector3): void {
     this.clock += deltaSeconds;
     this.shadowCount = 0;
     if (this.data.roads.length > 0) this.updateMovers(this.vehicles, deltaSeconds, focus, true);
-    if (this.data.paths.length > 0) this.updateMovers(this.pedestrians, deltaSeconds, focus, false);
+    // People are too small to see from high up: skip drawing and moving them there.
+    const high = focus.y - this.ground(focus.x, focus.z) > PEOPLE_VISIBLE_ALTITUDE;
+    this.people.visible = !high;
+    if (this.data.paths.length > 0 && !high) this.updateMovers(this.pedestrians, deltaSeconds, focus, false);
     this.shadows.count = this.shadowCount;
     this.shadows.instanceMatrix.needsUpdate = true;
     if (this.data.water.length > 0) this.updateBoats(deltaSeconds, focus);

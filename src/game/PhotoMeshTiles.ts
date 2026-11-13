@@ -160,6 +160,11 @@ export class PhotoMeshTiles {
     circles.slice(0, MAX_CUTOUTS).forEach((circle, index) => this.cutouts.value[index].set(circle.x, circle.z, circle.radius, circle.minY));
   }
 
+  /** Coarser tiles on slow computers: 1 is normal, larger loads less detail. */
+  public setDetail(coarseness: number): void {
+    if (this.tiles) this.tiles.errorTarget = deviceTier().photoMeshError * coarseness;
+  }
+
   /** Hide the photo mesh above `minY` inside one convex outline (counter-clockwise in x, z), or nowhere. */
   public setCutArea(area: { outline: ReadonlyArray<{ x: number; z: number }>; minY: number } | null): void {
     const outline = area ? area.outline.slice(0, MAX_AREA_CORNERS) : [];

@@ -577,8 +577,8 @@ interface PetalShape {
  * shading from `base` to `tip`. Lies along +z with its face up (+y), base at the origin.
  */
 function petal(shape: PetalShape): BufferGeometry {
-  const along = 7;
-  const across = 4;
+  const along = 5;
+  const across = 2;
   const positions: number[] = [];
   const colours: number[] = [];
   const baseColour = new Color(shape.base);
@@ -799,10 +799,10 @@ function chrysanthemumGeometry(kind: FlowerKind): BufferGeometry {
   heart.translate(0, y + 0.012, 0);
   parts.push(paint(heart, yellow ? '#c7891a' : '#ddd6b8'));
   // Many narrow, spooned petals in rings, the inner ones standing up and curling in.
-  parts.push(...ring(20, { length: 0.05, width: 0.011, cup: 0.9, curl: 0.5, point: 0.2, base, tip }, 0.12, y, 0));
-  parts.push(...ring(16, { length: 0.042, width: 0.011, cup: 1, curl: 0.8, point: 0.2, base, tip }, 0.55, y + 0.004, 0.2));
-  parts.push(...ring(12, { length: 0.032, width: 0.01, cup: 1, curl: 1.1, point: 0.2, base, tip }, 1.0, y + 0.008, 0.45));
-  parts.push(...ring(8, { length: 0.022, width: 0.009, cup: 1, curl: 1.3, point: 0.2, base, tip }, 1.3, y + 0.012, 0.7, 0.002));
+  parts.push(...ring(16, { length: 0.05, width: 0.011, cup: 0.9, curl: 0.5, point: 0.2, base, tip }, 0.12, y, 0));
+  parts.push(...ring(12, { length: 0.042, width: 0.011, cup: 1, curl: 0.8, point: 0.2, base, tip }, 0.55, y + 0.004, 0.2));
+  parts.push(...ring(9, { length: 0.032, width: 0.01, cup: 1, curl: 1.1, point: 0.2, base, tip }, 1.0, y + 0.008, 0.45));
+  parts.push(...ring(6, { length: 0.022, width: 0.009, cup: 1, curl: 1.3, point: 0.2, base, tip }, 1.3, y + 0.012, 0.7, 0.002));
   return mergeGeometries(parts)!;
 }
 
