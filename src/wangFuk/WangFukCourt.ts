@@ -217,7 +217,7 @@ vec3 court(vec3 p, vec3 n) {
     vec3 shaft = vec3(0.46, 0.42, 0.37);
     float slit = box(cell, vec2(0.40, 0.25), vec2(0.60, 0.78), aa);
     gGlass = slit;
-    return mix(shaft, vec3(0.22, 0.25, 0.28), slit);
+    return mix(shaft, vec3(0.62, 0.66, 0.70), slit);
   }
   // Floor slab line, with a soft shadow just under it.
   wall *= 1.0 - 0.10 * smoothstep(0.10, 0.0, vf) - 0.06 * smoothstep(0.98, 1.0, vf);
@@ -226,7 +226,7 @@ vec3 court(vec3 p, vec3 n) {
     // Ground storey: lobby glazing behind a grey stone base.
     float lobby = box(cell, vec2(0.08, 0.16), vec2(0.92, 0.88), aa);
     gGlass = lobby;
-    vec3 lobbyGlass = mix(vec3(0.30, 0.33, 0.35), vec3(0.62, 0.58, 0.50), box(cell, vec2(0.2, 0.2), vec2(0.8, 0.6), aa) * 0.5);
+    vec3 lobbyGlass = mix(vec3(0.62, 0.66, 0.68), vec3(0.80, 0.77, 0.70), box(cell, vec2(0.2, 0.2), vec2(0.8, 0.6), aa) * 0.5);
     return mix(vec3(0.55, 0.53, 0.50), lobbyGlass, lobby);
   }
 
@@ -241,12 +241,16 @@ vec3 court(vec3 p, vec3 n) {
   float glass = box(cell, glo, ghi, aa);
   // Dark glass that the sky reflects in (see roughness); curtains and blinds behind some.
   // Base: the sky and the block opposite seen in the glass, lighter at the top of each pane.
-  vec3 inside = mix(vec3(0.16, 0.20, 0.24), vec3(0.42, 0.50, 0.58), smoothstep(glo.y, ghi.y, cell.y) * (0.5 + 0.5 * r4));
-  if (r2 < 0.5) inside = mix(inside, curtain(r3) * 0.55, r3 > 0.5 ? 0.75 : 0.5 * step(cell.x, 0.5 + (r4 - 0.5) * 0.4) + 0.15);
-  if (r2 > 0.95) inside = vec3(0.22, 0.19, 0.15);
+  // Pale, clear glass: a bright sky reflection at the top, a lit room showing through below.
+  vec3 room = mix(vec3(0.70, 0.68, 0.64), vec3(0.84, 0.82, 0.78), r1);
+  vec3 skyGlint = mix(vec3(0.80, 0.86, 0.90), vec3(0.93, 0.95, 0.97), r4);
+  vec3 inside = mix(room, skyGlint, smoothstep(glo.y, ghi.y, cell.y) * 0.75);
+  // Net curtains and blinds: light and soft, pulled to one side in some windows.
+  if (r2 < 0.45) inside = mix(inside, mix(curtain(r3), vec3(0.95, 0.94, 0.91), 0.55), r3 > 0.5 ? 0.6 : 0.5 * step(cell.x, 0.5 + (r4 - 0.5) * 0.4) + 0.1);
+  if (r2 > 0.96) inside = vec3(0.50, 0.48, 0.45);
   // Depth: the head of the opening shades the glass below it, the sill catches light.
   float head = smoothstep(ghi.y, ghi.y - 0.12, cell.y);
-  inside *= mix(0.55, 1.0, head);
+  inside *= mix(0.78, 1.0, head);
   vec3 colour = wall;
   colour = mix(colour, vec3(0.70, 0.71, 0.72), frame);
   colour = mix(colour, vec3(0.86, 0.84, 0.80), box(cell, vec2(lo.x - 0.03, lo.y - 0.04), vec2(hi.x + 0.03, lo.y), aa));
@@ -297,7 +301,7 @@ float shaftAo = 1.0 - 0.15 * step(0.5, vRecess);
 diffuseColor.rgb *= pow(courtAlbedo, vec3(2.2)) * groundAo * shaftAo;`;
 
 const ROUGHNESS_MAIN = `#include <roughnessmap_fragment>
-roughnessFactor = mix(roughnessFactor, 0.08, gGlass);`;
+roughnessFactor = mix(roughnessFactor, 0.18, gGlass);`;
 
 export interface CourtMaterialOptions {
   seed: number;
