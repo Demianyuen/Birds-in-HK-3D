@@ -1,7 +1,8 @@
 import { deviceTier } from './deviceTier';
+import { insideConvex as insideOutline } from '../wangFuk/MemorialPlaza';
 import type { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin, LoadRegionPlugin, ReorientationPlugin, SphereRegion } from '3d-tiles-renderer/plugins';
-import { Color, DoubleSide, Group, MathUtils, Mesh, MeshBasicMaterial, Sphere, Vector4, type Material, type MeshStandardMaterial, type Object3D, type PerspectiveCamera, type WebGLRenderer } from 'three';
+import { Color, DoubleSide, Group, MathUtils, Mesh, MeshBasicMaterial, Sphere, Vector2, Vector4, type Material, type MeshStandardMaterial, type Object3D, type PerspectiveCamera, type WebGLRenderer } from 'three';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { createRegionClippingPlanes } from './CsdiTiles';
@@ -11,6 +12,8 @@ import type { FlightRegion } from './regions';
 
 const STREAMING_EDGE_BUFFER_METRES = 650;
 const MAX_CUTOUTS = 16;
+/** Corners of the one convex area cut away as a whole (the grounds of Wang Fuk Court). */
+const MAX_AREA_CORNERS = 48;
 
 export interface PhotoMeshMetrics {
   models: number;
@@ -33,6 +36,10 @@ export class PhotoMeshTiles {
   /** The photos carry daylight; the time of day warms and dims them with this colour. */
   private readonly tint = new Color('#ffffff');
   private readonly cutouts = { value: Array.from({ length: MAX_CUTOUTS }, () => new Vector4(0, 0, 0, 1e9)) };
+  private readonly areaCorners = { value: Array.from({ length: MAX_AREA_CORNERS }, () => new Vector2()) };
+  private readonly areaCount = { value: 0 };
+  private readonly areaMinY = { value: 1e9 };
+  private area: ReadonlyArray<{ x: number; z: number }> = [];
   private readonly cutoutCount = { value: 0 };
   private readonly loadedModels = new Set<Object3D>();
   private errors = 0;
@@ -107,12 +114,14 @@ export class PhotoMeshTiles {
           mesh.receiveShadow = false;
           // What is cut away out of sight cannot be landed on or bumped into either.
           const cutouts = this.cutouts;
+          const owner = this;
           const count = this.cutoutCount;
           mesh.raycast = function raycastOutsideCutouts(raycaster, intersects) {
             const before = intersects.length;
             Mesh.prototype.raycast.call(this, raycaster, intersects);
             for (let index = intersects.length - 1; index >= before; index -= 1) {
-              if (insideCutouts(intersects[index].point, cutouts.value, count.value)) intersects.splice(index, 1);
+              const point = intersects[index].point;
+              if (insideCutouts(point, cutouts.value, count.value) || owner.hidesInArea(point)) intersects.splice(index, 1);
             }
           };
         });
@@ -151,10 +160,27 @@ export class PhotoMeshTiles {
     circles.slice(0, MAX_CUTOUTS).forEach((circle, index) => this.cutouts.value[index].set(circle.x, circle.z, circle.radius, circle.minY));
   }
 
+  /** Hide the photo mesh above `minY` inside one convex outline (counter-clockwise in x, z), or nowhere. */
+  public setCutArea(area: { outline: ReadonlyArray<{ x: number; z: number }>; minY: number } | null): void {
+    const outline = area ? area.outline.slice(0, MAX_AREA_CORNERS) : [];
+    this.area = outline;
+    this.areaCount.value = outline.length;
+    this.areaMinY.value = area ? area.minY : 1e9;
+    outline.forEach((corner, index) => this.areaCorners.value[index].set(corner.x, corner.z));
+  }
+
+  /** True where the cut area hides the photo mesh. */
+  public hidesInArea(point: { x: number; y: number; z: number }): boolean {
+    return this.area.length >= 3 && point.y > this.areaMinY.value && insideOutline(point.x, point.z, this.area);
+  }
+
   private addCutoutShader(material: Material): void {
     material.onBeforeCompile = shader => {
       shader.uniforms.uCutouts = this.cutouts;
       shader.uniforms.uCutoutCount = this.cutoutCount;
+      shader.uniforms.uArea = this.areaCorners;
+      shader.uniforms.uAreaCount = this.areaCount;
+      shader.uniforms.uAreaMinY = this.areaMinY;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vPhotoWorld;')
         .replace('#include <project_vertex>', '#include <project_vertex>\nvPhotoWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -162,15 +188,28 @@ export class PhotoMeshTiles {
         .replace('#include <common>', `#include <common>
 varying vec3 vPhotoWorld;
 uniform vec4 uCutouts[${MAX_CUTOUTS}];
-uniform int uCutoutCount;`)
+uniform int uCutoutCount;
+uniform vec2 uArea[${MAX_AREA_CORNERS}];
+uniform int uAreaCount;
+uniform float uAreaMinY;`)
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 for (int i = 0; i < ${MAX_CUTOUTS}; i++) {
   if (i >= uCutoutCount) break;
   vec4 c = uCutouts[i];
   if (vPhotoWorld.y > c.w && distance(vPhotoWorld.xz, c.xy) < c.z) discard;
+}
+if (uAreaCount >= 3 && vPhotoWorld.y > uAreaMinY) {
+  bool inside = true;
+  for (int i = 0; i < ${MAX_AREA_CORNERS}; i++) {
+    if (i >= uAreaCount) break;
+    vec2 a = uArea[i];
+    vec2 b = uArea[i + 1 < uAreaCount ? i + 1 : 0];
+    if ((b.x - a.x) * (vPhotoWorld.z - a.y) - (b.y - a.y) * (vPhotoWorld.x - a.x) < 0.0) { inside = false; break; }
+  }
+  if (inside) discard;
 }`);
     };
-    material.customProgramCacheKey = () => 'landsd-photo-cutouts';
+    material.customProgramCacheKey = () => 'landsd-photo-cutouts-area';
   }
 
   public setVisible(visible: boolean): void {

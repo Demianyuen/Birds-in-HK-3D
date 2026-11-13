@@ -118,7 +118,7 @@ export class BirdsInHkGame {
   /** Hand-built Wang Fuk Court towers and the trees around them, placed once measured in the photo mesh. */
   private readonly court = new WangFukCourt(this.sunDirection);
   private readonly grove = new Grove(420);
-  private readonly plaza = new MemorialPlaza();
+  private plaza = new MemorialPlaza();
   private courtPlacer: CourtPlacer | null = null;
   private readonly resolution = new DynamicResolution({
     maximum: deviceTier().maxPixelRatio,
@@ -291,6 +291,11 @@ export class BirdsInHkGame {
       ? wangFukLocalMarkers(region.latitude, region.longitude)
         .map(marker => ({ name: marker.name, block: marker.block, position: { x: marker.position.x, z: marker.position.z } }))
       : [];
+    // The grounds of the estate, laid out around the eight towers.
+    this.scene.remove(this.plaza.group);
+    this.plaza.dispose();
+    this.plaza = new MemorialPlaza(blocks.map(block => block.position));
+    this.scene.add(this.plaza.group);
     this.courtPlacer = blocks.length > 0
       ? new CourtPlacer(
         this.court,
@@ -299,10 +304,11 @@ export class BirdsInHkGame {
         {
           roots: () => [this.photoMesh.group],
           terrain: (x, z) => this.aerialGround.getElevationAtWorld(x, z),
-          canGrowTree: (x, z) => !inAnyWater(this.roads.streetData.water, x, z),
+          canGrowTree: (x, z) => !inAnyWater(this.roads.streetData.water, x, z) && !this.plaza.keepClear(x, z),
+          surface: (x, z) => this.plaza.surfaceAt(x, z),
         },
         () => {
-          this.plaza.setTowerBases(this.court.blocks.map(block => block.baseY));
+          this.plaza.setTowers(this.court.blocks.map(block => ({ x: block.pose.x, z: block.pose.z, yaw: block.pose.yaw, baseY: block.baseY })));
           this.refreshCutouts();
           this.applyWorldPresentation();
         },
@@ -417,6 +423,7 @@ export class BirdsInHkGame {
   private refreshCutouts(): void {
     const plaza = this.plaza.cutout();
     this.photoMesh.setCutouts([...(plaza ? [plaza] : []), ...this.court.cutouts()]);
+    this.photoMesh.setCutArea(this.plaza.groundsCut());
   }
 
   /** How many towers have been measured and built, and the measurements (for checking placement). */

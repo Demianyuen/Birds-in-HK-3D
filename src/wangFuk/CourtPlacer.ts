@@ -19,6 +19,8 @@ export interface CourtWorld {
   terrain: (x: number, z: number) => number;
   /** False where a tree cannot stand (water). */
   canGrowTree?: (x: number, z: number) => boolean;
+  /** Level ground laid out here (the estate grounds), if any: trees stand on it. */
+  surface?: (x: number, z: number) => number | null;
 }
 
 export interface CourtMetrics {
@@ -77,7 +79,7 @@ export class CourtPlacer {
   public update(deltaSeconds: number, bird: Vector3, ready: boolean): void {
     this.clock += deltaSeconds;
     if (this.treesStarted) {
-      this.grove.update((x, z) => this.world.terrain(x, z) + this.groundOffset);
+      this.grove.update((x, z) => this.world.surface?.(x, z) ?? this.world.terrain(x, z) + this.groundOffset);
     }
     if (!ready || this.markers.length === 0 || this.court.count >= this.markers.length) return;
     if (this.clock - this.lastAttempt < MEASURE_INTERVAL) return;
