@@ -121,6 +121,7 @@ export class PhotoMeshTiles {
             Mesh.prototype.raycast.call(this, raycaster, intersects);
             for (let index = intersects.length - 1; index >= before; index -= 1) {
               const point = intersects[index].point;
+              if (owner.measuringWhole) break;
               if (insideCutouts(point, cutouts.value, count.value) || owner.hidesInArea(point)) intersects.splice(index, 1);
             }
           };
@@ -172,6 +173,23 @@ export class PhotoMeshTiles {
     this.areaCount.value = outline.length;
     this.areaMinY.value = area ? area.minY : 1e9;
     outline.forEach((corner, index) => this.areaCorners.value[index].set(corner.x, corner.z));
+  }
+
+  /** While true, rays see the whole photo mesh, cut-away parts included. */
+  public measuringWhole = false;
+
+  /**
+   * Runs `measure` with rays seeing the whole photo mesh. The towers of Wang Fuk
+   * Court are found by measuring the photo mesh where it is later cut away, so
+   * that measuring must not be blinded by the cuts.
+   */
+  public whole<T>(measure: () => T): T {
+    this.measuringWhole = true;
+    try {
+      return measure();
+    } finally {
+      this.measuringWhole = false;
+    }
   }
 
   /** True where the cut area hides the photo mesh. */

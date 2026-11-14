@@ -436,7 +436,6 @@ export class BirdsInHkGame {
       this.renderer.shadowMap.needsUpdate = true;
     }
     this.streetLife.setDensity(deviceTier().streetDensity * (light ? 1 : 0.35));
-    this.photoMesh.setDetail(light ? 1 : 1.8);
   }
 
   /** Hide the photo mesh where the hand-built towers and the memorial square stand. */
@@ -697,7 +696,8 @@ export class BirdsInHkGame {
       this.bird.updateCamera(this.camera, deltaSeconds);
       this.voice.update(realSeconds, this.bird.getTelemetry().state !== 'FLYING', this.bird.profileId);
       this.remoteBirds.update(deltaSeconds);
-      this.courtPlacer?.update(deltaSeconds, this.bird.object.position, this.worldPresentation === 'photo' && this.photoMesh.ready);
+      // Towers are measured against the whole photo mesh, including what the grounds cut away.
+      this.photoMesh.whole(() => this.courtPlacer?.update(deltaSeconds, this.bird.object.position, this.worldPresentation === 'photo' && this.photoMesh.ready));
       this.measurePlaza();
       this.streetLife.setSurface((x, z) => this.aerialGround.getElevationAtWorld(x, z) + 0.2, this.collisionRoots());
       this.streetLife.update(deltaSeconds, this.bird.object.position);
