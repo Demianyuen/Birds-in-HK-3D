@@ -25,9 +25,8 @@ describe('game entry document', () => {
     }
   });
 
-  it('leaves the choice of bird to the page script (six species) and offers to play its call', () => {
+  it('leaves the choice of bird to the page script (six species)', () => {
     expect(html).toContain('id="bird-picker"');
-    expect(html).toContain('id="bird-call"');
   });
 
   it('keeps the server-managed API credential out of the interface', () => {

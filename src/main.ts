@@ -142,17 +142,11 @@ for (const id of BIRD_ORDER) {
 }
 const refreshPreview = (): void => birdPreview.set(selectedBirdProfileId(), 'natural');
 refreshPreview();
-requireElement<HTMLButtonElement>('bird-call').addEventListener('click', () => {
-  game.voice.unlock();
-  game.voice.call(selectedBirdProfileId());
-});
 document.addEventListener('change', event => {
   const target = event.target as HTMLInputElement | null;
   if (target?.name !== 'bird-profile') return;
   try { localStorage.setItem(BIRD_KEY, target.value); } catch { /* per-browser convenience */ }
   refreshPreview();
-  game.voice.unlock();
-  game.voice.call(selectedBirdProfileId());
 });
 
 // Layer switches, frame rate and data-source state are working tools, not part of the memorial:
@@ -323,7 +317,7 @@ async function beginFlight(): Promise<void> {
     const region = getFlightRegion(selectedRegionId());
     const birdProfile = selectedBirdProfileId();
     game.setBirdProfile(birdProfile);
-    game.voice.unlock();
+    game.music.start();
     birdPreview.dispose();
     mapStateValue.textContent = `${region.englishLabel} · CSDI LIVE`;
     await Promise.all([

@@ -19,7 +19,7 @@ export interface BirdProfile {
 /** Birds seen every day in Hong Kong. Ids are plain lowercase letters (they travel between visitors). */
 export const BIRD_PROFILES: Readonly<Record<BirdProfileId, BirdProfile>> = Object.freeze({
   spotted: {
-    id: 'spotted', label: '珠頸斑鳩', note: '「咕咕—咕」的叫聲，屋邨常見', modelPath: '/models/pigeon.glb', loadingLabel: 'Spotted dove',
+    id: 'spotted', label: '珠頸斑鳩', note: '屋邨常見，性情溫馴', modelPath: '/models/pigeon.glb', loadingLabel: 'Spotted dove',
     colour: '#b79a8c', cruiseSpeed: 25, minimumSpeed: 8, maximumSpeed: 64, turnRate: 1.2, flapLift: 9,
   },
   pigeon: {
@@ -31,7 +31,7 @@ export const BIRD_PROFILES: Readonly<Record<BirdProfileId, BirdProfile>> = Objec
     colour: '#f4f4ef', cruiseSpeed: 24, minimumSpeed: 8, maximumSpeed: 62, turnRate: 1.2, flapLift: 9.2,
   },
   sparrow: {
-    id: 'sparrow', label: '麻雀', note: '細小靈活，吱吱喳喳', modelPath: '/models/pigeon.glb', loadingLabel: 'Tree sparrow',
+    id: 'sparrow', label: '麻雀', note: '細小靈活，成群出沒', modelPath: '/models/pigeon.glb', loadingLabel: 'Tree sparrow',
     colour: '#a47a52', cruiseSpeed: 22, minimumSpeed: 7, maximumSpeed: 56, turnRate: 1.45, flapLift: 10,
   },
   magpie: {

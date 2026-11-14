@@ -42,7 +42,7 @@ import { stylizedGroundUniforms } from './StylizedGround';
 import { DynamicResolution } from './DynamicResolution';
 import { deviceTier } from './deviceTier';
 import { QualityLadder } from './QualityLadder';
-import { BirdVoice } from './BirdVoice';
+import { AmbientMusic } from './AmbientMusic';
 import { StylizedClouds } from './StylizedClouds';
 import { StylizedTrees } from './StylizedTrees';
 import { setBuildingGroundHeight, setMemorialSites, type BuildingPresentation } from './BuildingMaterial';
@@ -114,8 +114,8 @@ export class BirdsInHkGame {
   private elapsed = 0;
   private smoothedFrameMilliseconds = 16.7;
   private readonly quality = new QualityLadder();
-  /** The bird's own call, now and then while it rests. */
-  public readonly voice = new BirdVoice();
+  /** Quiet background music (A = 432 Hz), started on the visitor's first tap. */
+  public readonly music = new AmbientMusic();
   private renderVerified = false;
   private paused = false;
   private readonly sunDirection = new Vector3();
@@ -694,7 +694,6 @@ export class BirdsInHkGame {
       const roots = this.collisionRoots();
       for (let left = realSeconds; left > 1e-4; left -= 0.05) this.bird.update(Math.min(0.05, left), roots);
       this.bird.updateCamera(this.camera, deltaSeconds);
-      this.voice.update(realSeconds, this.bird.getTelemetry().state !== 'FLYING', this.bird.profileId);
       this.remoteBirds.update(deltaSeconds);
       // Towers are measured against the whole photo mesh, including what the grounds cut away.
       this.photoMesh.whole(() => this.courtPlacer?.update(deltaSeconds, this.bird.object.position, this.worldPresentation === 'photo' && this.photoMesh.ready));

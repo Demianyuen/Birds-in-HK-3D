@@ -168,6 +168,7 @@ export class OpenWorldPanel {
   }
 
   private liveWorld: SkyLink | null = null;
+  private readonly musicButton = document.createElement('button');
   /** The moderator's quiet switch: no lines over the birds, no shared words, for now. */
   private quiet = false;
   private shown = false;
@@ -176,6 +177,7 @@ export class OpenWorldPanel {
     this.element.hidden = !visible;
     this.labels.element.hidden = !visible;
     this.danmaku.setVisible(visible);
+    this.musicButton.hidden = !visible;
     this.shown = visible;
     this.speakButton.hidden = !visible || this.quiet;
     this.radar.setVisible(visible);
@@ -318,6 +320,7 @@ export class OpenWorldPanel {
     this.labels.clear();
     this.danmaku.element.remove();
     this.danmaku.toggleButton.remove();
+    this.musicButton.remove();
     this.element.remove();
     this.speech.element.remove();
     this.speakButton.remove();
@@ -326,9 +329,25 @@ export class OpenWorldPanel {
     this.placeButton.remove();
   }
 
+  private setUpMusicButton(): void {
+    const sync = (): void => {
+      this.musicButton.textContent = this.game.music.on ? '音樂：開' : '音樂：關';
+      this.musicButton.setAttribute('aria-pressed', String(this.game.music.on));
+    };
+    this.musicButton.type = 'button';
+    this.musicButton.className = 'danmaku-toggle music-toggle';
+    this.musicButton.hidden = true;
+    this.musicButton.addEventListener('click', () => {
+      this.game.music.setOn(!this.game.music.on);
+      sync();
+    });
+    sync();
+  }
+
   /** Attach the floating prompt and button to the game container. */
   public mount(container: HTMLElement): void {
-    container.append(this.labels.element, this.danmaku.element, this.danmaku.toggleButton, this.prompt, this.placeButton, this.card, this.element, this.speakButton, this.speech.element, this.radar.element);
+    this.setUpMusicButton();
+    container.append(this.labels.element, this.danmaku.element, this.danmaku.toggleButton, this.musicButton, this.prompt, this.placeButton, this.card, this.element, this.speakButton, this.speech.element, this.radar.element);
   }
 
   private buildCard(): void {
