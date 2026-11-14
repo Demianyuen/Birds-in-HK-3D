@@ -1,4 +1,6 @@
 import { deviceTier } from './deviceTier';
+import { buildingUniforms } from './BuildingMaterial';
+import { NEAR_GLSL_DECLARATIONS, nearCourt, nearUniforms, PHOTO_GROUND_BAND } from './nearCourt';
 import { insideConvex as insideOutline } from '../wangFuk/MemorialPlaza';
 import type { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin, LoadRegionPlugin, ReorientationPlugin, SphereRegion } from '3d-tiles-renderer/plugins';
@@ -122,7 +124,7 @@ export class PhotoMeshTiles {
             for (let index = intersects.length - 1; index >= before; index -= 1) {
               const point = intersects[index].point;
               if (owner.measuringWhole) break;
-              if (insideCutouts(point, cutouts.value, count.value) || owner.hidesInArea(point)) intersects.splice(index, 1);
+              if (insideCutouts(point, cutouts.value, count.value) || owner.hidesInArea(point) || nearCourt.photoHidden(point)) intersects.splice(index, 1);
             }
           };
         });
@@ -173,6 +175,7 @@ export class PhotoMeshTiles {
     this.areaCount.value = outline.length;
     this.areaMinY.value = area ? area.minY : 1e9;
     outline.forEach((corner, index) => this.areaCorners.value[index].set(corner.x, corner.z));
+    nearCourt.setArea(outline, area ? area.minY : 1e9);
   }
 
   /** While true, rays see the whole photo mesh, cut-away parts included. */
@@ -201,9 +204,9 @@ export class PhotoMeshTiles {
     material.onBeforeCompile = shader => {
       shader.uniforms.uCutouts = this.cutouts;
       shader.uniforms.uCutoutCount = this.cutoutCount;
-      shader.uniforms.uArea = this.areaCorners;
-      shader.uniforms.uAreaCount = this.areaCount;
-      shader.uniforms.uAreaMinY = this.areaMinY;
+      Object.assign(shader.uniforms, nearUniforms, {
+        uCsdiHeight: buildingUniforms.uCsdiHeight, uCsdiHeightBounds: buildingUniforms.uCsdiHeightBounds,
+      });
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vPhotoWorld;')
         .replace('#include <project_vertex>', '#include <project_vertex>\nvPhotoWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -212,27 +215,23 @@ export class PhotoMeshTiles {
 varying vec3 vPhotoWorld;
 uniform vec4 uCutouts[${MAX_CUTOUTS}];
 uniform int uCutoutCount;
-uniform vec2 uArea[${MAX_AREA_CORNERS}];
-uniform int uAreaCount;
-uniform float uAreaMinY;`)
+uniform sampler2D uCsdiHeight;
+uniform vec4 uCsdiHeightBounds;
+${NEAR_GLSL_DECLARATIONS}`)
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 for (int i = 0; i < ${MAX_CUTOUTS}; i++) {
   if (i >= uCutoutCount) break;
   vec4 c = uCutouts[i];
   if (vPhotoWorld.y > c.w && distance(vPhotoWorld.xz, c.xy) < c.z) discard;
 }
-if (uAreaCount >= 3 && vPhotoWorld.y > uAreaMinY) {
-  bool inside = true;
-  for (int i = 0; i < ${MAX_AREA_CORNERS}; i++) {
-    if (i >= uAreaCount) break;
-    vec2 a = uArea[i];
-    vec2 b = uArea[i + 1 < uAreaCount ? i + 1 : 0];
-    if ((b.x - a.x) * (vPhotoWorld.z - a.y) - (b.y - a.y) * (vPhotoWorld.x - a.x) < 0.0) { inside = false; break; }
-  }
-  if (inside) discard;
+if (vPhotoWorld.y > uAreaMinY && nearInArea(vPhotoWorld.xz)) discard;
+// Round the estate only the photo mesh's ground is kept: its buildings are too soft up close.
+if (uNear.w > 0.5 && distance(vPhotoWorld.xz, uNear.xy) < uNear.z) {
+  float nearGround = texture2D(uCsdiHeight, (vPhotoWorld.xz - uCsdiHeightBounds.xy) / uCsdiHeightBounds.zw).r + uNearLift;
+  if (vPhotoWorld.y > nearGround + ${PHOTO_GROUND_BAND.toFixed(1)}) discard;
 }`);
     };
-    material.customProgramCacheKey = () => 'landsd-photo-cutouts-area';
+    material.customProgramCacheKey = () => 'landsd-photo-cutouts-near-v1';
   }
 
   public setVisible(visible: boolean): void {

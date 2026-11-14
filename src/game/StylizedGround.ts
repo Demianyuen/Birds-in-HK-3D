@@ -1,3 +1,4 @@
+import { NEAR_GLSL_DECLARATIONS, nearKeepInsideGlsl, nearUniforms } from './nearCourt';
 import type { MeshStandardMaterial, WebGLProgramParametersWithUniforms } from 'three';
 
 /**
@@ -235,7 +236,7 @@ export function applyStylizedGround(
 ): MeshStandardMaterial {
   const classify = options.vectorMask ? GLSL_CLASSIFY_VECTOR : GLSL_CLASSIFY_BASEMAP;
   material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
-    Object.assign(shader.uniforms, stylizedGroundUniforms);
+    Object.assign(shader.uniforms, stylizedGroundUniforms, nearUniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 varying vec3 vSgWorld;
@@ -246,8 +247,10 @@ vSgNormal = normalize(mat3(modelMatrix) * objectNormal);`)
 vSgWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-${GLSL_COMMON}`)
+${GLSL_COMMON}
+${NEAR_GLSL_DECLARATIONS}`)
       .replace('#include <map_fragment>', `#include <map_fragment>
+${nearKeepInsideGlsl('vSgWorld')}
 ${classify}
 ${GLSL_WATER_NORMAL}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
@@ -256,7 +259,7 @@ roughnessFactor = mix(roughnessFactor, 0.07, sgWater);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize(mix(normal, normalize((viewMatrix * vec4(sgWaterNormal, 0.0)).xyz), sgWater));`);
   };
-  material.customProgramCacheKey = () => (options.vectorMask ? 'stylized-ground-vector-v2' : 'stylized-ground-v4');
+  material.customProgramCacheKey = () => (options.vectorMask ? 'stylized-ground-vector-v3' : 'stylized-ground-v5');
   material.needsUpdate = true;
   return material;
 }

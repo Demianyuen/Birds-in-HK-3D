@@ -11,6 +11,7 @@ import type { Object3D, PerspectiveCamera, WebGLRenderer } from 'three';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { createInfrastructureMaterial, setBuildingPresentation, type BuildingPresentation } from './BuildingMaterial';
 import { geodeticToEcef } from './geo';
+import { nearCourt, skipHiddenHits } from './nearCourt';
 import { createVisibleTimeout } from './visibleTimeout';
 import type { FlightRegion } from './regions';
 
@@ -139,6 +140,8 @@ export class CsdiTiles {
         event.scene.traverse(object => {
           if (!(object instanceof Mesh)) return;
           containsMesh = true;
+          const building = this.layerName === 'building';
+          skipHiddenHits(object, point => nearCourt.stylisedHidden(point, building));
           object.castShadow = true;
           object.receiveShadow = true;
           this.materialMetrics.meshes += 1;

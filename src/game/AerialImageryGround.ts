@@ -1,3 +1,4 @@
+import { nearCourt, skipHiddenHits } from './nearCourt';
 import {
   CanvasTexture,
   Color,
@@ -329,6 +330,7 @@ export class AerialImageryGround {
         metalness: 0,
       }), { vectorMask: surface.mask !== null }));
       const tile = new Mesh(geometry, material);
+      skipHiddenHits(tile, point => nearCourt.stylisedHidden(point, false));
       this.surfaceMaterials.set(`${request.x}/${request.y}`, { request, material, base: surface.texture, mask: surface.mask });
       tile.position.set(request.worldX, 0.16, request.worldZ);
       tile.receiveShadow = true;

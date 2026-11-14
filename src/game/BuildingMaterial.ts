@@ -11,6 +11,7 @@ import {
   Vector4,
   type WebGLProgramParametersWithUniforms,
 } from 'three';
+import { NEAR_GLSL_DECLARATIONS, nearKeepInsideGlsl, nearUniforms } from './nearCourt';
 
 /**
  * Shared by every stylised building material: a terrain height field so the
@@ -111,10 +112,10 @@ export function setBuildingPresentation(source: Material, identity: string, mode
     source.envMapIntensity = 1;
     source.onBeforeCompile = (shader, renderer) => {
       original.onBeforeCompile.call(source, shader, renderer);
-      Object.assign(shader.uniforms, buildingUniforms);
+      Object.assign(shader.uniforms, buildingUniforms, nearUniforms);
       applyFacadeShader(shader);
     };
-    source.customProgramCacheKey = () => `csdi-stylized-building-v6:${original.customProgramCacheKey.call(source)}`;
+    source.customProgramCacheKey = () => `csdi-stylized-building-v7:${original.customProgramCacheKey.call(source)}`;
   }
   source.needsUpdate = true;
   return source;
@@ -153,6 +154,7 @@ uniform sampler2D uCsdiHeight;
 uniform vec4 uCsdiHeightBounds;
 uniform float uCsdiHeightReady;
 uniform vec4 uCsdiMemorial[8];
+${NEAR_GLSL_DECLARATIONS}
 float csdiHash(vec2 p) {
   p = fract(p * vec2(234.34, 435.345));
   p += dot(p, p + 34.23);
@@ -187,6 +189,9 @@ for (int i = 0; i < 8; i++) {
   vec4 site = uCsdiMemorial[i];
   csdiMemorial = max(csdiMemorial, site.w * (1.0 - smoothstep(site.z, site.z + 6.0, distance(vCsdiWorldPosition.xz, site.xy))));
 }
+// Beside the photo mesh the hand-built towers stand at the memorial sites: the CSDI ones are not drawn.
+if (uNear.w > 0.5 && csdiMemorial > 0.5) discard;
+${nearKeepInsideGlsl('vCsdiWorldPosition')}
 vec3 csdiWallColor = mix(csdiPalette(csdiId), pow(vec3(0.84, 0.82, 0.77), vec3(2.2)), csdiMemorial) * csdiDetail;
 
 float csdiAlong = abs(csdiN.x) > abs(csdiN.z) ? csdiP.z : csdiP.x;
@@ -201,7 +206,9 @@ float csdiPaneY = smoothstep(0.30 - csdiW.y, 0.30 + csdiW.y, csdiF.y)
 float csdiWindow = csdiPaneX * csdiPaneY * csdiWall;
 float csdiSill = (smoothstep(0.19, 0.21 + csdiW.y, csdiF.y) - smoothstep(0.27, 0.29 + csdiW.y, csdiF.y)) * csdiWall;
 float csdiWinId = csdiHash(floor(csdiUv) + csdiCell * 17.0);
-vec3 csdiGlass = mix(vec3(0.035, 0.065, 0.10), vec3(0.16, 0.22, 0.27), csdiWinId);
+// Pale, clear glass like the Wang Fuk Court towers.
+vec3 csdiGlass = mix(vec3(0.52, 0.58, 0.63), vec3(0.80, 0.85, 0.88), csdiWinId);
+csdiGlass *= mix(0.82, 1.0, smoothstep(0.30, 0.86, csdiF.y));
 csdiGlass = mix(csdiGlass, vec3(0.42, 0.36, 0.27), step(0.86, csdiWinId) * 0.65);
 
 vec3 csdiColor = mix(csdiWallColor, csdiWallColor * 1.18, csdiSill * csdiFade);
@@ -216,7 +223,7 @@ csdiRoofColor *= 1.0 - clamp(csdiJoint, 0.0, 1.0) * 0.07 * csdiFade;
 csdiRoofColor *= 0.97 + csdiHash(floor(csdiP.xz / 1.5) + csdiCell) * 0.06 * csdiFade;
 // Street level: height above the terrain under this fragment.
 vec2 csdiHeightUv = (csdiP.xz - uCsdiHeightBounds.xy) / uCsdiHeightBounds.zw;
-float csdiAbove = mix(40.0, csdiP.y - texture2D(uCsdiHeight, csdiHeightUv).r, uCsdiHeightReady);
+float csdiAbove = mix(40.0, csdiP.y - uNearLift * uNear.w - texture2D(uCsdiHeight, csdiHeightUv).r, uCsdiHeightReady);
 float csdiStreet = csdiWall * step(-2.0, csdiAbove) * (1.0 - smoothstep(4.3, 4.5, csdiAbove));
 // About half of the estates/streets get Hong Kong shopfronts with signage bands.
 float csdiShops = step(0.45, csdiHash(csdiCell + 3.17)) * csdiStreet * (1.0 - csdiMemorial);
@@ -271,6 +278,7 @@ export function createInfrastructureMaterial(source: Material): Material {
   source.metalness = 0;
   source.onBeforeCompile = (shader, renderer) => {
     previous.call(source, shader, renderer);
+    Object.assign(shader.uniforms, nearUniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
 varying vec3 vInfraWorldNormal;
@@ -282,8 +290,10 @@ vInfraWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 varying vec3 vInfraWorldNormal;
-varying vec3 vInfraWorldPosition;`)
+varying vec3 vInfraWorldPosition;
+${NEAR_GLSL_DECLARATIONS}`)
       .replace('#include <map_fragment>', `#include <map_fragment>
+${nearKeepInsideGlsl('vInfraWorldPosition')}
 float infraTex = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
 float infraDeck = smoothstep(0.6, 0.85, normalize(vInfraWorldNormal).y);
 vec3 infraConcrete = pow(vec3(0.80, 0.78, 0.74), vec3(2.2)) * (0.92 + clamp(sqrt(infraTex), 0.0, 1.0) * 0.12);
@@ -292,7 +302,7 @@ infraConcrete *= 1.0 - infraBand;
 vec3 infraAsphalt = pow(vec3(0.38, 0.39, 0.42), vec3(2.2));
 diffuseColor.rgb = mix(infraConcrete, infraAsphalt, infraDeck);`);
   };
-  source.customProgramCacheKey = () => `csdi-stylised-infrastructure-v1:${previousKey.call(source)}`;
+  source.customProgramCacheKey = () => `csdi-stylised-infrastructure-v2:${previousKey.call(source)}`;
   source.needsUpdate = true;
   return source;
 }
