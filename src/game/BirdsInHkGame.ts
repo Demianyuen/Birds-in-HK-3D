@@ -446,6 +446,25 @@ export class BirdsInHkGame {
     this.photoMesh.setCutArea(this.plaza.groundsCut());
   }
 
+  /** For checking only (?qa): put the bird in the air at a point, facing another. */
+  public qaPlaceBird(from: { x: number; y: number; z: number }, facing: { x: number; z: number }): void {
+    this.bird.beginAt(from, facing);
+  }
+
+  /** For checking only (?qa): where things stand around the memorial. */
+  public get qaReport(): Record<string, unknown> {
+    const bird = this.bird.object.position;
+    return {
+      bird: [Math.round(bird.x), Math.round(bird.y), Math.round(bird.z)],
+      towers: this.court.blocks.map(block => ({ block: block.block, x: Math.round(block.pose.x), z: Math.round(block.pose.z), baseY: Number(block.baseY.toFixed(1)), height: Number(block.height.toFixed(1)) })),
+      groundsLevel: this.plaza.level,
+      terrainAtPlaza: Number(this.aerialGround.getElevationAtWorld(MEMORIAL_PLAZA.x, MEMORIAL_PLAZA.z).toFixed(1)),
+      quality: this.quality.level,
+      pixelRatio: this.resolution.current,
+      placement: this.courtMetrics,
+    };
+  }
+
   /** How many towers have been measured and built, and the measurements (for checking placement). */
   public get courtMetrics(): CourtMetrics | null {
     return this.courtPlacer ? this.courtPlacer.metrics : null;

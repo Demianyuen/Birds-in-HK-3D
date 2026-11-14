@@ -282,8 +282,9 @@ window.addEventListener('beforeunload', () => {
 window.addEventListener('blur', () => { game.clearControls(); touchControls.releaseAll(); });
 showScreen('boot');
 
-if (import.meta.env.DEV) {
-  // Development-only hooks for repeatable QA screenshots (production/qa/evidence).
+if (import.meta.env.DEV || new URLSearchParams(window.location.search).has('qa')) {
+  // Checking hooks (development, or ?qa on the live site): move the bird and read placement figures.
+  // They change nothing for other visitors.
   Object.assign(window, {
     __birds: {
       game,
