@@ -41,7 +41,7 @@ describe('memorial square', () => {
     expect(plaza.level).toBeCloseTo(4, 3);
     plaza.setVisible(true);
     expect(plaza.group.visible).toBe(true);
-    expect(plaza.cutout()).toMatchObject({ x: MEMORIAL_PLAZA.x, z: MEMORIAL_PLAZA.z, minY: expect.closeTo(4.2, 3) });
+    expect(plaza.cutout()).toMatchObject({ x: MEMORIAL_PLAZA.x, z: MEMORIAL_PLAZA.z, minY: expect.closeTo(3.4, 3) });
     // Tower bases, once measured, win over the rays, and each tower gets a plinth.
     plaza.setTowers(towers.slice(0, 3).map((tower, index) => ({ ...tower, yaw: 0.3, baseY: [3.1, 3.4, 9][index] })));
     expect(plaza.level).toBeCloseTo(3.4);
@@ -64,7 +64,7 @@ describe('memorial square', () => {
     // 200 m away is not part of the grounds.
     expect(plaza.surfaceAt(MEMORIAL_PLAZA.x + 200, MEMORIAL_PLAZA.z)).toBeNull();
     const cut = plaza.groundsCut()!;
-    expect(cut.minY).toBeCloseTo(5.15);
+    expect(cut.minY).toBeCloseTo(4.4);
     expect(cut.outline.length).toBeLessThanOrEqual(48);
     plaza.dispose();
   });

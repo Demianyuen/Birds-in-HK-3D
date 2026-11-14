@@ -300,6 +300,7 @@ export class BirdsInHkGame {
     this.plaza.dispose();
     this.plaza = new MemorialPlaza(blocks.map(block => block.position));
     this.scene.add(this.plaza.group);
+    this.streetLife.setLevelGround((x, z) => (this.plaza.group.visible ? this.plaza.surfaceAt(x, z) : null));
     this.courtPlacer = blocks.length > 0
       ? new CourtPlacer(
         this.court,

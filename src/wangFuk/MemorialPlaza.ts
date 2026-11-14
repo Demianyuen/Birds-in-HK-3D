@@ -14,6 +14,11 @@ export interface GroundPoint {
 /** The estate grounds reach this far past the outermost tower centres (about 8 m past the walls). */
 export const ESTATE_MARGIN = BLOCK_RADIUS + 8;
 const PATH_WIDTH = 3.2;
+/**
+ * The photo mesh is cut from this far below the grounds: cutting just above them left thin
+ * slivers of the lumpy mesh showing wherever it crossed the lawn's level.
+ */
+const CUT_BELOW = 0.6;
 const HEDGE_RADIUS = MEMORIAL_PLAZA.radius - 1.6;
 const BENCH_RADIUS = 11.5;
 const LAMP_RADIUS = MEMORIAL_PLAZA.radius - 3.4;
@@ -134,13 +139,13 @@ export class MemorialPlaza {
   /** The photo mesh is hidden above the grounds inside the square's circle. */
   public cutout(): { x: number; z: number; radius: number; minY: number } | null {
     const level = this.level;
-    return level === null ? null : { x: MEMORIAL_PLAZA.x, z: MEMORIAL_PLAZA.z, radius: MEMORIAL_PLAZA.radius + 1, minY: level + 0.2 };
+    return level === null ? null : { x: MEMORIAL_PLAZA.x, z: MEMORIAL_PLAZA.z, radius: MEMORIAL_PLAZA.radius + 1, minY: level - CUT_BELOW };
   }
 
   /** The photo mesh is hidden above the grounds inside the whole outline. */
   public groundsCut(): { outline: readonly GroundPoint[]; minY: number } | null {
     const level = this.level;
-    return level === null ? null : { outline: this.outline, minY: level + 0.15 };
+    return level === null ? null : { outline: this.outline, minY: level - CUT_BELOW };
   }
 
   /** Height of the grounds here, or null outside them (or before they are measured). */

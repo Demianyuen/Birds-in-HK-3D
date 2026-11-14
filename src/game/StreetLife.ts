@@ -128,6 +128,7 @@ export class StreetLife {
   private readonly shadows: InstancedMesh;
   private readonly steps: InstancedBufferAttribute;
   private shadowCount = 0;
+  private levelAt: ((x: number, z: number) => number | null) | null = null;
   private surfaceCursor = 0;
   private vehicleLimit: number;
   private pedestrianLimit: number;
@@ -258,6 +259,14 @@ export class StreetLife {
   }
 
   /** Ground height for things on the road before the exact surface is known, and what to drop rays on. */
+  /**
+   * Level ground laid out by hand (the grounds of Wang Fuk Court): people there
+   * stand on it, and no vehicle is drawn on it (it has lawns and footpaths only).
+   */
+  public setLevelGround(levelAt: ((x: number, z: number) => number | null) | null): void {
+    this.levelAt = levelAt;
+  }
+
   public setSurface(ground: GroundHeight, roots: Object3D[]): void {
     this.ground = ground;
     const changed = roots.length !== this.roots.length || roots.some((root, index) => root !== this.roots[index]);
@@ -314,6 +323,11 @@ export class StreetLife {
       if (Math.hypot(point.x - focus.x, point.z - focus.z) > keep) {
         mover.active = false;
         continue;
+      }
+      const level = this.levelAt ? this.levelAt(point.x, point.z) : null;
+      if (level !== null) {
+        if (driving) continue; // keeps moving, but is not drawn while it crosses the grounds
+        point.y = level + 0.08;
       }
       const { dx, dz } = this.direction(mover);
       const heading = Math.atan2(dx, dz);
