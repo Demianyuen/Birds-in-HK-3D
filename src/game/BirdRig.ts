@@ -59,9 +59,29 @@ interface Shape3 {
   wingspan: number;
   forkedTail: boolean;
   scale: number;
+  /** Tail length relative to a pigeon's. */
+  tail?: number;
 }
 
 const PALETTES: Readonly<Record<BirdProfileId, Palette>> = Object.freeze({
+  // Spotted dove (珠頸斑鳩): pinkish-brown, grey head, black collar spotted with white.
+  spotted: {
+    body: '#a98d7c', breast: '#c4a195', rump: '#8f7868', head: '#b9b4b8', neck: '#1c1c20', neckSheen: '#f0efea',
+    coverts: '#9c8270', wingBar: null, secondaries: '#86705f', primaries: '#4c413a', primaryPatch: null,
+    tail: '#6f5f54', tailTip: '#ecebe6', beak: '#2a2624', cere: '#3a3431', eye: '#d9793a', legs: '#b4545c',
+  },
+  // Eurasian tree sparrow (麻雀): chestnut cap, white cheeks, streaked brown back.
+  sparrow: {
+    body: '#9a7350', breast: '#d9cdb8', rump: '#a88662', head: '#7a4a2c', neck: '#e9e3d6', neckSheen: '#2a2420',
+    coverts: '#8a6240', wingBar: '#efe9dc', secondaries: '#7a5a3e', primaries: '#4a3a2c', primaryPatch: null,
+    tail: '#6a5038', tailTip: '#55402e', beak: '#2b2623', cere: '#2b2623', eye: '#1c1512', legs: '#c08a6a',
+  },
+  // Magpie (喜鵲): black with a blue-green gloss, white belly and shoulder patch, long tail.
+  magpie: {
+    body: '#1f2228', breast: '#f1f1ec', rump: '#2a2e36', head: '#17191d', neck: '#1b2a3a', neckSheen: '#2f5d6b',
+    coverts: '#f1f1ec', wingBar: null, secondaries: '#24406a', primaries: '#1d2026', primaryPatch: '#eeeeea',
+    tail: '#1f3a44', tailTip: '#15181c', beak: '#151515', cere: '#151515', eye: '#201612', legs: '#1c1c1c',
+  },
   // Hong Kong feral pigeon (rock dove): blue-grey, two black wing bars, iridescent neck.
   pigeon: {
     body: '#97a0ad', breast: '#8a90a0', rump: '#b8bfc9', head: '#8c94a3', neck: '#3f8a6c', neckSheen: '#7a4f8f',
@@ -112,6 +132,9 @@ function luminance(colour: Color): number {
 }
 
 const SHAPES: Readonly<Record<BirdProfileId, Shape3>> = Object.freeze({
+  spotted: { wingspan: 0.96, forkedTail: false, scale: 0.76, tail: 1.25 },
+  sparrow: { wingspan: 0.82, forkedTail: false, scale: 0.5, tail: 0.85 },
+  magpie: { wingspan: 1.02, forkedTail: false, scale: 0.86, tail: 1.9 },
   pigeon: { wingspan: 1, forkedTail: false, scale: 0.82 },
   dove: { wingspan: 1.04, forkedTail: false, scale: 0.8 },
   eagle: { wingspan: 1.5, forkedTail: true, scale: 1.05 },
@@ -153,7 +176,7 @@ export class BirdRig {
   private readonly sheenMaterial = new MeshStandardMaterial({
     vertexColors: true, flatShading: true, roughness: 0.38, metalness: 0.32,
   });
-  private profileId: BirdProfileId = 'pigeon';
+  private profileId: BirdProfileId = 'spotted';
   private plumage: Plumage = PLUMAGES[0];
   private shape: Shape3 = SHAPES.pigeon;
 
@@ -185,7 +208,7 @@ export class BirdRig {
   /** Latest blended pose, exposed for tests and debugging. */
   public pose: BirdPose = glidePose(0);
 
-  public constructor(profileId: BirdProfileId = 'pigeon') {
+  public constructor(profileId: BirdProfileId = 'spotted') {
     this.root.name = 'Procedural bird';
     this.root.add(this.body);
     this.build(profileId);
@@ -423,7 +446,7 @@ export class BirdRig {
     for (let index = 0; index < TAIL_COUNT; index += 1) {
       const offset = index - (TAIL_COUNT - 1) / 2;
       const outer = Math.abs(offset) / ((TAIL_COUNT - 1) / 2);
-      const length = this.shape.forkedTail ? 1.05 + outer * 0.35 : 1.0 - outer * 0.08;
+      const length = (this.shape.forkedTail ? 1.05 + outer * 0.35 : 1.0 - outer * 0.08 * (this.shape.tail ?? 1) ** 2) * (this.shape.tail ?? 1);
       const feather = part(featherGeometry(length, 0.26, palette.tail, palette.tailTip, 0.8), palette.tail, this.tail);
       feather.position.y = 0.01 * (TAIL_COUNT - Math.abs(offset));
       this.tailFeathers.push(feather);

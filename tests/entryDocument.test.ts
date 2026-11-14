@@ -25,11 +25,9 @@ describe('game entry document', () => {
     }
   });
 
-  it('offers three explicit bird performance profiles', () => {
-    expect(countMatches(html, /name="bird-profile"/g)).toBe(3);
-    expect(html).toMatch(/value="pigeon"\s+checked/);
-    expect(html).toContain('value="dove"');
-    expect(html).toContain('value="eagle"');
+  it('leaves the choice of bird to the page script (six species) and offers to play its call', () => {
+    expect(html).toContain('id="bird-picker"');
+    expect(html).toContain('id="bird-call"');
   });
 
   it('keeps the server-managed API credential out of the interface', () => {

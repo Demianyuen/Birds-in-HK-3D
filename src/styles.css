@@ -805,3 +805,18 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
   .speech-compose-docked input { width: 100%; box-sizing: border-box; }
   .speech-compose-docked::after { display: none; }
 }
+
+/* Six everyday Hong Kong birds to choose from; the preview and its call sit below. */
+.menu-screen .bird-picker { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bird-customise { grid-template-columns: minmax(0, 1fr) auto; }
+.bird-call {
+  justify-self: start; min-height: 40px; padding: 8px 16px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.35); background: rgba(8, 24, 30, 0.6); color: #eef6f3; font: inherit; font-size: 13px;
+}
+.bird-call:hover, .bird-call:focus-visible { border-color: #84d9a8; outline: none; }
+@media (max-width: 600px) {
+  .menu-screen .bird-picker { grid-template-columns: repeat(2, 1fr); }
+  .menu-screen .bird-picker label small { display: block; font-size: 10px; }
+  .bird-customise { grid-template-columns: 1fr; justify-items: center; }
+  .bird-preview { height: 130px; }
+}

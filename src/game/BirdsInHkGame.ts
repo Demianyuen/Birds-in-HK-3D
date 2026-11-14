@@ -42,6 +42,7 @@ import { stylizedGroundUniforms } from './StylizedGround';
 import { DynamicResolution } from './DynamicResolution';
 import { deviceTier } from './deviceTier';
 import { QualityLadder } from './QualityLadder';
+import { BirdVoice } from './BirdVoice';
 import { StylizedClouds } from './StylizedClouds';
 import { StylizedTrees } from './StylizedTrees';
 import { setBuildingGroundHeight, setMemorialSites, type BuildingPresentation } from './BuildingMaterial';
@@ -113,6 +114,8 @@ export class BirdsInHkGame {
   private elapsed = 0;
   private smoothedFrameMilliseconds = 16.7;
   private readonly quality = new QualityLadder();
+  /** The bird's own call, now and then while it rests. */
+  public readonly voice = new BirdVoice();
   private renderVerified = false;
   private paused = false;
   private readonly sunDirection = new Vector3();
@@ -353,6 +356,10 @@ export class BirdsInHkGame {
 
   public setBirdPlumage(plumage: PlumageId): void {
     this.bird.setPlumage(plumage);
+  }
+
+  public get birdProfileId(): BirdProfileId {
+    return this.bird.profileId;
   }
 
   public get birdPlumage(): PlumageId {
@@ -688,6 +695,7 @@ export class BirdsInHkGame {
       const roots = this.collisionRoots();
       for (let left = realSeconds; left > 1e-4; left -= 0.05) this.bird.update(Math.min(0.05, left), roots);
       this.bird.updateCamera(this.camera, deltaSeconds);
+      this.voice.update(realSeconds, this.bird.getTelemetry().state !== 'FLYING', this.bird.profileId);
       this.remoteBirds.update(deltaSeconds);
       this.courtPlacer?.update(deltaSeconds, this.bird.object.position, this.worldPresentation === 'photo' && this.photoMesh.ready);
       this.measurePlaza();

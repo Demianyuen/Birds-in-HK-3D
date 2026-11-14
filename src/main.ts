@@ -9,7 +9,7 @@ import { transitionFlow, type ScreenName } from './app/flow';
 import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
 import { BirdsInHkGame, type GameTelemetry, type WorldPresentation } from './game/BirdsInHkGame';
 import type { FlightControl } from './game/BirdController';
-import { getBirdProfile, getPlumage, PLUMAGES, type BirdProfileId, type PlumageId } from './game/birdProfiles';
+import { BIRD_ORDER, BIRD_PROFILES, getBirdProfile, type BirdProfileId } from './game/birdProfiles';
 import { BirdPreview } from './game/BirdPreview';
 import type { MapLoadProgress } from './game/CsdiTiles';
 import { getFlightRegion, type FlightRegionId } from './game/regions';
@@ -116,35 +116,43 @@ const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
 document.querySelector('.heritage-evidence')?.append(createHeritageDiagram());
 
-// Your bird: species and feather colour, with a turning preview; remembered in this browser.
-const PLUMAGE_KEY = 'birds-in-hk:plumage';
-const plumagePicker = requireElement<HTMLFieldSetElement>('plumage-picker');
+// Your bird: one of the birds seen every day in Hong Kong, with a turning preview and its call;
+// remembered in this browser.
+const BIRD_KEY = 'birds-in-hk:bird';
+const birdPicker = requireElement<HTMLFieldSetElement>('bird-picker');
 const birdPreview = new BirdPreview(requireElement<HTMLCanvasElement>('bird-preview'));
-let savedPlumage: PlumageId = 'natural';
-try { savedPlumage = getPlumage(localStorage.getItem(PLUMAGE_KEY)).id; } catch { /* storage blocked */ }
-for (const plumage of PLUMAGES) {
+let savedBird: BirdProfileId = 'spotted';
+try { savedBird = getBirdProfile(localStorage.getItem(BIRD_KEY)).id; } catch { /* storage blocked */ }
+for (const id of BIRD_ORDER) {
+  const profile = BIRD_PROFILES[id];
   const label = document.createElement('label');
   const input = document.createElement('input');
   input.type = 'radio';
-  input.name = 'plumage';
-  input.value = plumage.id;
-  input.checked = plumage.id === savedPlumage;
-  const swatch = document.createElement('span');
-  swatch.className = 'plumage-swatch';
-  swatch.style.background = plumage.main ? `linear-gradient(135deg, ${plumage.main} 0 62%, ${plumage.dark} 62% 100%)` : 'linear-gradient(135deg, #97a0ad 0 40%, #3f8a6c 40% 62%, #f5f6f1 62% 100%)';
-  const name = document.createElement('small');
-  name.textContent = plumage.label;
-  label.append(input, swatch, name);
-  plumagePicker.append(label);
+  input.name = 'bird-profile';
+  input.value = id;
+  input.checked = id === savedBird;
+  const text = document.createElement('span');
+  const name = document.createElement('strong');
+  name.textContent = profile.label;
+  const note = document.createElement('small');
+  note.textContent = profile.note;
+  text.append(name, note);
+  label.append(input, text);
+  birdPicker.append(label);
 }
-const refreshPreview = (): void => birdPreview.set(selectedBirdProfileId(), selectedPlumageId());
+const refreshPreview = (): void => birdPreview.set(selectedBirdProfileId(), 'natural');
 refreshPreview();
+requireElement<HTMLButtonElement>('bird-call').addEventListener('click', () => {
+  game.voice.unlock();
+  game.voice.call(selectedBirdProfileId());
+});
 document.addEventListener('change', event => {
   const target = event.target as HTMLInputElement | null;
-  if (target?.name === 'plumage') {
-    try { localStorage.setItem(PLUMAGE_KEY, target.value); } catch { /* per-browser convenience */ }
-  }
-  if (target?.name === 'plumage' || target?.name === 'bird-profile') refreshPreview();
+  if (target?.name !== 'bird-profile') return;
+  try { localStorage.setItem(BIRD_KEY, target.value); } catch { /* per-browser convenience */ }
+  refreshPreview();
+  game.voice.unlock();
+  game.voice.call(selectedBirdProfileId());
 });
 
 // Layer switches, frame rate and data-source state are working tools, not part of the memorial:
@@ -315,7 +323,7 @@ async function beginFlight(): Promise<void> {
     const region = getFlightRegion(selectedRegionId());
     const birdProfile = selectedBirdProfileId();
     game.setBirdProfile(birdProfile);
-    game.setBirdPlumage(selectedPlumageId());
+    game.voice.unlock();
     birdPreview.dispose();
     mapStateValue.textContent = `${region.englishLabel} · CSDI LIVE`;
     await Promise.all([
@@ -475,11 +483,6 @@ function delay(milliseconds: number): Promise<void> {
 function selectedRegionId(): FlightRegionId {
   const selected = document.querySelector<HTMLInputElement>('input[name="flight-region"]:checked');
   return getFlightRegion(selected?.value).id;
-}
-
-function selectedPlumageId(): PlumageId {
-  const selected = document.querySelector<HTMLInputElement>('input[name="plumage"]:checked');
-  return getPlumage(selected?.value).id;
 }
 
 function selectedBirdProfileId(): BirdProfileId {

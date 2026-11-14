@@ -120,7 +120,7 @@ export class BirdController {
   /** Seconds since the last wall bump; drives camera shake. */
   public bumpAge = 10;
   private flightRadiusMetres = Number.POSITIVE_INFINITY;
-  private flightProfile: BirdProfile = getBirdProfile('pigeon');
+  private flightProfile: BirdProfile = getBirdProfile('spotted');
   private readonly controls: Record<FlightControl, boolean> = {
     yawLeft: false,
     yawRight: false,

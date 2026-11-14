@@ -1,7 +1,7 @@
 import { Color, Group, InstancedMesh, Matrix4, MeshStandardMaterial, Quaternion, Vector3, SphereGeometry, ConeGeometry, BufferGeometry, DynamicDrawUsage } from 'three';
 import { WORLD_PLAYER_LIMIT, type WorldPlayer } from './protocol';
 import { WALK_SCALE } from '../game/BirdController';
-import { getPlumage } from '../game/birdProfiles';
+import { BIRD_PROFILES, getPlumage, isBirdProfileId } from '../game/birdProfiles';
 
 interface RemoteBird {
   position: Vector3;
@@ -162,6 +162,8 @@ const NATURAL_REMOTE = '#b4bac2';
 
 /** Feather colour for another visitor's bird (instanced colours multiply the near-white material). */
 function plumageColour(id: string | undefined): Color {
+  // Visitors now send their species in this field; older pages sent a feather tint.
+  if (isBirdProfileId(id)) return new Color(BIRD_PROFILES[id].colour);
   const plumage = getPlumage(id);
   return new Color(plumage.main || NATURAL_REMOTE);
 }

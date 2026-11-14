@@ -148,7 +148,7 @@ export class OpenWorldPanel {
     if (!config || this.liveWorld) return;
     this.status.textContent = '正在連線…';
     try {
-      const self = { id: visitor.id, name: visitor.name, plumage: this.game.birdPlumage };
+      const self = { id: visitor.id, name: visitor.name, plumage: this.game.birdProfileId };
       const events = { onStatus: (status: LiveStatus) => this.showStatus(status), onChat: (line: ChatLine) => this.appendChat(line) };
       const relay = skyRelayUrl();
       let live: SkyLink;
