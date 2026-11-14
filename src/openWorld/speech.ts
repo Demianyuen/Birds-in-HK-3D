@@ -1,4 +1,4 @@
-import { SPEECH_LINES } from './contentRules';
+import { CHAT_MAX } from './contentRules';
 
 /** A line stays over the bird for 15 seconds at most; a newer line replaces it at once. */
 export const BUBBLE_SECONDS = 15;
@@ -72,51 +72,39 @@ export function findSpeaker(
  */
 export class SpeechInput {
   public readonly element = document.createElement('form');
-  private readonly choices: HTMLButtonElement[] = [];
+  private readonly input = document.createElement('input');
 
-  /**
-   * Only the ready-made lines can be said over the bird: tap one (or press 1–6).
-   * Nothing typed freely appears over anyone's head.
-   */
   public constructor(
     private readonly onSay: (text: string) => void,
     private readonly onFocus: () => void,
-    lines: readonly string[] = SPEECH_LINES,
   ) {
-    this.element.className = 'speech-compose speech-choices';
+    this.element.className = 'speech-compose';
     this.element.hidden = true;
-    this.element.setAttribute('aria-label', '選一句話');
-    lines.forEach((line, index) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'speech-choice';
-      button.textContent = line;
-      button.setAttribute('aria-keyshortcuts', String(index + 1));
-      button.addEventListener('click', () => this.choose(line));
-      button.addEventListener('focus', () => this.onFocus());
-      this.choices.push(button);
-      this.element.append(button);
+    this.element.setAttribute('aria-label', '說一句話');
+    this.input.type = 'text';
+    this.input.maxLength = CHAT_MAX;
+    this.input.autocomplete = 'off';
+    this.input.enterKeyHint = 'send';
+    this.input.placeholder = '說一句話… Enter 說出 · Esc 取消';
+    this.input.setAttribute('aria-label', '說一句話，按 Enter 說出，Esc 取消');
+    this.element.append(this.input);
+    this.element.addEventListener('submit', event => {
+      event.preventDefault();
+      const text = this.input.value.trim();
+      this.close();
+      if (text) this.onSay(text);
     });
-    this.element.addEventListener('submit', event => event.preventDefault());
-    this.element.addEventListener('keydown', event => {
+    this.input.addEventListener('keydown', event => {
       event.stopPropagation();
       if (event.key === 'Escape') {
         event.preventDefault();
         this.close();
-        return;
-      }
-      const number = Number(event.key);
-      if (Number.isInteger(number) && number >= 1 && number <= this.choices.length) {
-        event.preventDefault();
-        this.choose(this.choices[number - 1].textContent ?? '');
       }
     });
-    this.element.addEventListener('keyup', event => event.stopPropagation());
-    // Clicking back into the world (or anywhere else) closes the choices.
-    this.element.addEventListener('focusout', event => {
-      const next = (event as FocusEvent).relatedTarget as Node | null;
-      if (!next || !this.element.contains(next)) this.close();
-    });
+    this.input.addEventListener('keyup', event => event.stopPropagation());
+    // Clicking back into the world (or anywhere else) lets the line go.
+    this.input.addEventListener('blur', () => this.close());
+    this.input.addEventListener('focus', () => this.onFocus());
   }
 
   public get open(): boolean {
@@ -125,18 +113,15 @@ export class SpeechInput {
 
   public show(): void {
     this.element.hidden = false;
-    this.choices[0]?.focus();
+    this.input.value = '';
+    this.input.focus();
   }
 
   public close(): void {
     if (this.element.hidden) return;
     this.element.hidden = true;
-    (document.activeElement as HTMLElement | null)?.blur?.();
-  }
-
-  private choose(line: string): void {
-    this.close();
-    if (line) this.onSay(line);
+    this.input.value = '';
+    this.input.blur();
   }
 
   /** Keep the bubble over the bird's head (screen pixels), or at the bottom centre when the head is off screen. */

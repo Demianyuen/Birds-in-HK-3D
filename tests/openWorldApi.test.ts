@@ -225,7 +225,7 @@ describe('chat API', () => {
   });
 });
 
-describe('ready-made lines and the quiet switch', () => {
+describe('the quiet switch', () => {
   const moderator = { authorization: 'Bearer moderator-token-0123456789' };
   const quietOn = (on: boolean): void => {
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
@@ -241,12 +241,11 @@ describe('ready-made lines and the quiet switch', () => {
     }));
   };
 
-  it('says only the ready-made lines over the birds', async () => {
+  it('takes a freely typed line when the switch is off', async () => {
+    quietOn(false);
     const { res, done } = response();
     await chat(request('POST', '/api/chat', { name: '阿明', body: '大家好' }), res);
-    const result = await done;
-    expect(result.status).toBe(422);
-    expect(calls.some(call => call.init.method === 'POST')).toBe(false);
+    expect((await done).status).toBe(201);
   });
 
   it('when quiet, refuses lines and holds back every flower word, but keeps the flowers', async () => {

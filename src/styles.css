@@ -771,36 +771,6 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
   .boot-screen .source-credit { display: none; }
 }
 
-/* Saying something: tap one of the ready-made lines (nothing typed freely). */
-.speech-choices {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  width: min(320px, calc(100vw - 32px));
-  padding: 10px;
-  box-sizing: border-box;
-  border-radius: 14px;
-  background: rgba(255, 252, 244, 0.96);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
-}
-.speech-choice {
-  min-height: 36px;
-  padding: 6px 12px;
-  border: 1px solid #d8d2c2;
-  border-radius: 999px;
-  background: #fff;
-  color: #222823;
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-.speech-choice:hover, .speech-choice:focus-visible { border-color: #b08a3c; outline: none; background: #fbf4e2; }
-@media (max-width: 720px) {
-  .speech-choices { width: calc(100vw - 32px); }
-  .speech-choice { min-height: 44px; font-size: 15px; }
-}
-
 /* Phones, upright or on their side: the bird screen scrolls, nothing overlaps the map credits. */
 @media (max-width: 900px), (max-height: 520px) {
   .menu-screen { overflow-y: auto; -webkit-overflow-scrolling: touch; align-items: flex-start; padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
@@ -825,4 +795,13 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
   .menu-screen .bird-picker label span { padding: 12px 8px; min-height: 0; }
   .menu-screen .bird-picker label small { display: none; }
   .menu-screen h2 { font-size: 36px; }
+}
+
+/* Typing on a phone: 16px text so iOS does not zoom the page, and the speech box sits
+   in the upper part of the screen, clear of the on-screen keyboard. */
+@media (hover: none) and (pointer: coarse), (max-width: 720px) {
+  .speech-compose input, .flower-card textarea, .visitor-form input { font-size: 16px; }
+  .speech-compose-docked { top: 24vh; bottom: auto; width: calc(100vw - 32px); max-width: 360px; }
+  .speech-compose-docked input { width: 100%; box-sizing: border-box; }
+  .speech-compose-docked::after { display: none; }
 }
