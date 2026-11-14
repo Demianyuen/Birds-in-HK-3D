@@ -40,6 +40,8 @@ export class MemorialPlaza {
   private readonly spokes: Array<{ from: GroundPoint; to: GroundPoint }>;
   private readonly materials: Material[] = [];
   private readonly plinths = new Group();
+  private readonly bank = new Group();
+  private readonly lawnMaterial: MeshStandardMaterial;
   private readonly raycaster = new Raycaster();
   private readonly stone: MeshStandardMaterial;
   private measuredY: number | null = null;
@@ -62,7 +64,10 @@ export class MemorialPlaza {
     const glow = new MeshStandardMaterial({ color: '#fff4dc', emissive: '#ffd79a', emissiveIntensity: 0.9 });
     this.materials.push(lawn, paving, this.stone, hedge, wood, metal, glow);
 
+    this.lawnMaterial = lawn;
     this.add(lawnGeometry(this.outline), lawn, 'lawn');
+    this.bank.name = 'grass bank';
+    this.group.add(this.bank);
     this.add(pathGeometry(this.spokes), paving, 'paths');
     this.add(plazaGeometry(MEMORIAL_PLAZA.radius), paving, 'square');
     const furniture = furnitureGeometry(this.spokes);
@@ -140,6 +145,47 @@ export class MemorialPlaza {
   public cutout(): { x: number; z: number; radius: number; minY: number } | null {
     const level = this.level;
     return level === null ? null : { x: MEMORIAL_PLAZA.x, z: MEMORIAL_PLAZA.z, radius: MEMORIAL_PLAZA.radius + 1, minY: level - CUT_BELOW };
+  }
+
+  /**
+   * Joins the level grounds to the land around them. Where the photo mesh outside
+   * stands higher than the lawn, cutting it away leaves an open edge you can see
+   * under (down to the sea plane); a grass bank rising to meet it closes that edge.
+   * Call again as the photo mesh gains detail.
+   */
+  public fitEdge(roots: readonly Object3D[]): boolean {
+    const level = this.level;
+    if (level === null || roots.length === 0) return false;
+    const centre = this.outline.reduce((sum, point) => ({ x: sum.x + point.x / this.outline.length, z: sum.z + point.z / this.outline.length }), { x: 0, z: 0 });
+    const down = new Vector3(0, -1, 0);
+    const outward = this.outline.map(point => {
+      const length = Math.hypot(point.x - centre.x, point.z - centre.z) || 1;
+      return { x: (point.x - centre.x) / length, z: (point.z - centre.z) / length };
+    });
+    const heights = this.outline.map((point, index) => {
+      this.raycaster.set(new Vector3(point.x + outward[index].x * 0.6, level + 60, point.z + outward[index].z * 0.6), down);
+      this.raycaster.near = 0;
+      this.raycaster.far = 120;
+      // The ground just outside: the lowest surface near our level (roofs and tree crowns are above it).
+      let ground: number | null = null;
+      for (const hit of this.raycaster.intersectObjects(roots as Object3D[], true)) {
+        if (hit.point.y < level - 6 || hit.point.y > level + 14) continue;
+        if (ground === null || hit.point.y < ground) ground = hit.point.y;
+      }
+      return ground ?? level;
+    });
+    this.setBank(bankGeometry(this.outline, outward, heights.map(height => height - level)));
+    return true;
+  }
+
+  private setBank(geometry: BufferGeometry): void {
+    for (const child of [...this.bank.children]) {
+      (child as Mesh).geometry.dispose();
+      this.bank.remove(child);
+    }
+    const mesh = new Mesh(geometry, this.lawnMaterial);
+    mesh.receiveShadow = true;
+    this.bank.add(mesh);
   }
 
   /** The photo mesh is hidden above the grounds inside the whole outline. */
@@ -311,6 +357,37 @@ function strip(geometry: BufferGeometry): BufferGeometry {
   flat.deleteAttribute('uv');
   if (!flat.getAttribute('normal')) flat.computeVertexNormals();
   return flat;
+}
+
+/** Width of the grass bank inside the edge of the grounds (m). */
+export const BANK_WIDTH = 3;
+
+/**
+ * A strip of grass just inside the outline, level at its inner edge and rising (or
+ * falling) to `rise[i]` above the grounds at the outline itself. Heights are evened
+ * out between neighbours so one stray measurement does not make a spike.
+ */
+export function bankGeometry(outline: readonly GroundPoint[], outward: readonly GroundPoint[], rise: readonly number[]): BufferGeometry {
+  const count = outline.length;
+  const smooth = rise.map((_, index) => {
+    const around = [rise[(index + count - 1) % count], rise[index], rise[(index + 1) % count]].sort((a, b) => a - b);
+    return around[1];
+  });
+  const positions: number[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const next = (index + 1) % count;
+    const a = outline[index];
+    const b = outline[next];
+    const ia = { x: a.x - outward[index].x * BANK_WIDTH, z: a.z - outward[index].z * BANK_WIDTH };
+    const ib = { x: b.x - outward[next].x * BANK_WIDTH, z: b.z - outward[next].z * BANK_WIDTH };
+    const ya = smooth[index] + 0.05;
+    const yb = smooth[next] + 0.05;
+    positions.push(ia.x, 0.03, ia.z, a.x, ya, a.z, b.x, yb, b.z, ia.x, 0.03, ia.z, b.x, yb, b.z, ib.x, 0.03, ib.z);
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 /** Lawn over the whole outline, with a kerb that drops into the ground all round. */

@@ -4,7 +4,7 @@ import { insideCutouts } from '../src/game/PhotoMeshTiles';
 import { MEMORIAL_PLAZA, insideMemorialGround } from '../src/openWorld/contentRules';
 import { wangFukLocalMarkers } from '../src/game/wangFukLocations';
 import { BLOCK_RADIUS } from '../src/wangFuk/plan';
-import { estateOutline, insideConvex, MemorialPlaza, plazaGeometry, plazaLevel } from '../src/wangFuk/MemorialPlaza';
+import { bankGeometry, estateOutline, insideConvex, MemorialPlaza, plazaGeometry, plazaLevel } from '../src/wangFuk/MemorialPlaza';
 
 const towers = wangFukLocalMarkers(22.44705, 114.17544).map(marker => ({ x: marker.position.x, z: marker.position.z }));
 
@@ -67,6 +67,32 @@ describe('memorial square', () => {
     expect(cut.minY).toBeCloseTo(4.4);
     expect(cut.outline.length).toBeLessThanOrEqual(48);
     plaza.dispose();
+  });
+});
+
+describe('grass bank at the edge of the grounds', () => {
+  it('rises to meet higher land outside, so there is no open edge to see under', () => {
+    // Land all round standing 3 m above the level the grounds settle at.
+    const land = new Mesh(new PlaneGeometry(600, 600), new MeshBasicMaterial());
+    land.rotation.x = -Math.PI / 2;
+    land.position.set(MEMORIAL_PLAZA.x, 8, MEMORIAL_PLAZA.z);
+    land.updateMatrixWorld(true);
+    const plaza = new MemorialPlaza(towers);
+    plaza.setTowerBases([5]);
+    expect(plaza.fitEdge([land])).toBe(true);
+    const bank = plaza.group.getObjectByName('grass bank')!.children[0] as Mesh;
+    bank.geometry.computeBoundingBox();
+    expect(bank.geometry.boundingBox!.max.y).toBeCloseTo(3.05, 1);
+    expect(bank.geometry.boundingBox!.min.y).toBeCloseTo(0.03, 2);
+    plaza.dispose();
+  });
+
+  it('ignores one stray height between two ordinary ones', () => {
+    const outline = [{ x: 0, z: 0 }, { x: 10, z: 0 }, { x: 10, z: 10 }, { x: 0, z: 10 }];
+    const outward = outline.map(point => ({ x: Math.sign(point.x - 5) * Math.SQRT1_2, z: Math.sign(point.z - 5) * Math.SQRT1_2 }));
+    const geometry = bankGeometry(outline, outward, [1, 9, 1, 1]);
+    geometry.computeBoundingBox();
+    expect(geometry.boundingBox!.max.y).toBeCloseTo(1.05, 2);
   });
 });
 

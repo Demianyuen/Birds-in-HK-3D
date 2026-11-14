@@ -27,7 +27,7 @@ export function tierFor(touchFirst: boolean, devicePixelRatio: number): DeviceTi
   }
   return {
     phone: false, maxPixelRatio: Math.min(devicePixelRatio || 1, 1.5), antialias: true, shadowMapSize: 2_048, bloom: true,
-    streetDensity: 1, photoMeshError: 12, csdiError: 16, tileCacheBytes: 400 * 1_048_576,
+    streetDensity: 1, photoMeshError: 8, csdiError: 16, tileCacheBytes: 400 * 1_048_576,
   };
 }
 

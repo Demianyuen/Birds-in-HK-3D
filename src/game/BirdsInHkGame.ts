@@ -114,6 +114,8 @@ export class BirdsInHkGame {
   private elapsed = 0;
   private smoothedFrameMilliseconds = 16.7;
   private readonly quality = new QualityLadder();
+  private edgeFits = 0;
+  private lastEdgeFit = 0;
   /** Quiet background music (A = 432 Hz), started on the visitor's first tap. */
   public readonly music = new AmbientMusic();
   private renderVerified = false;
@@ -314,6 +316,7 @@ export class BirdsInHkGame {
         },
         () => {
           this.plaza.setTowers(this.court.blocks.map(block => ({ x: block.pose.x, z: block.pose.z, yaw: block.pose.yaw, baseY: block.baseY })));
+          this.edgeFits = 0;
           this.refreshCutouts();
           this.applyWorldPresentation();
         },
@@ -437,6 +440,8 @@ export class BirdsInHkGame {
       this.renderer.shadowMap.needsUpdate = true;
     }
     this.streetLife.setDensity(deviceTier().streetDensity * (light ? 1 : 0.35));
+    // The sharper map tiles are the last thing given up.
+    this.photoMesh.setDetail(light ? 1 : 1.5);
   }
 
   /** Hide the photo mesh where the hand-built towers and the memorial square stand. */
@@ -684,10 +689,20 @@ export class BirdsInHkGame {
 
   /** Once the photo mesh is detailed near the court, find the ground level for the memorial square. */
   private measurePlaza(): void {
-    if (this.plaza.level !== null || this.region?.id !== 'tai-po') return;
+    if (this.region?.id !== 'tai-po') return;
     if (this.worldPresentation !== 'photo' || !this.photoMesh.ready) return;
     const bird = this.bird.object.position;
     if (Math.hypot(bird.x - MEMORIAL_PLAZA.x, bird.z - MEMORIAL_PLAZA.z) > 400) return;
+    if (this.plaza.level !== null) {
+      // Keep the grass bank matched to the land around as the photo mesh gains detail.
+      const now = performance.now();
+      if (this.edgeFits < 20 && now - this.lastEdgeFit > 4_000) {
+        this.lastEdgeFit = now;
+        this.edgeFits += 1;
+        this.plaza.fitEdge([this.photoMesh.group]);
+      }
+      return;
+    }
     if (this.plaza.measure([this.photoMesh.group], this.aerialGround.getElevationAtWorld(MEMORIAL_PLAZA.x, MEMORIAL_PLAZA.z))) {
       this.refreshCutouts();
       this.applyWorldPresentation();
