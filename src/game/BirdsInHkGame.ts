@@ -43,7 +43,7 @@ import { DynamicResolution } from './DynamicResolution';
 import { deviceTier } from './deviceTier';
 import { QualityLadder } from './QualityLadder';
 import { nearCourt } from './nearCourt';
-import { buildingUniforms } from './BuildingMaterial';
+import { BuildingMask } from './BuildingMask';
 import { MEMORIAL_CENTRE } from '../openWorld/contentRules';
 import { AmbientMusic } from './AmbientMusic';
 import { StylizedClouds } from './StylizedClouds';
@@ -78,7 +78,7 @@ export interface GameTelemetry extends FlightTelemetry {
 export type WorldPresentation = BuildingPresentation | 'photo';
 
 /** Radius round Wang Fuk Court inside which clean buildings replace the photo mesh's (m). */
-const NEAR_COURT_RADIUS = 420;
+const NEAR_COURT_RADIUS = 260;
 
 export class BirdsInHkGame {
   private readonly scene = new Scene();
@@ -121,7 +121,11 @@ export class BirdsInHkGame {
   private smoothedFrameMilliseconds = 16.7;
   private readonly quality = new QualityLadder();
   /** Clean buildings round the estate instead of the melted photo ones (off with ?near=photo). */
-  private readonly nearWanted = !new URLSearchParams(window.location.search).has('near');
+  private readonly nearWanted = new URLSearchParams(window.location.search).has('near');
+  /** Clean official buildings in place of the photo mesh's melted ones (off with ?buildings=photo). */
+  private readonly cleanWanted = new URLSearchParams(window.location.search).get('buildings') !== 'photo';
+  private readonly mask = new BuildingMask(deviceTier().phone ? 2_048 : 4_096);
+  private photoShown = false;
   private edgeFits = 0;
   private lastEdgeFit = 0;
   /** Quiet background music (A = 432 Hz), started on the visitor's first tap. */
@@ -270,6 +274,7 @@ export class BirdsInHkGame {
       }))
       : [];
     setMemorialSites(towerSites);
+    this.mask.setArea(region.flightRadiusMetres + 650);
     // The shader fades the sites out over 6 m; rays treat the CSDI towers as absent to the middle of that.
     nearCourt.setTowerSites(towerSites.map(site => ({ ...site, radius: site.radius + 3 })));
     const scenery = terrainPromise.then(() => {
@@ -327,6 +332,14 @@ export class BirdsInHkGame {
         },
         () => {
           this.plaza.setTowers(this.court.blocks.map(block => ({ x: block.pose.x, z: block.pose.z, yaw: block.pose.yaw, baseY: block.baseY })));
+          // A tower measured while the map was still coarse can sit metres too high: stand it on the
+          // grounds like the others, keeping its roof where it was measured.
+          const level = this.plaza.level;
+          if (level !== null) {
+            for (const block of [...this.court.blocks]) {
+              if (Math.abs(block.baseY - level) > 1.5) this.court.place(block.block, block.pose, level, block.height + block.baseY - level);
+            }
+          }
           this.edgeFits = 0;
           this.refreshCutouts();
           this.applyWorldPresentation();
@@ -430,21 +443,23 @@ export class BirdsInHkGame {
     this.applyWorldPresentation();
   }
 
-  /** The photo mesh already holds ground, trees and buildings: hide the stylised ones while it shows. */
+  /**
+   * Aerial-photo view: hills, trees, roads and water as photographed, but every building
+   * in view is the clean official one (the photo mesh's own buildings look melted).
+   */
   private applyWorldPresentation(): void {
     const photo = this.worldPresentation === 'photo' && this.photoMesh.ready;
     this.photoMesh.setVisible(this.worldPresentation === 'photo');
-    // Round the estate, the photo mesh keeps its ground and the clean CSDI buildings stand on it.
-    const lift = photo ? this.photoGroundLift() : null;
-    const near = lift !== null && this.nearWanted && this.region?.id === 'tai-po' && buildingUniforms.uCsdiHeightReady.value > 0;
-    if (near) nearCourt.enable(MEMORIAL_CENTRE, NEAR_COURT_RADIUS, lift, (x, z) => this.aerialGround.getElevationAtWorld(x, z));
+    const clean = photo && this.cleanWanted;
+    this.mask.setOn(clean);
+    // Experiment (?near): stylised flat ground too, inside a circle round the estate.
+    const level = this.plaza.level;
+    const near = photo && this.nearWanted && this.region?.id === 'tai-po' && level !== null;
+    if (near) nearCourt.enable(MEMORIAL_CENTRE, NEAR_COURT_RADIUS, level - 0.25);
     else nearCourt.disable();
-    // The terrain model and the CSDI models share a height datum; the photo mesh's ground sits `lift` above it.
-    this.officialWorldRoot.position.y = near ? lift : 0;
-    this.aerialGround.group.position.y = near ? lift - 0.35 : 0;
-    this.officialWorldRoot.updateMatrixWorld(true);
-    this.aerialGround.group.updateMatrixWorld(true);
-    this.officialWorldRoot.visible = !photo || near;
+    this.officialWorldRoot.visible = !photo || clean || near;
+    // The photo mesh has its own bridges and flyovers.
+    this.infrastructure.setVisible(!photo || near);
     this.aerialGround.group.visible = !photo || near;
     this.trees.group.visible = !photo;
     this.court.setVisible(photo);
@@ -498,6 +513,7 @@ export class BirdsInHkGame {
       terrainAtPlaza: Number(this.aerialGround.getElevationAtWorld(MEMORIAL_PLAZA.x, MEMORIAL_PLAZA.z).toFixed(1)),
       quality: this.quality.level,
       nearCourt: nearCourt.on,
+      cleanBuildings: this.mask.on,
       photoGroundLift: this.photoGroundLift(),
       pixelRatio: this.resolution.current,
       placement: this.courtMetrics,
@@ -759,7 +775,9 @@ export class BirdsInHkGame {
     this.infrastructure.update(this.camera, this.renderer);
     this.photoMesh.update(this.camera, this.renderer);
     // Keep the stylised world showing until the first photo tiles arrive.
-    if (this.worldPresentation === 'photo' && this.officialWorldRoot.visible && this.photoMesh.ready && !nearCourt.on) this.applyWorldPresentation();
+    if (this.worldPresentation === 'photo' && !this.photoShown && this.photoMesh.ready) this.applyWorldPresentation();
+    this.photoShown = this.worldPresentation === 'photo' && this.photoMesh.ready;
+    this.mask.update(this.renderer, this.scene, performance.now());
 
     if (this.mode === 'playing' && this.paused) {
       this.bird.updateCamera(this.camera, 1);

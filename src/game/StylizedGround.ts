@@ -239,11 +239,16 @@ export function applyStylizedGround(
     Object.assign(shader.uniforms, stylizedGroundUniforms, nearUniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
+uniform vec4 uNear;
+uniform float uNearLift;
 varying vec3 vSgWorld;
 varying vec3 vSgNormal;`)
       .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+// Round Wang Fuk Court the ground is laid flat (the terrain model is too rough there).
+if (uNear.w > 0.5) objectNormal = vec3(0.0, 1.0, 0.0);
 vSgNormal = normalize(mat3(modelMatrix) * objectNormal);`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
+if (uNear.w > 0.5) transformed.y = uNearLift - modelMatrix[3].y;
 vSgWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
@@ -259,7 +264,7 @@ roughnessFactor = mix(roughnessFactor, 0.07, sgWater);`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize(mix(normal, normalize((viewMatrix * vec4(sgWaterNormal, 0.0)).xyz), sgWater));`);
   };
-  material.customProgramCacheKey = () => (options.vectorMask ? 'stylized-ground-vector-v3' : 'stylized-ground-v5');
+  material.customProgramCacheKey = () => (options.vectorMask ? 'stylized-ground-vector-v4' : 'stylized-ground-v6');
   material.needsUpdate = true;
   return material;
 }

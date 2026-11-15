@@ -30,10 +30,12 @@ export const MEMORIAL_CENTRE = Object.freeze({ x: 18, z: 22 });
 export const MEMORIAL_RADIUS = 190;
 
 /**
- * The small level square in the open ground north of 宏建閣 (Block D), clear of
- * every tower, where birds are guided to land and lay their flowers.
+ * The small level square in the open middle of the estate, where birds are guided
+ * to land and lay their flowers. Placed from measurements of the live map: it is
+ * clear of all eight towers and of the mid-rise block that stands north-east of
+ * the middle (about x 0–40, z −30–0), where an earlier position wrongly put it.
  */
-export const MEMORIAL_PLAZA = Object.freeze({ x: 28, z: -6, radius: 18 });
+export const MEMORIAL_PLAZA = Object.freeze({ x: -10, z: 4, radius: 16 });
 
 /**
  * Where every visit begins: high above Tolo Harbour, about 1.7 km east-north-east

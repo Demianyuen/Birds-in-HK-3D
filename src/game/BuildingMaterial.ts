@@ -12,6 +12,7 @@ import {
   type WebGLProgramParametersWithUniforms,
 } from 'three';
 import { NEAR_GLSL_DECLARATIONS, nearKeepInsideGlsl, nearUniforms } from './nearCourt';
+import { maskUniforms } from './BuildingMask';
 
 /**
  * Shared by every stylised building material: a terrain height field so the
@@ -112,10 +113,10 @@ export function setBuildingPresentation(source: Material, identity: string, mode
     source.envMapIntensity = 1;
     source.onBeforeCompile = (shader, renderer) => {
       original.onBeforeCompile.call(source, shader, renderer);
-      Object.assign(shader.uniforms, buildingUniforms, nearUniforms);
+      Object.assign(shader.uniforms, buildingUniforms, nearUniforms, { uClean: maskUniforms.uClean });
       applyFacadeShader(shader);
     };
-    source.customProgramCacheKey = () => `csdi-stylized-building-v7:${original.customProgramCacheKey.call(source)}`;
+    source.customProgramCacheKey = () => `csdi-stylized-building-v9:${original.customProgramCacheKey.call(source)}`;
   }
   source.needsUpdate = true;
   return source;
@@ -155,6 +156,7 @@ uniform vec4 uCsdiHeightBounds;
 uniform float uCsdiHeightReady;
 uniform vec4 uCsdiMemorial[8];
 ${NEAR_GLSL_DECLARATIONS}
+uniform float uClean;
 float csdiHash(vec2 p) {
   p = fract(p * vec2(234.34, 435.345));
   p += dot(p, p + 34.23);
@@ -190,7 +192,7 @@ for (int i = 0; i < 8; i++) {
   csdiMemorial = max(csdiMemorial, site.w * (1.0 - smoothstep(site.z, site.z + 6.0, distance(vCsdiWorldPosition.xz, site.xy))));
 }
 // Beside the photo mesh the hand-built towers stand at the memorial sites: the CSDI ones are not drawn.
-if (uNear.w > 0.5 && csdiMemorial > 0.5) discard;
+if (uClean > 0.5 && csdiMemorial > 0.5) discard;
 ${nearKeepInsideGlsl('vCsdiWorldPosition')}
 vec3 csdiWallColor = mix(csdiPalette(csdiId), pow(vec3(0.84, 0.82, 0.77), vec3(2.2)), csdiMemorial) * csdiDetail;
 
@@ -223,7 +225,9 @@ csdiRoofColor *= 1.0 - clamp(csdiJoint, 0.0, 1.0) * 0.07 * csdiFade;
 csdiRoofColor *= 0.97 + csdiHash(floor(csdiP.xz / 1.5) + csdiCell) * 0.06 * csdiFade;
 // Street level: height above the terrain under this fragment.
 vec2 csdiHeightUv = (csdiP.xz - uCsdiHeightBounds.xy) / uCsdiHeightBounds.zw;
-float csdiAbove = mix(40.0, csdiP.y - uNearLift * uNear.w - texture2D(uCsdiHeight, csdiHeightUv).r, uCsdiHeightReady);
+float csdiAbove = mix(40.0, csdiP.y - texture2D(uCsdiHeight, csdiHeightUv).r, uCsdiHeightReady);
+// Round the estate the ground is laid flat: street level is measured from it.
+if (uNear.w > 0.5) csdiAbove = csdiP.y - uNearLift;
 float csdiStreet = csdiWall * step(-2.0, csdiAbove) * (1.0 - smoothstep(4.3, 4.5, csdiAbove));
 // About half of the estates/streets get Hong Kong shopfronts with signage bands.
 float csdiShops = step(0.45, csdiHash(csdiCell + 3.17)) * csdiStreet * (1.0 - csdiMemorial);

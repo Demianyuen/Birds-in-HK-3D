@@ -4,24 +4,25 @@ import { Mesh as ThreeMesh } from 'three';
 /**
  * Around Wang Fuk Court the aerial photo mesh is too soft to stand beside: its
  * buildings look melted from close by. Inside a circle round the estate the photo
- * mesh therefore keeps only its ground, and the official CSDI buildings (drawn in
- * the same clean style as the eight towers) stand on it, with the stylised ground
- * underneath to fill any gaps. Outside the circle nothing changes.
+ * mesh is therefore not drawn; the official CSDI buildings stand there instead, in
+ * the same clean style as the eight towers, on the stylised ground laid flat at
+ * the level of the estate grounds. Outside the circle nothing changes.
  *
- * This module holds what the shaders and the collision rays share: the circle,
- * how far the photo mesh's ground sits above the terrain model, and the outline of
- * the estate grounds (which belong to the hand-laid lawns and square).
+ * Measured on the live map: the land within about 260 m is level reclaimed ground
+ * (photo mesh 5–9 m), CSDI buildings share the photo mesh's height datum, and the
+ * terrain model under the stylised ground is far too rough there (−3 to +19 m) to
+ * use as it is: hence the flat ground.
+ *
+ * This module holds what the shaders and the collision rays share.
  */
 export const MAX_AREA_CORNERS = 48;
-/** Photo mesh higher than this above the ground is treated as a building or a tree crown. */
-export const PHOTO_GROUND_BAND = 1.2;
 /** The clean buildings reach a little past the circle, so they meet the photo mesh's cut edge. */
 export const STYLISED_OVERLAP = 35;
 
 export const nearUniforms = {
   /** x, z, radius, on (1) or off (0). */
   uNear: { value: new Vector4(0, 0, 0, 0) },
-  /** Height of the photo mesh's ground above the terrain model here (m). */
+  /** Height of the flat ground inside the circle (m). */
   uNearLift: { value: 0 },
   uArea: { value: Array.from({ length: MAX_AREA_CORNERS }, () => new Vector2()) },
   uAreaCount: { value: 0 },
@@ -45,28 +46,27 @@ bool nearInArea(vec2 p) {
   return true;
 }`;
 
-/** For the stylised ground and CSDI models: drawn only inside the circle and outside the estate grounds. */
+/** For the stylised ground and CSDI models: while the circle is on, drawn only inside it. */
 export function nearKeepInsideGlsl(world: string): string {
-  return `if (uNear.w > 0.5 && (distance(${world}.xz, uNear.xy) > uNear.z + ${STYLISED_OVERLAP.toFixed(1)} || nearInArea(${world}.xz))) discard;`;
+  return `if (uNear.w > 0.5 && distance(${world}.xz, uNear.xy) > uNear.z + ${STYLISED_OVERLAP.toFixed(1)}) discard;`;
 }
 
 let area: ReadonlyArray<{ x: number; z: number }> = [];
 let sites: ReadonlyArray<{ x: number; z: number; radius: number }> = [];
-let terrain: (x: number, z: number) => number = () => 0;
 
 export const nearCourt = {
   get on(): boolean {
     return nearUniforms.uNear.value.w > 0.5;
   },
 
-  enable(centre: { x: number; z: number }, radius: number, lift: number, terrainHeight: (x: number, z: number) => number): void {
+  enable(centre: { x: number; z: number }, radius: number, groundHeight: number): void {
     nearUniforms.uNear.value.set(centre.x, centre.z, radius, 1);
-    nearUniforms.uNearLift.value = lift;
-    terrain = terrainHeight;
+    nearUniforms.uNearLift.value = groundHeight;
   },
 
-  setLift(lift: number): void {
-    nearUniforms.uNearLift.value = lift;
+  /** Height of the flat ground inside the circle. */
+  get ground(): number {
+    return nearUniforms.uNearLift.value;
   },
 
   disable(): void {
@@ -101,16 +101,15 @@ export const nearCourt = {
     return Math.hypot(x - near.x, z - near.y) <= near.z + extra;
   },
 
-  /** True where the photo mesh is not drawn because it is a building or tree inside the circle. */
-  photoHidden(point: { x: number; y: number; z: number }): boolean {
-    if (!this.on || !this.insideCircle(point.x, point.z)) return false;
-    return point.y > terrain(point.x, point.z) + nearUniforms.uNearLift.value + PHOTO_GROUND_BAND;
+  /** True where the photo mesh is not drawn: inside the circle. */
+  photoHidden(point: { x: number; z: number }): boolean {
+    return this.on && this.insideCircle(point.x, point.z);
   },
 
   /** True where the stylised ground or a CSDI model is not drawn (while the circle is on). */
   stylisedHidden(point: { x: number; z: number }, building: boolean): boolean {
     if (!this.on) return false;
-    if (!this.insideCircle(point.x, point.z, STYLISED_OVERLAP) || this.inArea(point.x, point.z)) return true;
+    if (!this.insideCircle(point.x, point.z, STYLISED_OVERLAP)) return true;
     return building && sites.some(site => Math.hypot(point.x - site.x, point.z - site.z) < site.radius);
   },
 };

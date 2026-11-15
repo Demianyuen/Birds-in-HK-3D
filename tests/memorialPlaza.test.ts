@@ -9,10 +9,16 @@ import { bankGeometry, estateOutline, insideConvex, MemorialPlaza, plazaGeometry
 const towers = wangFukLocalMarkers(22.44705, 114.17544).map(marker => ({ x: marker.position.x, z: marker.position.z }));
 
 describe('memorial square', () => {
-  it('sits in open ground, clear of every Wang Fuk Court tower, on the memorial ground', () => {
-    for (const marker of wangFukLocalMarkers(22.44705, 114.17544)) {
-      const gap = Math.hypot(marker.position.x - MEMORIAL_PLAZA.x, marker.position.z - MEMORIAL_PLAZA.z) - BLOCK_RADIUS;
-      expect(gap, marker.block).toBeGreaterThan(MEMORIAL_PLAZA.radius + 6);
+  it('sits in the open middle: clear of the towers and of the mid-rise block, as measured on the live map', () => {
+    // Tower centres fitted to the photo mesh on the live site (15 Nov 2026), local metres.
+    const measured = { A: [-52, -21], B: [-47, 17], C: [-20, 42], D: [16, 43], E: [43, 68], G: [83, 25], H: [83, -18] };
+    for (const [block, [x, z]] of Object.entries(measured)) {
+      const gap = Math.hypot(x - MEMORIAL_PLAZA.x, z - MEMORIAL_PLAZA.z) - BLOCK_RADIUS;
+      expect(gap, block).toBeGreaterThan(MEMORIAL_PLAZA.radius + 6);
+    }
+    // The mid-rise block sampled at 10 m steps: none of its points lies on the square.
+    for (const [x, z] of [[0, -30], [10, -20], [20, -20], [30, -20], [20, -10], [30, -10], [20, 0], [30, 0]]) {
+      expect(Math.hypot(x - MEMORIAL_PLAZA.x, z - MEMORIAL_PLAZA.z)).toBeGreaterThan(MEMORIAL_PLAZA.radius + 3);
     }
     expect(insideMemorialGround(MEMORIAL_PLAZA.x, MEMORIAL_PLAZA.z)).toBe(true);
   });

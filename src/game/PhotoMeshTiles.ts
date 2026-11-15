@@ -1,6 +1,6 @@
 import { deviceTier } from './deviceTier';
-import { buildingUniforms } from './BuildingMaterial';
-import { NEAR_GLSL_DECLARATIONS, nearCourt, nearUniforms, PHOTO_GROUND_BAND } from './nearCourt';
+import { NEAR_GLSL_DECLARATIONS, nearCourt, nearUniforms } from './nearCourt';
+import { MASK_GLSL_DECLARATIONS, maskUniforms } from './BuildingMask';
 import { insideConvex as insideOutline } from '../wangFuk/MemorialPlaza';
 import type { TilesRenderer } from '3d-tiles-renderer/three';
 import { GLTFExtensionsPlugin, LoadRegionPlugin, ReorientationPlugin, SphereRegion } from '3d-tiles-renderer/plugins';
@@ -204,9 +204,7 @@ export class PhotoMeshTiles {
     material.onBeforeCompile = shader => {
       shader.uniforms.uCutouts = this.cutouts;
       shader.uniforms.uCutoutCount = this.cutoutCount;
-      Object.assign(shader.uniforms, nearUniforms, {
-        uCsdiHeight: buildingUniforms.uCsdiHeight, uCsdiHeightBounds: buildingUniforms.uCsdiHeightBounds,
-      });
+      Object.assign(shader.uniforms, nearUniforms, maskUniforms);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vPhotoWorld;')
         .replace('#include <project_vertex>', '#include <project_vertex>\nvPhotoWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -215,9 +213,8 @@ export class PhotoMeshTiles {
 varying vec3 vPhotoWorld;
 uniform vec4 uCutouts[${MAX_CUTOUTS}];
 uniform int uCutoutCount;
-uniform sampler2D uCsdiHeight;
-uniform vec4 uCsdiHeightBounds;
-${NEAR_GLSL_DECLARATIONS}`)
+${NEAR_GLSL_DECLARATIONS}
+${MASK_GLSL_DECLARATIONS}`)
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
 for (int i = 0; i < ${MAX_CUTOUTS}; i++) {
   if (i >= uCutoutCount) break;
@@ -225,13 +222,12 @@ for (int i = 0; i < ${MAX_CUTOUTS}; i++) {
   if (vPhotoWorld.y > c.w && distance(vPhotoWorld.xz, c.xy) < c.z) discard;
 }
 if (vPhotoWorld.y > uAreaMinY && nearInArea(vPhotoWorld.xz)) discard;
-// Round the estate only the photo mesh's ground is kept: its buildings are too soft up close.
-if (uNear.w > 0.5 && distance(vPhotoWorld.xz, uNear.xy) < uNear.z) {
-  float nearGround = texture2D(uCsdiHeight, (vPhotoWorld.xz - uCsdiHeightBounds.xy) / uCsdiHeightBounds.zw).r + uNearLift;
-  if (vPhotoWorld.y > nearGround + ${PHOTO_GROUND_BAND.toFixed(1)}) discard;
-}`);
+// Round the estate the photo mesh is too soft up close: the clean buildings and ground stand there instead.
+if (uNear.w > 0.5 && distance(vPhotoWorld.xz, uNear.xy) < uNear.z) discard;
+// Wherever a clean official building is showing, the melted photo one is left out.
+if (uClean > 0.5 && buildingMaskHides(vPhotoWorld)) discard;`);
     };
-    material.customProgramCacheKey = () => 'landsd-photo-cutouts-near-v1';
+    material.customProgramCacheKey = () => 'landsd-photo-cutouts-mask-v2';
   }
 
   public setVisible(visible: boolean): void {

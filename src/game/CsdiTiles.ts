@@ -12,6 +12,7 @@ import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { createInfrastructureMaterial, setBuildingPresentation, type BuildingPresentation } from './BuildingMaterial';
 import { geodeticToEcef } from './geo';
 import { nearCourt, skipHiddenHits } from './nearCourt';
+import { showInBuildingMask } from './BuildingMask';
 import { createVisibleTimeout } from './visibleTimeout';
 import type { FlightRegion } from './regions';
 
@@ -142,6 +143,7 @@ export class CsdiTiles {
           containsMesh = true;
           const building = this.layerName === 'building';
           skipHiddenHits(object, point => nearCourt.stylisedHidden(point, building));
+          if (building) showInBuildingMask(object);
           object.castShadow = true;
           object.receiveShadow = true;
           this.materialMetrics.meshes += 1;
@@ -246,6 +248,11 @@ export class CsdiTiles {
         }
       });
     }
+  }
+
+  /** Show or hide this layer without unloading it. */
+  public setVisible(visible: boolean): void {
+    if (this.tiles) this.tiles.group.visible = visible;
   }
 
   public get collisionRoot(): Object3D | null {
