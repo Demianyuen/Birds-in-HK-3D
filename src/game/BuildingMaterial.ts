@@ -116,7 +116,7 @@ export function setBuildingPresentation(source: Material, identity: string, mode
       Object.assign(shader.uniforms, buildingUniforms, nearUniforms, { uClean: maskUniforms.uClean });
       applyFacadeShader(shader);
     };
-    source.customProgramCacheKey = () => `csdi-stylized-building-v10:${original.customProgramCacheKey.call(source)}`;
+    source.customProgramCacheKey = () => `csdi-stylized-building-v11:${original.customProgramCacheKey.call(source)}`;
   }
   source.needsUpdate = true;
   return source;
@@ -163,16 +163,17 @@ float csdiHash(vec2 p) {
   return fract(p.x * p.y);
 }
 vec3 csdiPalette(float id) {
-  // Hong Kong residential pastels (sRGB); converted to linear below.
-  vec3 c = vec3(0.93, 0.88, 0.76);
-  c = mix(c, vec3(0.73, 0.86, 0.78), step(0.125, id));
-  c = mix(c, vec3(0.92, 0.74, 0.66), step(0.250, id));
-  c = mix(c, vec3(0.74, 0.83, 0.91), step(0.375, id));
-  c = mix(c, vec3(0.95, 0.88, 0.64), step(0.500, id));
-  c = mix(c, vec3(0.93, 0.93, 0.90), step(0.625, id));
-  c = mix(c, vec3(0.82, 0.78, 0.88), step(0.750, id));
-  c = mix(c, vec3(0.86, 0.62, 0.52), step(0.875, id));
-  return pow(c * 0.9, vec3(2.2));
+  // Weathered Hong Kong facades (sRGB): concrete, cream render, pale tile, muted brick. Close in tone,
+  // so a building that spans two colour cells does not turn into stripes.
+  vec3 c = vec3(0.80, 0.77, 0.70);
+  c = mix(c, vec3(0.74, 0.73, 0.70), step(0.125, id));
+  c = mix(c, vec3(0.83, 0.78, 0.69), step(0.250, id));
+  c = mix(c, vec3(0.72, 0.70, 0.66), step(0.375, id));
+  c = mix(c, vec3(0.79, 0.72, 0.66), step(0.500, id));
+  c = mix(c, vec3(0.84, 0.82, 0.77), step(0.625, id));
+  c = mix(c, vec3(0.70, 0.72, 0.72), step(0.750, id));
+  c = mix(c, vec3(0.76, 0.66, 0.58), step(0.875, id));
+  return pow(c * 0.92, vec3(2.2));
 }`,
     )
     .replace(
@@ -208,13 +209,26 @@ float csdiPaneY = smoothstep(0.30 - csdiW.y, 0.30 + csdiW.y, csdiF.y)
 float csdiWindow = csdiPaneX * csdiPaneY * csdiWall;
 float csdiSill = (smoothstep(0.19, 0.21 + csdiW.y, csdiF.y) - smoothstep(0.27, 0.29 + csdiW.y, csdiF.y)) * csdiWall;
 float csdiWinId = csdiHash(floor(csdiUv) + csdiCell * 17.0);
-// Pale, clear glass like the Wang Fuk Court towers.
-vec3 csdiGlass = mix(vec3(0.52, 0.58, 0.63), vec3(0.80, 0.85, 0.88), csdiWinId);
-csdiGlass *= mix(0.82, 1.0, smoothstep(0.30, 0.86, csdiF.y));
-csdiGlass = mix(csdiGlass, vec3(0.42, 0.36, 0.27), step(0.86, csdiWinId) * 0.65);
+// Glass set back in the wall: sky-grey panes, darker towards the top of each opening (the shade of
+// the lintel), some with a curtain drawn.
+vec3 csdiGlass = mix(vec3(0.20, 0.25, 0.30), vec3(0.42, 0.50, 0.57), csdiWinId);
+csdiGlass *= mix(1.0, 0.62, smoothstep(0.62, 0.86, csdiF.y));
+csdiGlass = mix(csdiGlass, vec3(0.62, 0.58, 0.50), step(0.80, csdiWinId) * 0.7);
+// A thin pale frame round each pane and a mullion down the middle.
+float csdiFrame = csdiPaneX * csdiPaneY * (1.0 - smoothstep(0.035, 0.035 + csdiW.x, min(csdiF.x - 0.18, 0.82 - csdiF.x)) * smoothstep(0.035, 0.035 + csdiW.y, min(csdiF.y - 0.30, 0.86 - csdiF.y)));
+csdiFrame = max(csdiFrame, csdiPaneX * csdiPaneY * (1.0 - smoothstep(0.012, 0.012 + csdiW.x, abs(csdiF.x - 0.5))));
+// The wall itself: a slab line at every floor, rain streaks under the sills, mottled render.
+float csdiSlabLine = (1.0 - smoothstep(0.0, 0.035 + csdiW.y, csdiF.y)) * csdiWall;
+float csdiStreak = csdiHash(vec2(floor(csdiAlong / 0.45), csdiCell.x + csdiCell.y * 3.0));
+float csdiStain = csdiPaneX * (1.0 - smoothstep(0.02, 0.30, csdiF.y)) * smoothstep(0.55, 1.0, csdiStreak);
+float csdiMottle = csdiHash(floor(vec2(csdiAlong, csdiP.y) / 1.3) + csdiCell);
 
-vec3 csdiColor = mix(csdiWallColor, csdiWallColor * 1.18, csdiSill * csdiFade);
+vec3 csdiColor = csdiWallColor * (0.96 + 0.07 * csdiMottle * csdiFade);
+csdiColor *= 1.0 - 0.16 * csdiStain * csdiFade * csdiWall;
+csdiColor = mix(csdiColor, csdiWallColor * 0.74, csdiSlabLine * csdiFade * 0.8);
+csdiColor = mix(csdiColor, csdiWallColor * 1.16, csdiSill * csdiFade);
 csdiColor = mix(csdiColor, csdiGlass, csdiWindow * csdiFade);
+csdiColor = mix(csdiColor, vec3(0.60, 0.60, 0.58), csdiFrame * csdiWall * csdiFade * 0.85);
 csdiColor = mix(csdiColor, mix(csdiWallColor, csdiGlass, 0.3), csdiWall * (1.0 - csdiFade) * 0.85);
 // Roofs: per-building concrete tone with soft, low-contrast slab joints (no checkerboard).
 vec3 csdiRoofColor = mix(vec3(0.34, 0.33, 0.31), vec3(0.46, 0.44, 0.40), csdiHash(csdiCell + 7.31));
