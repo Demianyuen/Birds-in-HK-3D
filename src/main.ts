@@ -124,6 +124,7 @@ let lastFrameTime = performance.now();
 visitorName.value = rememberedName();
 const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
+touchControls.attach(canvas);
 document.querySelector('.heritage-evidence')?.append(createHeritageDiagram());
 
 // Your bird: one of the birds seen every day in Hong Kong, with a turning preview and its call;
@@ -216,11 +217,15 @@ canvas.addEventListener('click', event => {
   // A click on a flower opens its words; with the pointer locked, the flower at the centre of the view.
   const locked = document.pointerLockElement === canvas;
   if (openWorld.pickFlowerAt(locked ? window.innerWidth / 2 : event.clientX, locked ? window.innerHeight / 2 : event.clientY)) return;
+  // A finger steers by dragging; only a mouse locks the pointer.
+  if (performance.now() - touchControls.lastTouchAt < 1_000) return;
   void canvas.requestPointerLock();
 });
 
 document.addEventListener('mousemove', event => {
   if (currentScreen !== 'game') return;
+  // After a touch the browser makes up mouse moves at the finger's place: they must not steer.
+  if (performance.now() - touchControls.lastTouchAt < 1_000) return;
   if (document.pointerLockElement === canvas) {
     // Locked pointer (after clicking the view): relative mouse look.
     game.setSteerAxes(0, 0);
@@ -237,7 +242,9 @@ document.addEventListener('mousemove', event => {
     cursorAxis(event.clientY, window.innerHeight),
   );
 });
-canvas.addEventListener('mouseleave', () => game.setSteerAxes(0, 0));
+canvas.addEventListener('mouseleave', () => {
+  if (performance.now() - touchControls.lastTouchAt >= 1_000) game.setSteerAxes(0, 0);
+});
 document.addEventListener('pointerlockchange', () => {
   game.setPointerLocked(document.pointerLockElement === canvas);
   game.setSteerAxes(0, 0);

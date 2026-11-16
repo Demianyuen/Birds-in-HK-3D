@@ -81,6 +81,9 @@ export class BirdController {
   private speed = 26;
   private verticalVelocity = 0;
   private flapQueued = false;
+  /** Touch screens: the bird keeps its height by itself (beating its wings now and then), so one thumb can fly it. */
+  private easyFlight = false;
+  private easyFlapIn = 1.2;
   private perched = false;
   /** Holding on to a building wall (climb with W/S, sidestep with A/D, Space to let go). */
   private clinging = false;
@@ -277,6 +280,10 @@ export class BirdController {
     this.speed = MathUtils.clamp(this.speed + direction * 3.5, this.flightProfile.minimumSpeed, this.flightProfile.maximumSpeed);
   }
 
+  public setEasyFlight(easy: boolean): void {
+    this.easyFlight = easy;
+  }
+
   public flap(): void {
     if (!this.enabled) return;
     this.flapQueued = true;
@@ -385,7 +392,16 @@ export class BirdController {
     }
     const minimumSpeed = flaring ? this.flightProfile.minimumSpeed * 0.6 : this.flightProfile.minimumSpeed;
     this.speed = MathUtils.clamp(this.speed, minimumSpeed, this.flightProfile.maximumSpeed);
-    const sink = flaring ? GLIDE_SINK * 0.8 : GLIDE_SINK;
+    let sink = flaring ? GLIDE_SINK * 0.8 : GLIDE_SINK;
+    if (this.easyFlight && !flaring) {
+      // Level cruise; a wingbeat every so often shows what holds the bird up.
+      sink = -0.15;
+      this.easyFlapIn -= deltaSeconds;
+      if (this.easyFlapIn <= 0) {
+        this.easyFlapIn = 1.5 + Math.random() * 0.9;
+        this.rig.triggerFlap();
+      }
+    }
     this.verticalVelocity += (sink - this.verticalVelocity) * (1 - Math.exp(-1.6 * deltaSeconds));
     if (this.flapQueued) {
       this.verticalVelocity += this.flightProfile.flapLift;

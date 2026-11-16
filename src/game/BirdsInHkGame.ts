@@ -222,6 +222,7 @@ export class BirdsInHkGame {
     this.mode = 'loading';
     this.bird.setEnabled(false);
     this.bird.setFlightRadius(region.flightRadiusMetres - 120);
+    this.bird.setEasyFlight(deviceTier().phone);
     this.camera.position.set(0, 185, 500);
     this.camera.lookAt(0, 72, 0);
     const terrainPromise = this.aerialGround.load(region, progress => {

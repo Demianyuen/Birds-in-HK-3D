@@ -424,21 +424,41 @@ h1 {
 .world-player-list { max-height: 112px; overflow-y: auto; display: flex; flex-wrap: wrap; gap: 4px; }
 .world-player-list:focus-visible { outline: 2px solid #cdf5b5; outline-offset: 2px; }
 .world-player-list button { max-width: 100%; overflow-wrap: anywhere; font-size: 11px; }
-.touch-flight { display: none; }
-/* Touch buttons only on touch-first devices (phones, tablets), never with a mouse. */
+.touch-flight, .touch-stick { display: none; }
+/* Touch controls only on touch-first devices (phones, tablets), never with a mouse. */
 @media (hover: none) and (pointer: coarse) {
   .touch-flight {
-    display: grid; grid-template-columns: repeat(3, 48px); gap: 6px;
-    position: absolute; right: 14px; bottom: 112px; z-index: 8;
+    display: grid; justify-items: end; gap: 10px;
+    position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 8;
+    pointer-events: none;
   }
+  .touch-flight[hidden] { display: none; }
   .touch-flight button {
-    min-height: 44px; border: 1px solid #91c2a9; border-radius: 8px;
-    color: #effaf3; background: rgb(12 42 35 / 92%); touch-action: none;
-    user-select: none; font-size: 20px;
+    pointer-events: auto; border: 1px solid rgb(190 226 208 / 70%); color: #effaf3;
+    background: rgb(12 42 35 / 62%); backdrop-filter: blur(6px);
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
   }
-  .touch-flight button:active { background: #426d56; }
+  .touch-flight button:active { background: rgb(66 109 86 / 90%); }
   .touch-flight button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-  .touch-flight .touch-flap { grid-column: 1 / -1; font-size: 14px; }
+  .touch-flap { width: 84px; height: 84px; border-radius: 50%; font-size: 17px; letter-spacing: 0.08em; }
+  .touch-speed { display: flex; gap: 8px; }
+  .touch-speed button { width: 46px; height: 46px; border-radius: 50%; font-size: 15px; }
+  .touch-hint {
+    position: fixed; left: 50%; bottom: calc(190px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    margin: 0; padding: 7px 14px; border-radius: 999px; white-space: nowrap;
+    color: #effaf3; background: rgb(8 24 22 / 58%); font-size: 13px; pointer-events: none;
+  }
+  .touch-hint[hidden] { display: none; }
+  .touch-stick {
+    display: block; position: fixed; z-index: 7; width: 144px; height: 144px; margin: -72px 0 0 -72px;
+    border: 1.5px solid rgb(255 255 255 / 34%); border-radius: 50%; background: rgb(255 255 255 / 6%);
+    pointer-events: none;
+  }
+  .touch-stick[hidden] { display: none; }
+  .touch-knob {
+    position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; border-radius: 50%;
+    background: rgb(255 255 255 / 42%); transform: translate(-50%, -50%);
+  }
 }
 @media (max-width: 700px) {
   .world-panel { right: 10px; top: auto; bottom: 52px; }
@@ -818,3 +838,23 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
 
 /* Music on/off sits beside the drifting-words switch. */
 .music-toggle { right: 104px; }
+
+/* Phone landing page: the title is the first thing seen (the page starts at the top and
+   scrolls, instead of being pushed up out of view by the form), and the words under it
+   are bright enough to read over the sky. */
+@media (max-width: 700px) {
+  .boot-screen {
+    justify-content: flex-start; gap: 22px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: calc(28px + env(safe-area-inset-top)) 20px calc(72px + env(safe-area-inset-bottom));
+    background: linear-gradient(rgb(5 15 20 / 62%), rgb(5 15 20 / 46%) 45%, rgb(5 15 20 / 70%));
+  }
+  .boot-screen h1 { font-size: clamp(44px, 14vw, 58px); line-height: 0.92; }
+  .boot-screen .tagline { margin-top: 16px; color: #f2f7f4; font-size: 17px; line-height: 1.5; }
+  .boot-screen .boot-note { color: #e2ebe7; font-size: 15px; line-height: 1.65; text-shadow: 0 1px 2px rgb(0 0 0 / 55%); }
+  .boot-screen .visitor-form { flex-shrink: 0; }
+  .boot-screen .brand-lockup { flex-shrink: 0; }
+}
+@media (max-width: 700px) {
+  /* The map credits belong with the map; on the phone landing page they covered the start button. */
+  #app[data-screen="boot"] .map-attribution { display: none; }
+}
