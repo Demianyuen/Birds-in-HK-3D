@@ -40,7 +40,7 @@ import { getBirdProfile, type BirdProfileId, type PlumageId } from './birdProfil
 import { evaluateWorldReadiness } from './worldReadiness';
 import { stylizedGroundUniforms } from './StylizedGround';
 import { DynamicResolution } from './DynamicResolution';
-import { deviceTier } from './deviceTier';
+import { LIGHTER_KEY, deviceTier } from './deviceTier';
 import { QualityLadder } from './QualityLadder';
 import { nearCourt } from './nearCourt';
 import { BuildingMask } from './BuildingMask';
@@ -124,7 +124,7 @@ export class BirdsInHkGame {
   private readonly nearWanted = new URLSearchParams(window.location.search).has('near');
   /** Clean official buildings in place of the photo mesh's melted ones (off with ?buildings=photo). */
   private readonly cleanWanted = new URLSearchParams(window.location.search).get('buildings') !== 'photo';
-  private readonly mask = new BuildingMask(deviceTier().phone ? 2_048 : 4_096);
+  private readonly mask = new BuildingMask(deviceTier().phone || deviceTier().maxPixelRatio <= 1 ? 2_048 : 4_096);
   private photoShown = false;
   private edgeFits = 0;
   private lastEdgeFit = 0;
@@ -153,6 +153,10 @@ export class BirdsInHkGame {
     this.camera.lookAt(0, 100, 0);
 
     this.renderer = new WebGLRenderer({ canvas, antialias: deviceTier().antialias, powerPreference: 'high-performance' });
+    canvas.addEventListener('webglcontextlost', event => {
+      event.preventDefault();
+      this.recoverFromLostGraphics();
+    });
     this.renderer.setPixelRatio(this.resolution.current);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = SRGBColorSpace;
@@ -448,6 +452,32 @@ export class BirdsInHkGame {
    * Aerial-photo view: hills, trees, roads and water as photographed, but every building
    * in view is the clean official one (the photo mesh's own buildings look melted).
    */
+  /**
+   * The graphics card dropped the page (too little memory, a sleeping laptop, a driver reset): without
+   * this the visitor is left with a blank screen. Come back once or twice with a lighter world; after
+   * that, say so plainly instead of reloading for ever.
+   */
+  private recoverFromLostGraphics(): void {
+    let tries = 0;
+    try {
+      tries = Number(window.sessionStorage.getItem(LIGHTER_KEY) ?? '0') + 1;
+      window.sessionStorage.setItem(LIGHTER_KEY, String(tries));
+    } catch {
+      tries = 3;
+    }
+    const note = document.createElement('div');
+    note.setAttribute('role', 'status');
+    note.style.cssText = 'position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:#0b141b;color:#e8efe9;font:16px/1.7 system-ui,sans-serif;text-align:center';
+    if (tries <= 2) {
+      note.textContent = '畫面中斷了，正在以較輕的畫質重新載入……';
+      document.body.append(note);
+      window.setTimeout(() => window.location.reload(), 1_400);
+    } else {
+      note.textContent = '這部裝置的顯示卡暫時負荷不了這個地方。可以關掉其他分頁或程式後重新整理，或改用另一部裝置。';
+      document.body.append(note);
+    }
+  }
+
   private applyWorldPresentation(): void {
     const photo = this.worldPresentation === 'photo' && this.photoMesh.ready;
     this.photoMesh.setVisible(this.worldPresentation === 'photo');

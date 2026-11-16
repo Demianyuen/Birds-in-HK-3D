@@ -34,7 +34,17 @@ export interface CourtMetrics {
 /** Fits worse than this (mean metres of error per ray) are not trusted and nothing is drawn. */
 const MAX_FIT_ERROR = 1.4;
 const MIN_HITS = 40;
-const MAX_ATTEMPTS = 8;
+/** Quick tries per tower while the photo mesh is still sharpening; after these a tower is retried slowly, never given up. */
+const QUICK_ATTEMPTS = 8;
+const SLOW_RETRY_SECONDS = 3;
+/** After this many tries a tower measured on the live map (16 Nov 2026) is stood where it was measured then. */
+const KNOWN_AFTER_ATTEMPTS = 14;
+const KNOWN_POSES: Readonly<Record<string, { x: number; z: number; yaw: number; baseY: number; height: number }>> = {
+  H: { x: 81, z: -16, yaw: (134.1 * Math.PI) / 180, baseY: 6.8, height: 87.3 },
+  G: { x: 82, z: 24, yaw: (47.3 * Math.PI) / 180, baseY: 6.8, height: 88 },
+  F: { x: 86, z: 64, yaw: (125.6 * Math.PI) / 180, baseY: 6.3, height: 87.2 },
+  E: { x: 43, z: 68, yaw: (48.9 * Math.PI) / 180, baseY: 7.3, height: 86.2 },
+};
 /** Only measure towers the bird is near enough for the photo mesh to be detailed there (m). */
 const MEASURE_RANGE = 700;
 const MEASURE_INTERVAL = 0.35;
@@ -55,6 +65,7 @@ export class CourtPlacer {
   private treesStarted = false;
   private groundOffset = 0;
   private totalAttempts = 0;
+  private readonly retryAt = new Map<string, number>();
 
   public constructor(
     private readonly court: WangFukCourt,
@@ -84,20 +95,39 @@ export class CourtPlacer {
     if (!ready || this.markers.length === 0 || this.court.count >= this.markers.length) return;
     if (this.clock - this.lastAttempt < MEASURE_INTERVAL) return;
     const next = this.markers
-      .filter(marker => !this.court.has(marker.block) && (this.attempts.get(marker.block) ?? 0) < MAX_ATTEMPTS)
-      .map(marker => ({ marker, distance: Math.hypot(marker.x - bird.x, marker.z - bird.z) }))
+      .filter(marker => !this.court.has(marker.block) && (this.retryAt.get(marker.block) ?? 0) <= this.clock)
+      .map(marker => ({ marker, tries: this.attempts.get(marker.block) ?? 0, distance: Math.hypot(marker.x - bird.x, marker.z - bird.z) }))
       .filter(item => item.distance < MEASURE_RANGE)
-      .sort((a, b) => a.distance - b.distance)[0];
+      // Fewest tries first, so one tower that is hard to measure never holds the others back.
+      .sort((a, b) => a.tries - b.tries || a.distance - b.distance)[0];
     if (!next) return;
     this.lastAttempt = this.clock;
-    this.attempts.set(next.marker.block, (this.attempts.get(next.marker.block) ?? 0) + 1);
+    const tries = next.tries + 1;
+    this.attempts.set(next.marker.block, tries);
+    if (tries >= QUICK_ATTEMPTS) this.retryAt.set(next.marker.block, this.clock + SLOW_RETRY_SECONDS);
     this.totalAttempts += 1;
-    this.tryBlock(next.marker);
+    this.tryBlock(next.marker, tries);
   }
 
-  private tryBlock(marker: CourtMarker): void {
+  /** A tower that could not be measured after many tries, stood where it was measured on the live map. */
+  private placeKnown(marker: CourtMarker): boolean {
+    const known = KNOWN_POSES[marker.block];
+    if (!known || Math.hypot(known.x - marker.x, known.z - marker.z) > 12) return false;
+    this.fits.set(marker.block, { x: known.x, z: known.z, yaw: known.yaw, error: 0, rays: 0, height: known.height });
+    this.court.place(marker.block, known, known.baseY, known.height);
+    if (!this.treesStarted) this.startTrees(known.baseY - this.world.terrain(marker.x, marker.z));
+    this.onPlaced();
+    return true;
+  }
+
+  private tryBlock(marker: CourtMarker, tries = 1): void {
+    if (this.measureBlock(marker, tries)) return;
+    if (tries >= KNOWN_AFTER_ATTEMPTS) this.placeKnown(marker);
+  }
+
+  private measureBlock(marker: CourtMarker, tries: number): boolean {
     const roots = this.world.roots();
-    if (roots.length === 0) return;
+    if (roots.length === 0) return false;
     const terrain = this.world.terrain(marker.x, marker.z);
     const midY = terrain + 45;
     const samples: ProfileSample[] = probeDirections(72).map(({ dx, dz }) => {
@@ -107,9 +137,11 @@ export class CourtPlacer {
       const hit = this.raycaster.intersectObjects(roots, true)[0];
       return { dx, dz, distance: hit ? hit.distance : null };
     });
-    if (samples.filter(sample => sample.distance !== null).length < MIN_HITS) return;
+    if (samples.filter(sample => sample.distance !== null).length < MIN_HITS) return false;
     const fit = fitBlock(marker.x, marker.z, samples);
-    if (!fit || fit.error > MAX_FIT_ERROR) return;
+    // The longer a tower resists, the looser the fit that is accepted (the photo mesh may never sharpen on a slow line).
+    const allowed = MAX_FIT_ERROR + Math.min(0.6, Math.max(0, tries - QUICK_ATTEMPTS) * 0.05);
+    if (!fit || fit.error > allowed) return false;
 
     // Ground beside the tower: the lowest of several downward rays (canopy and cars sit higher).
     const reach = BLOCK_RADIUS + 7;
@@ -130,6 +162,7 @@ export class CourtPlacer {
     this.court.place(marker.block, fit, baseY, body);
     if (!this.treesStarted) this.startTrees(baseY - terrain);
     this.onPlaced();
+    return true;
   }
 
   private castDown(x: number, z: number, fromY: number, roots: Object3D[]): number | null {

@@ -18,7 +18,17 @@ export interface DeviceTier {
   tileCacheBytes: number;
 }
 
-export function tierFor(touchFirst: boolean, devicePixelRatio: number): DeviceTier {
+/** Set for the rest of the visit when the graphics card gave up once: the world comes back lighter. */
+export const LIGHTER_KEY = 'birds-lighter-world';
+
+export function tierFor(touchFirst: boolean, devicePixelRatio: number, lighter = false): DeviceTier {
+  if (lighter && !touchFirst) {
+    // A computer whose graphics card ran out: phone-like load, still a computer's controls.
+    return {
+      phone: false, maxPixelRatio: 1, antialias: false, shadowMapSize: 1_024, bloom: false,
+      streetDensity: 0.6, photoMeshError: 18, csdiError: 22, tileCacheBytes: 180 * 1_048_576,
+    };
+  }
   if (touchFirst) {
     return {
       phone: true, maxPixelRatio: Math.min(devicePixelRatio || 1, 1.25), antialias: false, shadowMapSize: 1_024, bloom: false,
@@ -27,7 +37,7 @@ export function tierFor(touchFirst: boolean, devicePixelRatio: number): DeviceTi
   }
   return {
     phone: false, maxPixelRatio: Math.min(devicePixelRatio || 1, 1.5), antialias: true, shadowMapSize: 2_048, bloom: true,
-    streetDensity: 1, photoMeshError: 8, csdiError: 16, tileCacheBytes: 400 * 1_048_576,
+    streetDensity: 1, photoMeshError: 10, csdiError: 16, tileCacheBytes: 300 * 1_048_576,
   };
 }
 
@@ -41,6 +51,12 @@ export function deviceTier(): DeviceTier {
   } catch {
     // no matchMedia: treat as a computer
   }
-  cached = tierFor(touchFirst, window.devicePixelRatio || 1);
+  let lighter = false;
+  try {
+    lighter = window.sessionStorage.getItem(LIGHTER_KEY) !== null;
+  } catch {
+    // no storage: full quality
+  }
+  cached = tierFor(touchFirst, window.devicePixelRatio || 1, lighter);
   return cached;
 }

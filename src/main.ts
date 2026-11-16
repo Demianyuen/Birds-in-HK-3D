@@ -67,6 +67,16 @@ let groundEvidenceReported = false;
 let lastPerformanceReport = 0;
 let googleMapsOverlay: GoogleMapsCsdiOverlay | null = null;
 const googleMapsConfigured = configuredGoogleMaps() !== null;
+// No 3D in this browser (old device, graphics turned off, or the browser switched it off after a
+// crash): say so instead of leaving a dark page whose button does nothing.
+if (!document.createElement('canvas').getContext('webgl2')) {
+  const note = document.createElement('div');
+  note.setAttribute('role', 'alert');
+  note.style.cssText = 'position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:#0b141b;color:#e8efe9;font:16px/1.8 system-ui,sans-serif;text-align:center';
+  note.textContent = '這個瀏覽器暫時未能顯示立體畫面。請完全關閉瀏覽器後重新開啟，或改用另一個瀏覽器或裝置。';
+  document.body.append(note);
+  throw new Error('WebGL2 is not available');
+}
 const game = new BirdsInHkGame(canvas, updateTelemetry);
 const worldEndpoint = import.meta.env.VITE_WORLD_SERVER_URL
   || (import.meta.env.DEV ? 'ws://127.0.0.1:8787/world' : undefined);

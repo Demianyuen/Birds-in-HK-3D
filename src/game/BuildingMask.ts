@@ -113,7 +113,7 @@ export class BuildingMask {
   }
 
   /** Redraw the footprints (at most every `everyMs`). `buildings` must be showing in `scene`. */
-  public update(renderer: WebGLRenderer, scene: Scene, nowMs: number, everyMs = 400): void {
+  public update(renderer: WebGLRenderer, scene: Scene, nowMs: number, everyMs = 1_500): void {
     if (!this.on || nowMs - this.lastDraw < everyMs) return;
     this.lastDraw = nowMs;
     const background = scene.background;
