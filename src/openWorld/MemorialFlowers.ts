@@ -183,8 +183,8 @@ export class MemorialFlowers {
     });
     this.disposables.push(this.ringGeometry, this.ringMaterial);
 
-    const guideGeometry = new CylinderGeometry(4, 4, 260, 24, 1, true);
-    guideGeometry.translate(0, 130, 0);
+    const guideGeometry = new CylinderGeometry(2.6, 3.4, 320, 32, 1, true);
+    guideGeometry.translate(0, 160, 0);
     const guideMaterial = new MeshBasicMaterial({
       map: verticalFadeTexture(), color: '#fff2d2', transparent: true, opacity: 0,
       blending: AdditiveBlending, depthWrite: false, side: 2,
@@ -357,7 +357,9 @@ export class MemorialFlowers {
       const material = this.guide.material as MeshBasicMaterial;
       // Stays faintly lit once flowers are laid, a little brighter the more there are, so the place can be found from afar.
       const remembrance = this.flowers.size > 0 ? Math.min(0.08, 0.03 + Math.log10(this.flowers.size + 1) * 0.015) : 0;
-      const target = MathClamp((near - 60) / 260, 0, 1) * (this.guideWanted ? 0.2 : remembrance);
+      // From afar it guides; close by it stays as a soft column at the middle of the square, never a wall of light.
+      const far = MathClamp((near - 60) / 260, 0, 1) * (this.guideWanted ? 0.2 : remembrance);
+      const target = Math.max(far, 0.085);
       material.opacity += (target - material.opacity) * Math.min(1, deltaSeconds * 2);
       this.guide.visible = material.opacity > 0.005;
     }

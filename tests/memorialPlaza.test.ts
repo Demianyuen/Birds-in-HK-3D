@@ -1,7 +1,7 @@
 import { Mesh, MeshBasicMaterial, PlaneGeometry, Vector3, Vector4 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { insideCutouts } from '../src/game/PhotoMeshTiles';
-import { MEMORIAL_PLAZA, insideMemorialGround } from '../src/openWorld/contentRules';
+import { MEMORIAL_CLEARING, MEMORIAL_PLAZA, insideMemorialGround } from '../src/openWorld/contentRules';
 import { wangFukLocalMarkers } from '../src/game/wangFukLocations';
 import { BLOCK_RADIUS } from '../src/wangFuk/plan';
 import { bankGeometry, estateOutline, insideConvex, MemorialPlaza, plazaGeometry, plazaLevel } from '../src/wangFuk/MemorialPlaza';
@@ -9,16 +9,18 @@ import { bankGeometry, estateOutline, insideConvex, MemorialPlaza, plazaGeometry
 const towers = wangFukLocalMarkers(22.44705, 114.17544).map(marker => ({ x: marker.position.x, z: marker.position.z }));
 
 describe('memorial square', () => {
-  it('sits in the open middle: clear of the towers and of the mid-rise block, as measured on the live map', () => {
+  it('is the centre of the estate: clear of every tower, standing where the mid-rise block is no longer drawn', () => {
     // Tower centres fitted to the photo mesh on the live site (15 Nov 2026), local metres.
-    const measured = { A: [-52, -21], B: [-47, 17], C: [-20, 42], D: [16, 43], E: [43, 68], G: [83, 25], H: [83, -18] };
+    const measured = { A: [-52, -21], B: [-47, 17], C: [-20, 42], D: [16, 43], E: [43, 68], F: [86, 64], G: [83, 25], H: [83, -18] };
     for (const [block, [x, z]] of Object.entries(measured)) {
       const gap = Math.hypot(x - MEMORIAL_PLAZA.x, z - MEMORIAL_PLAZA.z) - BLOCK_RADIUS;
       expect(gap, block).toBeGreaterThan(MEMORIAL_PLAZA.radius + 6);
+      // The clearing must not take away any part of a tower.
+      expect(Math.hypot(x - MEMORIAL_CLEARING.x, z - MEMORIAL_CLEARING.z) - BLOCK_RADIUS, block).toBeGreaterThan(MEMORIAL_CLEARING.radius + 3);
     }
-    // The mid-rise block sampled at 10 m steps: none of its points lies on the square.
-    for (const [x, z] of [[0, -30], [10, -20], [20, -20], [30, -20], [20, -10], [30, -10], [20, 0], [30, 0]]) {
-      expect(Math.hypot(x - MEMORIAL_PLAZA.x, z - MEMORIAL_PLAZA.z)).toBeGreaterThan(MEMORIAL_PLAZA.radius + 3);
+    // The mid-rise block sampled at 10 m steps: all of it lies inside the clearing.
+    for (const [x, z] of [[0, -30], [10, -20], [20, -20], [30, -20], [40, -30], [20, -10], [30, -10], [0, 0], [20, 0], [40, 0]]) {
+      expect(Math.hypot(x - MEMORIAL_CLEARING.x, z - MEMORIAL_CLEARING.z)).toBeLessThan(MEMORIAL_CLEARING.radius);
     }
     expect(insideMemorialGround(MEMORIAL_PLAZA.x, MEMORIAL_PLAZA.z)).toBe(true);
   });

@@ -56,7 +56,7 @@ import { WangFukCourt } from '../wangFuk/WangFukCourt';
 import { inAnyWater, type StreetData } from './streetData';
 import { RemoteBirds } from '../multiplayer/RemoteBirds';
 import { createCarriedFlower, disposeCarriedFlower, MemorialFlowers } from '../openWorld/MemorialFlowers';
-import { MEMORIAL_APPROACH, MEMORIAL_PLAZA, type FlowerKind } from '../openWorld/contentRules';
+import { MEMORIAL_APPROACH, MEMORIAL_CLEARING, MEMORIAL_PLAZA, type FlowerKind } from '../openWorld/contentRules';
 import { MemorialPlaza } from '../wangFuk/MemorialPlaza';
 import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 
@@ -271,7 +271,7 @@ export class BirdsInHkGame {
     const towerSites = region.id === 'tai-po'
       ? wangFukLocalMarkers(region.latitude, region.longitude).map(marker => ({
         x: marker.position.x, z: marker.position.z, radius: 28,
-      }))
+      })).concat([{ ...MEMORIAL_CLEARING }])
       : [];
     setMemorialSites(towerSites);
     this.mask.setArea(region.flightRadiusMetres + 650);
@@ -354,7 +354,8 @@ export class BirdsInHkGame {
       : null;
     this.places.setPlaces([
       ...(courtCentre ? memorialPlaces(courtCentre, blocks) : []),
-      ...this.roads.placeNames,
+      // The block in the middle is not drawn, so neither is its name.
+      ...this.roads.placeNames.filter(place => Math.hypot(place.x - MEMORIAL_CLEARING.x, place.z - MEMORIAL_CLEARING.z) > MEMORIAL_CLEARING.radius),
     ]);
     onProgress({
       stage: 'navigation road data ready',

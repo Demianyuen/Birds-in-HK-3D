@@ -19,7 +19,7 @@ import { maskUniforms } from './BuildingMask';
  * facade shader knows how far each fragment is above the street. That drives
  * ground-floor shopfronts, signage bands and contact shading.
  */
-const MEMORIAL_SITE_LIMIT = 8;
+const MEMORIAL_SITE_LIMIT = 10;
 
 export const buildingUniforms = {
   uCsdiHeight: { value: createHeightTexture(new Float32Array([0]), 1) },
@@ -116,7 +116,7 @@ export function setBuildingPresentation(source: Material, identity: string, mode
       Object.assign(shader.uniforms, buildingUniforms, nearUniforms, { uClean: maskUniforms.uClean });
       applyFacadeShader(shader);
     };
-    source.customProgramCacheKey = () => `csdi-stylized-building-v9:${original.customProgramCacheKey.call(source)}`;
+    source.customProgramCacheKey = () => `csdi-stylized-building-v10:${original.customProgramCacheKey.call(source)}`;
   }
   source.needsUpdate = true;
   return source;
@@ -154,7 +154,7 @@ varying vec3 vCsdiWorldNormal;
 uniform sampler2D uCsdiHeight;
 uniform vec4 uCsdiHeightBounds;
 uniform float uCsdiHeightReady;
-uniform vec4 uCsdiMemorial[8];
+uniform vec4 uCsdiMemorial[${MEMORIAL_SITE_LIMIT}];
 ${NEAR_GLSL_DECLARATIONS}
 uniform float uClean;
 float csdiHash(vec2 p) {
@@ -187,7 +187,7 @@ float csdiId = csdiHash(csdiCell);
 float csdiTex = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
 float csdiDetail = clamp(0.86 + (sqrt(csdiTex) - 0.42) * 0.55, 0.68, 1.08);
 float csdiMemorial = 0.0;
-for (int i = 0; i < 8; i++) {
+for (int i = 0; i < ${MEMORIAL_SITE_LIMIT}; i++) {
   vec4 site = uCsdiMemorial[i];
   csdiMemorial = max(csdiMemorial, site.w * (1.0 - smoothstep(site.z, site.z + 6.0, distance(vCsdiWorldPosition.xz, site.xy))));
 }

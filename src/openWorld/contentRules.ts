@@ -30,12 +30,19 @@ export const MEMORIAL_CENTRE = Object.freeze({ x: 18, z: 22 });
 export const MEMORIAL_RADIUS = 190;
 
 /**
- * The small level square in the open middle of the estate, where birds are guided
- * to land and lay their flowers. Placed from measurements of the live map: it is
- * clear of all eight towers and of the mid-rise block that stands north-east of
- * the middle (about x 0–40, z −30–0), where an earlier position wrongly put it.
+ * The level square at the heart of the estate, where birds are guided to land and
+ * lay their flowers, with a column of light rising from its middle. It stands where
+ * the mid-rise block (church and school, about x 0–40, z −30–0 on the live map) is:
+ * in this memorial that block is not drawn, so the square is the centre the eight
+ * towers face. Clear of every tower by more than its own radius.
  */
-export const MEMORIAL_PLAZA = Object.freeze({ x: -10, z: 4, radius: 16 });
+export const MEMORIAL_PLAZA = Object.freeze({ x: 20, z: -8, radius: 20 });
+
+/** The mid-rise block in the middle of the estate is not drawn inside this circle; the square takes its place. */
+export const MEMORIAL_CLEARING = Object.freeze({ x: 20, z: -13, radius: 34 });
+
+/** Trees keep this far from the middle of the square, so the space between the towers stays open. */
+export const MEMORIAL_OPEN_RADIUS = 46;
 
 /**
  * Where every visit begins: high above Tolo Harbour, about 1.7 km east-north-east

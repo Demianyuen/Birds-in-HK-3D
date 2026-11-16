@@ -39,7 +39,8 @@ const BOAT_KINDS: readonly BoatKind[] = ['sampan', 'ferry', 'trawler'];
 const VEHICLE_COUNT = 240;
 const PEDESTRIAN_COUNT = 150;
 /** Steps per second ×π: how fast the legs swing. */
-const STEP_RATE = 7;
+/** Radians of walking cycle per second at 1.3 m/s: one cycle is two steps of about 0.7 m, so feet do not slide. */
+const STEP_RATE = 5.75;
 const BOAT_COUNT = 18;
 const VEHICLE_KEEP_RADIUS = 1_700;
 const VEHICLE_SPAWN_RADIUS = 1_300;
@@ -98,6 +99,8 @@ interface Mover {
   z: number;
   lift: number;
   liftTarget: number;
+  /** Facing, eased so a walker turns a corner instead of snapping round. NaN until first drawn. */
+  heading: number;
 }
 
 interface Boat {
@@ -326,11 +329,18 @@ export class StreetLife {
       }
       const level = this.levelAt ? this.levelAt(point.x, point.z) : null;
       if (level !== null) {
-        if (driving) continue; // keeps moving, but is not drawn while it crosses the grounds
-        point.y = level + 0.08;
+        // The estate grounds are laid out by hand; the mapped roads and footpaths there no longer
+        // match them, so nobody is drawn crossing lawns, hedges or the square.
+        continue;
       }
       const { dx, dz } = this.direction(mover);
-      const heading = Math.atan2(dx, dz);
+      let heading = Math.atan2(dx, dz);
+      if (!driving) {
+        if (Number.isNaN(mover.heading)) mover.heading = heading;
+        const turn = Math.atan2(Math.sin(heading - mover.heading), Math.cos(heading - mover.heading));
+        mover.heading += turn * Math.min(1, deltaSeconds * 6);
+        heading = mover.heading;
+      }
       this.quaternion.setFromAxisAngle(this.up, heading);
       // The soft shadow, flat on the ground under it.
       const [wide, long] = driving ? VEHICLE_FOOTPRINT[VEHICLE_KINDS[mover.kind]] : PERSON_FOOTPRINT;
@@ -408,6 +418,7 @@ export class StreetLife {
         mover.colour.set(pick(CLOTHES));
       }
       mover.phase = Math.random() * 10;
+      mover.heading = Number.NaN;
       mover.lift = 0;
       mover.liftTarget = 0;
       mover.active = true;
@@ -708,7 +719,7 @@ export class StreetLife {
 // ---- helpers ------------------------------------------------------------------------------
 
 function emptyMover(): Mover {
-  return { line: { points: [], laneClass: 'minor', oneway: 0, bridge: false }, seg: 0, t: 0, dir: 1, speed: 0, offset: 0, colour: new Color(), kind: 0, phase: 0, active: false, x: 0, z: 0, lift: 0, liftTarget: 0 };
+  return { line: { points: [], laneClass: 'minor', oneway: 0, bridge: false }, seg: 0, t: 0, dir: 1, speed: 0, offset: 0, colour: new Color(), kind: 0, phase: 0, active: false, x: 0, z: 0, lift: 0, liftTarget: 0, heading: Number.NaN };
 }
 
 function cellKey(x: number, z: number): string {
