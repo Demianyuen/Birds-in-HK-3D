@@ -45,6 +45,36 @@ quietToggle.addEventListener('click', async () => {
     quietToggle.disabled = false;
   }
 });
+const gatherPanel = document.getElementById('gather-panel') as HTMLElement;
+const gatherState = document.getElementById('gather-state') as HTMLElement;
+const gatherMove = document.getElementById('gather-move') as HTMLButtonElement;
+let gatherChecked = false;
+
+/** Flowers still lying where the square used to be: offered once, after signing in. */
+async function checkGather(): Promise<void> {
+  if (gatherChecked) return;
+  gatherChecked = true;
+  try {
+    const data = await call('POST', '', { action: 'gather-flowers', move: false });
+    const count = Number(data.count) || 0;
+    gatherPanel.hidden = count === 0;
+    gatherState.textContent = `有 ${count} 朵花留在廣場以前的位置。可以把它們搬到現在的廣場；留言和其他地方的花不變。`;
+  } catch {
+    gatherChecked = false;
+  }
+}
+
+gatherMove.addEventListener('click', async () => {
+  gatherMove.disabled = true;
+  try {
+    const data = await call('POST', '', { action: 'gather-flowers', move: true });
+    gatherState.textContent = `已把 ${Number(data.count) || 0} 朵花搬到現在的廣場。`;
+    gatherMove.hidden = true;
+  } catch (error) {
+    status.textContent = `未能搬花：${(error as Error).message}`;
+    gatherMove.disabled = false;
+  }
+});
 let view: View = 'pending';
 
 function token(): string {
@@ -85,6 +115,7 @@ async function load(): Promise<void> {
     form.hidden = true;
     tabs.hidden = false;
     if (typeof data.quiet === 'boolean') showQuiet(data.quiet);
+    void checkGather();
     items.replaceChildren();
     if (view === 'pending') renderPending((data.pending as PendingItem[]) ?? []);
     else if (view === 'shared') renderShared((data.shared as PendingItem[]) ?? []);

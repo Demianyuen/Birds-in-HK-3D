@@ -1,5 +1,6 @@
 import { readKind } from './_lib/flowerKinds.js';
 import { readQuiet, writeQuiet } from './_lib/quiet.js';
+import { flowersToGather, type FlowerSpot } from '../src/openWorld/gatherFlowers.js';
 import type { ServerResponse } from 'node:http';
 import {
   ApiError,
@@ -12,8 +13,8 @@ import {
   type ApiRequest,
 } from './_lib/openWorld.js';
 
-type Action = 'approve' | 'reject' | 'hide-flower' | 'hide-chat' | 'quiet';
-const ACTIONS: readonly Action[] = ['approve', 'reject', 'hide-flower', 'hide-chat', 'quiet'];
+type Action = 'approve' | 'reject' | 'hide-flower' | 'hide-chat' | 'quiet' | 'gather-flowers';
+const ACTIONS: readonly Action[] = ['approve', 'reject', 'hide-flower', 'hide-chat', 'quiet', 'gather-flowers'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -22,6 +23,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * GET  /api/moderate?view=chat    → the last day of live chat
  * GET  /api/moderate?view=shared  → words already shared (to take one back)
  * POST /api/moderate { action, id } → approve / reject a message, hide a flower or a chat line
+ * POST /api/moderate { action: 'gather-flowers', move } → flowers left on a former square: how many (move: false) or move them to the present one
  * POST /api/moderate { action: 'quiet', on } → the quiet switch (every quiet:on/off reply carries { quiet })
  */
 export default async function handler(req: ApiRequest, res: ServerResponse): Promise<void> {
@@ -64,6 +66,21 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
       if (typeof body.on !== 'boolean') throw new ApiError(422, 'Say on: true or false.');
       await writeQuiet(config, body.on);
       sendJson(res, 200, { ok: true, quiet: body.on });
+      return;
+    }
+    if (action === 'gather-flowers') {
+      const response = await rest(config, 'memorial_flowers?select=id,x,z&order=created_at.desc&limit=5000');
+      const moves = flowersToGather((await response.json()) as FlowerSpot[]);
+      if (body.move === true) {
+        for (let start = 0; start < moves.length; start += 20) {
+          await Promise.all(moves.slice(start, start + 20).map(move => rest(
+            config,
+            `memorial_flowers?id=eq.${move.id}`,
+            { method: 'PATCH', body: { x: move.x, z: move.z, y: move.y }, headers: { Prefer: 'return=minimal' } },
+          )));
+        }
+      }
+      sendJson(res, 200, { ok: true, count: moves.length, moved: body.move === true });
       return;
     }
     if (action === 'hide-chat') {
