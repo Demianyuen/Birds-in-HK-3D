@@ -624,9 +624,9 @@ export class OpenWorldPanel {
     if (this.visitor && line.speaker === this.visitor.id) return; // already showing over our own bird
     const birds = this.game.remoteBirdLabels.map(remote => ({ id: remote.id, name: remote.name, position: remote.position }));
     const speaker = findSpeaker(line, birds);
-    if (line.speaker === 'shared') {
+    if (line.speaker?.startsWith('shared-')) {
       // Words a moderator has just shared: the bird that said them has flown on, so they drift past.
-      this.danmaku.push({ id: `said-${line.id}`, name: line.name, body: line.body });
+      this.danmaku.push({ id: `said-${line.speaker}`, name: line.name, body: line.body });
       return;
     }
     if (speaker) this.bubbles.say(speaker, line.body, performance.now());

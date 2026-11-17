@@ -4,7 +4,7 @@ main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
 [vars]
-ALLOWED_ORIGINS = "https://birds-in-hk-3d.vercel.app,http://localhost:5173,http://127.0.0.1:5173"
+ALLOWED_ORIGINS = "https://birds-in-hk.org,https://www.birds-in-hk.org,https://birds-in-hk.vercel.app,https://birds-in-hk-3d.vercel.app,http://localhost:5173,http://127.0.0.1:5173"
 
 [[durable_objects.bindings]]
 name = "SKY_ROOM"

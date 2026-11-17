@@ -1,6 +1,7 @@
 import { readKind } from './_lib/flowerKinds.js';
 import { NOT_SHARED_SUFFIX, SWITCH_SENDERS, readQuiet, readSpeechLive, writeQuiet, writeSpeechLive } from './_lib/quiet.js';
 import { flowersToGather, type FlowerSpot } from '../src/openWorld/gatherFlowers.js';
+import { MEMORIAL_CENTRE } from '../src/openWorld/contentRules.js';
 import type { ServerResponse } from 'node:http';
 import {
   ApiError,
@@ -104,13 +105,12 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
       const found = await rest(config, `memorial_chat?select=name,body,x,z,sender_hash,hidden&id=eq.${body.id}&limit=1`);
       const [held] = (await found.json()) as Array<{ name: string; body: string; x: number; z: number; sender_hash: string; hidden: boolean }>;
       if (!held || !held.hidden || SWITCH_SENDERS.includes(held.sender_hash)) throw new ApiError(404, '找不到這句話。');
-      const fresh = { name: held.name, body: held.body, x: held.x, z: held.z, sender_hash: held.sender_hash.replace(NOT_SHARED_SUFFIX, '') };
-      try {
-        await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: { ...fresh, speaker: 'shared' } });
-      } catch {
-        await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: fresh });
-      }
+      const speaker = `shared-${body.id}`.slice(0, 40).padEnd(8, '0');
+      const fresh = { name: held.name, body: held.body, x: held.x, z: held.z, sender_hash: held.sender_hash.replace(NOT_SHARED_SUFFIX, ''), speaker };
+      await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: fresh });
       await rest(config, `memorial_chat?id=eq.${body.id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+      // With the sky relay, visitors do not listen to the table: send the shared line to every room of its zone.
+      await shareThroughRelay({ speaker, name: held.name, body: held.body, x: held.x, z: held.z });
       sendJson(res, 200, { ok: true });
       return;
     }
@@ -132,4 +132,27 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
   } catch (error) {
     sendError(res, error);
   }
+}
+
+const ZONE_CELL = 800;
+const COURT_ZONE_RADIUS = 420;
+const MAX_ROOMS = 12;
+
+/** Same zones as src/openWorld/zones.ts. */
+function zoneAt(x: number, z: number): string {
+  if (Math.hypot(x - MEMORIAL_CENTRE.x, z - MEMORIAL_CENTRE.z) <= COURT_ZONE_RADIUS) return 'court';
+  return `c${Math.floor(x / ZONE_CELL)}_${Math.floor(z / ZONE_CELL)}`;
+}
+
+async function shareThroughRelay(line: { speaker: string; name: string; body: string; x: number; z: number }): Promise<void> {
+  const base = process.env.SKY_RELAY_HTTP_URL;
+  const secret = process.env.SKY_RELAY_SECRET;
+  if (!base || !secret) return;
+  const zone = zoneAt(line.x, line.z);
+  await Promise.all(Array.from({ length: MAX_ROOMS }, (_, index) => fetch(`${base.replace(/\/+$/, '')}/say/${zone}/${index + 1}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-relay-secret': secret },
+    body: JSON.stringify(line),
+    signal: AbortSignal.timeout(2_000),
+  }).catch(() => undefined)));
 }
