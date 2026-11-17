@@ -858,3 +858,16 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
   /* The map credits belong with the map; on the phone landing page they covered the start button. */
   #app[data-screen="boot"] .map-attribution { display: none; }
 }
+
+/* Language switch: only on the way in (landing page and bird choice). */
+.lang-toggle {
+  position: fixed; z-index: 30;
+  top: calc(16px + env(safe-area-inset-top)); right: max(16px, env(safe-area-inset-right));
+  min-width: 48px; height: 40px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid rgb(232 239 233 / 55%); background: rgb(8 24 30 / 55%); color: #f2f7f4;
+  font: 600 15px/1 system-ui, sans-serif; letter-spacing: 0.04em; cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.lang-toggle:hover { background: rgb(24 52 58 / 75%); }
+.lang-toggle:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+#app:not([data-screen="boot"]):not([data-screen="menu"]) .lang-toggle { display: none; }

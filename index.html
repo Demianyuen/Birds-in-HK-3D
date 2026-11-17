@@ -19,65 +19,67 @@
   </head>
   <body>
     <main id="app" data-screen="boot">
-      <canvas id="game-canvas" aria-label="宏福苑紀念空間畫面"></canvas>
+      <canvas id="game-canvas" aria-label="宏福苑紀念空間畫面" data-i18n-aria="canvas"></canvas>
+
+      <button type="button" class="lang-toggle">EN</button>
 
       <section id="boot-screen" class="screen boot-screen" aria-labelledby="boot-title">
         <div class="brand-lockup">
-          <p class="place-name">大埔 · 宏福苑</p>
+          <p class="place-name" data-i18n="boot.place">大埔 · 宏福苑</p>
           <h1 id="boot-title">Birds in HK</h1>
-          <p class="tagline">化身一隻鴿子，帶著一朵花飛過大埔，輕輕放在宏福苑。</p>
+          <p class="tagline" data-i18n="boot.tagline">化身一隻鴿子，帶著一朵花飛過大埔，輕輕放在宏福苑。</p>
         </div>
         <form id="visitor-form" class="visitor-form" novalidate>
           <label class="visitor-field">
-            <span>你的名字</span>
-            <input id="visitor-name" name="name" maxlength="24" autocomplete="nickname" placeholder="例如：陳太、大埔街坊" />
+            <span data-i18n="boot.name">你的名字</span>
+            <input id="visitor-name" name="name" maxlength="24" autocomplete="nickname" placeholder="例如：陳太、大埔街坊" data-i18n-placeholder="boot.namePlaceholder" />
           </label>
           <fieldset class="flower-picker">
-            <legend>帶一朵花</legend>
-            <label><input type="radio" name="flower-kind" value="white-chrysanthemum" checked /><span>白菊</span></label>
-            <label><input type="radio" name="flower-kind" value="lily" /><span>白百合</span></label>
-            <label><input type="radio" name="flower-kind" value="white-rose" /><span>白玫瑰</span></label>
-            <label><input type="radio" name="flower-kind" value="white-carnation" /><span>白康乃馨</span></label>
-            <label><input type="radio" name="flower-kind" value="ginger-lily" /><span>姜花</span></label>
-            <label><input type="radio" name="flower-kind" value="white-lotus" /><span>白蓮</span></label>
-            <label><input type="radio" name="flower-kind" value="white-orchid" /><span>白蝴蝶蘭</span></label>
-            <label><input type="radio" name="flower-kind" value="yellow-chrysanthemum" /><span>黃菊</span></label>
-            <label><input type="radio" name="flower-kind" value="lantern" /><span>紙燈</span></label>
+            <legend data-i18n="boot.flower">帶一朵花</legend>
+            <label><input type="radio" name="flower-kind" value="white-chrysanthemum" checked /><span data-i18n="flower.white-chrysanthemum">白菊</span></label>
+            <label><input type="radio" name="flower-kind" value="lily" /><span data-i18n="flower.lily">白百合</span></label>
+            <label><input type="radio" name="flower-kind" value="white-rose" /><span data-i18n="flower.white-rose">白玫瑰</span></label>
+            <label><input type="radio" name="flower-kind" value="white-carnation" /><span data-i18n="flower.white-carnation">白康乃馨</span></label>
+            <label><input type="radio" name="flower-kind" value="ginger-lily" /><span data-i18n="flower.ginger-lily">姜花</span></label>
+            <label><input type="radio" name="flower-kind" value="white-lotus" /><span data-i18n="flower.white-lotus">白蓮</span></label>
+            <label><input type="radio" name="flower-kind" value="white-orchid" /><span data-i18n="flower.white-orchid">白蝴蝶蘭</span></label>
+            <label><input type="radio" name="flower-kind" value="yellow-chrysanthemum" /><span data-i18n="flower.yellow-chrysanthemum">黃菊</span></label>
+            <label><input type="radio" name="flower-kind" value="lantern" /><span data-i18n="flower.lantern">紙燈</span></label>
           </fieldset>
           <p id="visitor-error" class="visitor-error" role="alert" hidden></p>
           <div class="visitor-actions">
-            <button id="continue-button" class="primary-button" type="submit">帶著花出發</button>
+            <button id="continue-button" class="primary-button" type="submit" data-i18n="boot.continue">帶著花出發</button>
           </div>
-          <p class="visitor-privacy">名字和花會即時讓其他人看到。降落在宏福苑放花時，可以再寫下想說的話。</p>
+          <p class="visitor-privacy" data-i18n="boot.privacy">名字和花會即時讓其他人看到。降落在宏福苑放花時，可以再寫下想說的話。</p>
         </form>
-        <p class="source-credit">3D：地政總署 CSDI · 地面：OpenStreetMap · 高程：AWS Terrarium</p>
+        <p class="source-credit" data-i18n="boot.credit">3D：地政總署 CSDI · 地面：OpenStreetMap · 高程：AWS Terrarium</p>
       </section>
 
       <section id="menu-screen" class="screen menu-screen" aria-labelledby="menu-title" hidden>
         <div class="menu-content">
           <p class="place-name">OFFICIAL 3D HONG KONG</p>
-          <h2 id="menu-title">你的小鳥</h2>
+          <h2 id="menu-title" data-i18n="menu.title">你的小鳥</h2>
           <fieldset class="bird-picker" id="bird-picker">
-            <legend>選擇雀鳥</legend>
+            <legend data-i18n="menu.birds">選擇雀鳥</legend>
           </fieldset>
           <div class="bird-customise">
             <canvas id="bird-preview" class="bird-preview" aria-hidden="true"></canvas>
           </div>
           <fieldset class="region-picker">
-            <legend>飛行地區</legend>
+            <legend data-i18n="menu.region">飛行地區</legend>
             <label>
               <input type="radio" name="flight-region" value="tai-po" checked />
               <span>
-                <strong>大埔 · 宏福苑</strong>
-                <small>官方 CSDI 建築及基建 · LandsD 街道地圖</small>
+                <strong data-i18n="menu.regionName">大埔 · 宏福苑</strong>
+                <small data-i18n="menu.regionNote">官方 CSDI 建築及基建 · LandsD 街道地圖</small>
               </span>
             </label>
           </fieldset>
-          <button id="start-button" class="primary-button" type="button">開始飛行</button>
+          <button id="start-button" class="primary-button" type="button" data-i18n="menu.start">開始飛行</button>
           <button id="google-maps-button" class="secondary-button google-maps-button" type="button" hidden>Google Maps 3D</button>
         </div>
         <div class="menu-meta">
-          <span>飛行地區 01 · 大埔</span>
+          <span data-i18n="menu.meta">飛行地區 01 · 大埔</span>
           <span>LANDSD CSDI 3D</span>
         </div>
       </section>
@@ -85,7 +87,7 @@
       <section id="loading-screen" class="screen loading-screen" aria-live="polite" hidden>
         <div class="loading-content">
           <p class="place-name">PREPARING HONG KONG</p>
-          <h2>正在建立飛行世界</h2>
+          <h2 data-i18n="loading.title">正在建立飛行世界</h2>
           <div class="progress-track" aria-hidden="true">
             <div id="progress-fill" class="progress-fill"></div>
           </div>
@@ -93,18 +95,18 @@
             <span id="loading-stage">啟動 3D 引擎</span>
             <strong id="loading-progress">0%</strong>
           </div>
-          <p id="loading-detail">正在連接官方三維空間數據。</p>
+          <p id="loading-detail" data-i18n="loading.detail">正在連接官方三維空間數據。</p>
         </div>
       </section>
 
       <section id="error-screen" class="screen error-screen" role="alert" hidden>
         <div class="error-content">
           <p class="place-name">MAP CONNECTION</p>
-          <h2>未能載入官方地圖</h2>
-          <p id="error-message">官方三維地圖暫時未能載入。</p>
+          <h2 data-i18n="error.title">未能載入官方地圖</h2>
+          <p id="error-message" data-i18n="error.message">官方三維地圖暫時未能載入。</p>
           <div class="error-actions">
-            <button id="retry-button" class="primary-button" type="button">重新載入</button>
-            <button id="region-button" class="secondary-button" type="button">返回地區選擇</button>
+            <button id="retry-button" class="primary-button" type="button" data-i18n="error.retry">重新載入</button>
+            <button id="region-button" class="secondary-button" type="button" data-i18n="error.back">返回地區選擇</button>
           </div>
         </div>
       </section>

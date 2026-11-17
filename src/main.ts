@@ -9,6 +9,7 @@ import { transitionFlow, type ScreenName } from './app/flow';
 import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
 import { BirdsInHkGame, type GameTelemetry, type WorldPresentation } from './game/BirdsInHkGame';
 import type { FlightControl } from './game/BirdController';
+import { initLanguage, message } from './i18n';
 import { BIRD_ORDER, BIRD_PROFILES, getBirdProfile, type BirdProfileId } from './game/birdProfiles';
 import { BirdPreview } from './game/BirdPreview';
 import type { MapLoadProgress } from './game/CsdiTiles';
@@ -24,6 +25,7 @@ const canvas = requireElement<HTMLCanvasElement>('game-canvas');
 const visitorForm = requireElement<HTMLFormElement>('visitor-form');
 const visitorName = requireElement<HTMLInputElement>('visitor-name');
 const visitorError = requireElement<HTMLElement>('visitor-error');
+let lastVisitorError = '';
 const startButton = requireElement<HTMLButtonElement>('start-button');
 const retryButton = requireElement<HTMLButtonElement>('retry-button');
 const regionButton = requireElement<HTMLButtonElement>('region-button');
@@ -145,12 +147,17 @@ for (const id of BIRD_ORDER) {
   const text = document.createElement('span');
   const name = document.createElement('strong');
   name.textContent = profile.label;
+  name.dataset.i18n = `bird.${id}.label`;
   const note = document.createElement('small');
   note.textContent = profile.note;
+  note.dataset.i18n = `bird.${id}.note`;
   text.append(name, note);
   label.append(input, text);
   birdPicker.append(label);
 }
+initLanguage(() => {
+  if (!visitorError.hidden && lastVisitorError) visitorError.textContent = message(lastVisitorError);
+});
 const refreshPreview = (): void => birdPreview.set(selectedBirdProfileId(), 'natural');
 refreshPreview();
 document.addEventListener('change', event => {
@@ -200,7 +207,8 @@ visitorForm.addEventListener('submit', event => {
   const kind = new FormData(visitorForm).get('flower-kind');
   const result = readVisitorForm(visitorName.value, '', kind);
   visitorError.hidden = !result.error;
-  visitorError.textContent = result.error ?? '';
+  lastVisitorError = result.error ?? '';
+  visitorError.textContent = message(lastVisitorError);
   if (!result.visitor) return;
   visitor = result.visitor;
   showScreen(transitionFlow(currentScreen, 'continue'));
