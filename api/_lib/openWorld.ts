@@ -1,3 +1,4 @@
+import { checkSession } from './totp.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -109,15 +110,38 @@ export function sendError(res: ServerResponse, error: unknown): void {
   sendJson(res, 500, { error: 'Something went wrong. Please try again later.' });
 }
 
-/** Moderator check: Authorization: Bearer <MODERATOR_TOKEN>, compared in constant time. */
+/** Shortest moderator password accepted. */
+export const MODERATOR_MIN_LENGTH = 16;
+
+function bearer(req: IncomingMessage): string {
+  const header = req.headers.authorization ?? '';
+  return header.startsWith('Bearer ') ? header.slice(7) : '';
+}
+
+/** The password alone, compared in constant time (the first step of signing in). */
+export function checkModeratorPassword(req: IncomingMessage): string {
+  const expected = process.env.MODERATOR_TOKEN;
+  if (!expected || expected.length < MODERATOR_MIN_LENGTH) throw new ApiError(503, '管理密碼未設定，或少於 16 個字元。');
+  const a = Buffer.from(bearer(req));
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) throw new ApiError(401, '密碼不正確。');
+  return expected;
+}
+
+/**
+ * Moderator check. Without MODERATOR_TOTP_SECRET: Authorization: Bearer <MODERATOR_TOKEN>.
+ * With it (two-step sign-in): Authorization: Bearer <session>, issued after the password and an
+ * authenticator code; the password alone is no longer enough.
+ */
 export function requireModerator(req: IncomingMessage): void {
   const expected = process.env.MODERATOR_TOKEN;
-  if (!expected || expected.length < 16) throw new ApiError(503, '審核功能尚未設定。');
-  const header = req.headers.authorization ?? '';
-  const supplied = header.startsWith('Bearer ') ? header.slice(7) : '';
-  const a = Buffer.from(supplied);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) throw new ApiError(401, 'Not authorised.');
+  if (!expected || expected.length < MODERATOR_MIN_LENGTH) throw new ApiError(503, '管理密碼未設定，或少於 16 個字元。');
+  const secret = process.env.MODERATOR_TOTP_SECRET;
+  if (secret) {
+    if (!checkSession(bearer(req), expected, secret)) throw new ApiError(401, '請重新登入。');
+    return;
+  }
+  checkModeratorPassword(req);
 }
 
 export function isoSecondsAgo(seconds: number): string {

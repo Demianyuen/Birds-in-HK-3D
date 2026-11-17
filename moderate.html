@@ -13,8 +13,21 @@
       <p class="moderation-intro">分享後，留言會在花旁邊顯示給所有人。不合適的留言可以不分享；花本身仍然保留，除非你選擇隱藏。</p>
       <form id="token-form" class="token-form">
         <label>管理密碼 <input id="token" type="password" autocomplete="current-password" required /></label>
+        <label id="code-row" hidden>驗證碼 <input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="6 位數字" /></label>
         <button type="submit">登入</button>
       </form>
+      <details id="two-step-setup" class="two-step-setup">
+        <summary>設定雙重認證</summary>
+        <p class="meta">用手機的驗證程式（Google Authenticator、Microsoft Authenticator，或 iPhone「密碼」App）掃描下面的二維碼。這串密鑰只在你的瀏覽器產生，不會傳到任何地方。</p>
+        <button type="button" id="two-step-make">產生新的密鑰</button>
+        <div id="two-step-out" hidden>
+          <canvas id="two-step-qr" width="220" height="220" aria-label="雙重認證二維碼"></canvas>
+          <p class="meta">無法掃描時，在驗證程式選「輸入設定金鑰」，輸入：</p>
+          <p><code id="two-step-key"></code></p>
+          <label>掃描後，輸入程式顯示的 6 位數字確認 <input id="two-step-check" inputmode="numeric" maxlength="7" /></label>
+          <p id="two-step-result" class="meta" role="status"></p>
+        </div>
+      </details>
       <section id="quiet-panel" class="quiet-panel" hidden>
         <div>
           <strong>安靜模式</strong>

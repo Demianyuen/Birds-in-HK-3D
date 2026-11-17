@@ -26,8 +26,10 @@
   "dependencies": {
     "@mapbox/vector-tile": "^2.0.5",
     "@supabase/supabase-js": "^2.118.0",
+    "@types/qrcode": "^1.5.5",
     "3d-tiles-renderer": "0.4.28",
     "pbf": "^4.0.2",
+    "qrcode": "^1.5.4",
     "three": "0.170.0",
     "ws": "8.21.3"
   },

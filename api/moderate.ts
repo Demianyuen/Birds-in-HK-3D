@@ -2,9 +2,11 @@ import { readKind } from './_lib/flowerKinds.js';
 import { NOT_SHARED_SUFFIX, SWITCH_SENDERS, readQuiet, readSpeechLive, writeQuiet, writeSpeechLive } from './_lib/quiet.js';
 import { flowersToGather, type FlowerSpot } from '../src/openWorld/gatherFlowers.js';
 import { MEMORIAL_CENTRE } from '../src/openWorld/contentRules.js';
+import { checkTotp, issueSession } from './_lib/totp.js';
 import type { ServerResponse } from 'node:http';
 import {
   ApiError,
+  checkModeratorPassword,
   readJson,
   requireModerator,
   rest,
@@ -19,7 +21,8 @@ const ACTIONS: readonly Action[] = ['approve', 'reject', 'hide-flower', 'hide-ch
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Moderator-only (Authorization: Bearer MODERATOR_TOKEN).
+ * Sign in: POST /api/moderate?login=1 (Bearer password, body { code } when two-step sign-in is on) → { session }.
+ * Everything else is moderator-only (Authorization: Bearer password, or the session with two-step sign-in).
  * GET  /api/moderate?view=pending → messages waiting for approval
  * GET  /api/moderate?view=chat    → the last day of live chat
  * GET  /api/moderate?view=shared  → words already shared (to take one back)
@@ -30,6 +33,24 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export default async function handler(req: ApiRequest, res: ServerResponse): Promise<void> {
   try {
+    if (req.method === 'POST' && (req.url ?? '').includes('login=1')) {
+      // Signing in: the password, plus a code from the authenticator app when two-step sign-in is on.
+      const password = checkModeratorPassword(req);
+      const secret = process.env.MODERATOR_TOTP_SECRET;
+      if (!secret) {
+        sendJson(res, 200, { ok: true, twoStep: false });
+        return;
+      }
+      const body = await readJson(req);
+      const code = typeof body.code === 'string' ? body.code.replace(/\s/g, '') : '';
+      if (!code) {
+        sendJson(res, 200, { ok: true, twoStep: true, needCode: true });
+        return;
+      }
+      if (!checkTotp(secret, code)) throw new ApiError(401, '驗證碼不正確或已過期。');
+      sendJson(res, 200, { ok: true, twoStep: true, session: issueSession(password, secret) });
+      return;
+    }
     requireModerator(req);
     const config = supabaseConfig();
     if (req.method === 'GET') {

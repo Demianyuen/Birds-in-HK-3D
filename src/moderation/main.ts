@@ -1,9 +1,11 @@
 import './moderation.css';
+import QRCode from 'qrcode';
 import { FLOWER_LABELS } from '../openWorld/visitor';
 
 /**
- * Moderator page (/moderate.html). The token is kept for this browser tab only
- * (sessionStorage) and sent as a Bearer token to /api/moderate.
+ * Moderator page (/moderate.html). Signing in gives a token kept for this browser tab only
+ * (sessionStorage), sent as a Bearer token to /api/moderate: the password itself, or, with
+ * two-step sign-in, a session issued after the password and an authenticator code.
  */
 type View = 'pending' | 'shared' | 'chat';
 
@@ -108,11 +110,96 @@ function token(): string {
   try { return sessionStorage.getItem(TOKEN_KEY) ?? ''; } catch { return ''; }
 }
 
-form.addEventListener('submit', event => {
+const codeRow = document.getElementById('code-row') as HTMLElement;
+const codeInput = document.getElementById('code') as HTMLInputElement;
+
+function keep(value: string): void {
+  try { sessionStorage.setItem(TOKEN_KEY, value); } catch { /* storage blocked */ }
+}
+
+form.addEventListener('submit', async event => {
   event.preventDefault();
-  try { sessionStorage.setItem(TOKEN_KEY, tokenInput.value); } catch { /* storage blocked */ }
-  tokenInput.value = '';
-  void load();
+  const password = tokenInput.value;
+  const code = codeInput.value.replace(/\s/g, '');
+  status.textContent = '登入中…';
+  try {
+    const response = await fetch('/api/moderate?login=1', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${password}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(code ? { code } : {}),
+    });
+    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${response.status}`);
+    if (data.needCode) {
+      codeRow.hidden = false;
+      codeInput.required = true;
+      codeInput.focus();
+      status.textContent = '請輸入驗證程式顯示的 6 位數字。';
+      return;
+    }
+    keep(typeof data.session === 'string' ? data.session : password);
+    tokenInput.value = '';
+    codeInput.value = '';
+    codeRow.hidden = true;
+    (document.getElementById('two-step-setup') as HTMLElement).hidden = true;
+    void load();
+  } catch (error) {
+    status.textContent = `未能登入：${(error as Error).message}`;
+  }
+});
+
+// Setting up two-step sign-in: the secret is made here, in this browser, and only shown.
+const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+let setupSecret: Uint8Array | null = null;
+
+function toBase32(bytes: Uint8Array): string {
+  let bits = 0;
+  let value = 0;
+  let out = '';
+  for (const byte of bytes) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) out += BASE32[(value << (5 - bits)) & 31];
+  return out;
+}
+
+async function codeAt(secret: Uint8Array, unixSeconds: number): Promise<string> {
+  const counter = new DataView(new ArrayBuffer(8));
+  counter.setBigUint64(0, BigInt(Math.floor(unixSeconds / 30)));
+  const key = await crypto.subtle.importKey('raw', secret, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const hmac = new Uint8Array(await crypto.subtle.sign('HMAC', key, counter.buffer));
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const number = (new DataView(hmac.buffer).getUint32(offset) & 0x7fffffff) % 1_000_000;
+  return String(number).padStart(6, '0');
+}
+
+document.getElementById('two-step-make')?.addEventListener('click', async () => {
+  setupSecret = crypto.getRandomValues(new Uint8Array(20));
+  const key = toBase32(setupSecret);
+  const label = encodeURIComponent('Birds in HK:管理');
+  await QRCode.toCanvas(document.getElementById('two-step-qr') as HTMLCanvasElement,
+    `otpauth://totp/${label}?secret=${key}&issuer=${encodeURIComponent('Birds in HK')}&digits=6&period=30`, { width: 220, margin: 1 });
+  (document.getElementById('two-step-key') as HTMLElement).textContent = key.replace(/(.{4})/g, '$1 ').trim();
+  (document.getElementById('two-step-result') as HTMLElement).textContent = '';
+  (document.getElementById('two-step-out') as HTMLElement).hidden = false;
+});
+
+document.getElementById('two-step-check')?.addEventListener('input', async event => {
+  const input = event.target as HTMLInputElement;
+  const code = input.value.replace(/\s/g, '');
+  const result = document.getElementById('two-step-result') as HTMLElement;
+  if (!setupSecret || code.length !== 6) { result.textContent = ''; return; }
+  const now = Date.now() / 1_000;
+  const codes = await Promise.all([-1, 0, 1].map(step => codeAt(setupSecret!, now + step * 30)));
+  const key = toBase32(setupSecret);
+  result.textContent = codes.includes(code)
+    ? `正確。把這串密鑰（不含空格）加到 Vercel 的 MODERATOR_TOTP_SECRET，重新部署後生效：${key}`
+    : '不正確，請再看一次程式顯示的數字（每 30 秒會換一次）。';
 });
 
 tabs.addEventListener('click', event => {
@@ -149,8 +236,16 @@ async function load(): Promise<void> {
     else if (view === 'shared') renderShared((data.shared as PendingItem[]) ?? []);
     else renderChat((data.chat as ChatItem[]) ?? []);
   } catch (error) {
-    status.textContent = error instanceof Error && error.message === 'Not authorised.' ? '密碼不正確。' : `未能載入：${(error as Error).message}`;
+    const message = (error as Error).message;
+    // A wrong password or an expired two-step session: sign in again.
+    if (/重新登入|密碼不正確|Not authorised/.test(message)) {
+      try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked */ }
+      status.textContent = message.includes('重新登入') ? '登入已過期，請重新登入。' : '密碼不正確。';
+    } else {
+      status.textContent = `未能載入：${message}`;
+    }
     form.hidden = false;
+    tabs.hidden = true;
   }
 }
 

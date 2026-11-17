@@ -25,3 +25,8 @@ button:hover { border-color: var(--accent); }
   button { min-height: 44px; }
   .tabs { flex-wrap: wrap; }
 }
+.two-step-setup { margin: 8px 0 20px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+.two-step-setup summary { cursor: pointer; }
+.two-step-setup canvas { display: block; margin: 12px 0; background: #fff; border-radius: 4px; }
+.two-step-setup code { font-size: 15px; letter-spacing: 0.04em; word-break: break-all; }
+.two-step-setup input { margin-left: 6px; padding: 6px 8px; width: 9ch; }
