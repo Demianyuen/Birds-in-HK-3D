@@ -1,5 +1,5 @@
 import { readKind } from './_lib/flowerKinds.js';
-import { readQuiet, writeQuiet } from './_lib/quiet.js';
+import { NOT_SHARED_SUFFIX, SWITCH_SENDERS, readQuiet, readSpeechLive, writeQuiet, writeSpeechLive } from './_lib/quiet.js';
 import { flowersToGather, type FlowerSpot } from '../src/openWorld/gatherFlowers.js';
 import type { ServerResponse } from 'node:http';
 import {
@@ -13,8 +13,8 @@ import {
   type ApiRequest,
 } from './_lib/openWorld.js';
 
-type Action = 'approve' | 'reject' | 'hide-flower' | 'hide-chat' | 'quiet' | 'gather-flowers';
-const ACTIONS: readonly Action[] = ['approve', 'reject', 'hide-flower', 'hide-chat', 'quiet', 'gather-flowers'];
+type Action = 'approve' | 'reject' | 'hide-flower' | 'hide-chat' | 'share-chat' | 'speech' | 'quiet' | 'gather-flowers';
+const ACTIONS: readonly Action[] = ['approve', 'reject', 'hide-flower', 'hide-chat', 'share-chat', 'speech', 'quiet', 'gather-flowers'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -24,6 +24,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * GET  /api/moderate?view=shared  → words already shared (to take one back)
  * POST /api/moderate { action, id } → approve / reject a message, hide a flower or a chat line
  * POST /api/moderate { action: 'gather-flowers', move } → flowers left on a former square: how many (move: false) or move them to the present one
+ * POST /api/moderate { action: 'share-chat', id } → share a held line · { action: 'speech', live } → hold lines (default) or show them at once
  * POST /api/moderate { action: 'quiet', on } → the quiet switch (every quiet:on/off reply carries { quiet })
  */
 export default async function handler(req: ApiRequest, res: ServerResponse): Promise<void> {
@@ -33,9 +34,16 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
     if (req.method === 'GET') {
       const view = new URL(req.url ?? '/', 'http://vercel.local').searchParams.get('view');
       const quiet = await readQuiet(config);
+      const speechLive = await readSpeechLive(config);
       if (view === 'chat') {
-        const response = await rest(config, 'memorial_chat?select=id,created_at,name,body,hidden&sender_hash=neq.moderator-quiet-switch&order=created_at.desc&limit=200');
-        sendJson(res, 200, { chat: await response.json(), quiet });
+        const response = await rest(config, `memorial_chat?select=id,created_at,name,body,hidden,sender_hash&sender_hash=not.in.(${SWITCH_SENDERS.join(',')})&order=created_at.desc&limit=200`);
+        const rows = (await response.json()) as Array<{ hidden: boolean; sender_hash: string } & Record<string, unknown>>;
+        // waiting: held, not yet read · shown: others can see it · hidden: a moderator kept it back
+        const chat = rows.map(({ sender_hash: hash, ...row }) => ({
+          ...row,
+          state: !row.hidden ? 'shown' : hash.endsWith(NOT_SHARED_SUFFIX) ? 'hidden' : 'waiting',
+        }));
+        sendJson(res, 200, { chat, quiet, speechLive });
         return;
       }
       if (view === 'shared') {
@@ -44,7 +52,7 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
           'memorial_flowers?select=id,created_at,name,message,kind,sender_hash&message_status=eq.approved&hidden=eq.false&order=created_at.desc&limit=200',
         );
         const rows = (await response.json()) as Array<Record<string, unknown>>;
-        sendJson(res, 200, { shared: rows.map(({ sender_hash: _hash, ...row }) => ({ ...row, kind: readKind({ kind: row.kind, sender_hash: _hash }) })), quiet });
+        sendJson(res, 200, { shared: rows.map(({ sender_hash: _hash, ...row }) => ({ ...row, kind: readKind({ kind: row.kind, sender_hash: _hash }) })), quiet, speechLive });
         return;
       }
       const response = await rest(
@@ -52,7 +60,7 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
         'memorial_flowers?select=id,created_at,name,message,kind,hidden,sender_hash&message_status=eq.pending&order=created_at.asc&limit=200',
       );
       const rows = (await response.json()) as Array<Record<string, unknown>>;
-      sendJson(res, 200, { pending: rows.map(({ sender_hash: _hash, ...row }) => ({ ...row, kind: readKind({ kind: row.kind, sender_hash: _hash }) })), quiet });
+      sendJson(res, 200, { pending: rows.map(({ sender_hash: _hash, ...row }) => ({ ...row, kind: readKind({ kind: row.kind, sender_hash: _hash }) })), quiet, speechLive });
       return;
     }
     if (req.method !== 'POST') {
@@ -83,9 +91,36 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
       sendJson(res, 200, { ok: true, count: moves.length, moved: body.move === true });
       return;
     }
+    if (action === 'speech') {
+      if (typeof body.live !== 'boolean') throw new ApiError(422, 'Invalid speech switch.');
+      await writeSpeechLive(config, body.live);
+      sendJson(res, 200, { ok: true, speechLive: body.live });
+      return;
+    }
+    if (action === 'share-chat') {
+      // A held line becomes a fresh visible line, so visitors who are there now receive it;
+      // marked as shared words (no bird to show it over any more).
+      if (!Number.isSafeInteger(body.id)) throw new ApiError(422, 'Invalid chat id.');
+      const found = await rest(config, `memorial_chat?select=name,body,x,z,sender_hash,hidden&id=eq.${body.id}&limit=1`);
+      const [held] = (await found.json()) as Array<{ name: string; body: string; x: number; z: number; sender_hash: string; hidden: boolean }>;
+      if (!held || !held.hidden || SWITCH_SENDERS.includes(held.sender_hash)) throw new ApiError(404, '找不到這句話。');
+      const fresh = { name: held.name, body: held.body, x: held.x, z: held.z, sender_hash: held.sender_hash.replace(NOT_SHARED_SUFFIX, '') };
+      try {
+        await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: { ...fresh, speaker: 'shared' } });
+      } catch {
+        await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: fresh });
+      }
+      await rest(config, `memorial_chat?id=eq.${body.id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+      sendJson(res, 200, { ok: true });
+      return;
+    }
     if (action === 'hide-chat') {
       if (!Number.isSafeInteger(body.id)) throw new ApiError(422, 'Invalid chat id.');
-      await rest(config, `memorial_chat?id=eq.${body.id}`, { method: 'PATCH', body: { hidden: true }, headers: { Prefer: 'return=minimal' } });
+      const found = await rest(config, `memorial_chat?select=sender_hash&id=eq.${body.id}&limit=1`);
+      const [line] = (await found.json()) as Array<{ sender_hash: string }>;
+      if (!line || SWITCH_SENDERS.includes(line.sender_hash)) throw new ApiError(404, '找不到這句話。');
+      const kept = line.sender_hash.endsWith(NOT_SHARED_SUFFIX) ? line.sender_hash : `${line.sender_hash}${NOT_SHARED_SUFFIX}`;
+      await rest(config, `memorial_chat?id=eq.${body.id}`, { method: 'PATCH', body: { hidden: true, sender_hash: kept }, headers: { Prefer: 'return=minimal' } });
     } else {
       if (typeof body.id !== 'string' || !UUID.test(body.id)) throw new ApiError(422, 'Invalid flower id.');
       const patch = action === 'approve' ? { message_status: 'approved' }

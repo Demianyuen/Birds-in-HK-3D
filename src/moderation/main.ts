@@ -8,7 +8,7 @@ import { FLOWER_LABELS } from '../openWorld/visitor';
 type View = 'pending' | 'shared' | 'chat';
 
 interface PendingItem { id: string; created_at: string; name: string; message: string; kind: string }
-interface ChatItem { id: number; created_at: string; name: string; body: string; hidden: boolean }
+interface ChatItem { id: number; created_at: string; name: string; body: string; hidden: boolean; state?: 'waiting' | 'shown' | 'hidden' }
 
 const TOKEN_KEY = 'birds-in-hk:moderator-token';
 const KIND_LABELS = FLOWER_LABELS as Readonly<Record<string, string>>;
@@ -45,6 +45,33 @@ quietToggle.addEventListener('click', async () => {
     quietToggle.disabled = false;
   }
 });
+const speechPanel = document.getElementById('speech-panel') as HTMLElement;
+const speechState = document.getElementById('speech-state') as HTMLElement;
+const speechToggle = document.getElementById('speech-toggle') as HTMLButtonElement;
+let speechLive = false;
+
+function showSpeech(live: boolean): void {
+  speechLive = live;
+  speechPanel.hidden = false;
+  speechState.textContent = live
+    ? '即時顯示中：訪客打的字會立刻出現在小鳥頭上，其他人馬上看到。你只能事後隱藏。'
+    : '先看過才公開：訪客打的字只有自己看到，在「最近對話」按「分享」後，才會飄過其他人的畫面。';
+  speechToggle.textContent = live ? '改為先看過才公開' : '改為即時顯示';
+}
+
+speechToggle.addEventListener('click', async () => {
+  speechToggle.disabled = true;
+  try {
+    const data = await call('POST', '', { action: 'speech', live: !speechLive });
+    showSpeech(data.speechLive === true);
+    status.textContent = '已更新（約 15 秒內生效）。';
+  } catch (error) {
+    status.textContent = `未能更新：${(error as Error).message}`;
+  } finally {
+    speechToggle.disabled = false;
+  }
+});
+
 const gatherPanel = document.getElementById('gather-panel') as HTMLElement;
 const gatherState = document.getElementById('gather-state') as HTMLElement;
 const gatherMove = document.getElementById('gather-move') as HTMLButtonElement;
@@ -115,6 +142,7 @@ async function load(): Promise<void> {
     form.hidden = true;
     tabs.hidden = false;
     if (typeof data.quiet === 'boolean') showQuiet(data.quiet);
+    if (typeof data.speechLive === 'boolean') showSpeech(data.speechLive);
     void checkGather();
     items.replaceChildren();
     if (view === 'pending') renderPending((data.pending as PendingItem[]) ?? []);
@@ -165,18 +193,30 @@ function renderShared(list: PendingItem[]): void {
 }
 
 function renderChat(list: ChatItem[]): void {
-  status.textContent = list.length ? `最近一天有 ${list.length} 句對話。` : '最近一天沒有對話。';
-  for (const item of list) {
+  const waiting = list.filter(item => item.state === 'waiting').length;
+  status.textContent = !list.length ? '最近一天沒有對話。'
+    : waiting ? `最近一天有 ${list.length} 句對話，其中 ${waiting} 句等待分享。` : `最近一天有 ${list.length} 句對話。`;
+  // Lines waiting to be read come first.
+  const ordered = [...list].sort((a, b) => Number(b.state === 'waiting') - Number(a.state === 'waiting'));
+  for (const item of ordered) {
+    const state = item.state ?? (item.hidden ? 'hidden' : 'shown');
     const row = document.createElement('li');
-    if (item.hidden) row.classList.add('hidden-item');
+    if (state === 'hidden') row.classList.add('hidden-item');
     const meta = document.createElement('p');
     meta.className = 'meta';
-    meta.textContent = `${item.name} · ${new Date(item.created_at).toLocaleString('zh-HK')}${item.hidden ? ' · 已隱藏' : ''}`;
+    const label = state === 'waiting' ? ' · 等待分享' : state === 'hidden' ? ' · 不分享' : ' · 已公開';
+    meta.textContent = `${item.name} · ${new Date(item.created_at).toLocaleString('zh-HK')}${label}`;
     const text = document.createElement('p');
     text.className = 'message';
     text.textContent = item.body;
     row.append(meta, text);
-    if (!item.hidden) row.append(actionButton('隱藏', 'hide-chat', item.id, row));
+    if (state === 'waiting') {
+      const actions = document.createElement('div');
+      actions.append(actionButton('分享', 'share-chat', item.id, row), actionButton('不分享', 'hide-chat', item.id, row));
+      row.append(actions);
+    } else if (state === 'shown') {
+      row.append(actionButton('隱藏', 'hide-chat', item.id, row));
+    }
     items.append(row);
   }
 }

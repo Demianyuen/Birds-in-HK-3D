@@ -88,7 +88,8 @@ export async function placeFlower(input: {
   return { flower: { ...flower, name: input.name }, messageStatus: data.messageStatus === 'pending' || data.messageStatus === 'approved' ? data.messageStatus : 'none' };
 }
 
-export async function sendChat(input: { name: string; body: string; x: number; z: number; speaker?: string; zone?: string; room?: number }): Promise<void> {
+/** Resolves to whether the line is held for a moderator (others do not see it yet). */
+export async function sendChat(input: { name: string; body: string; x: number; z: number; speaker?: string; zone?: string; room?: number }): Promise<boolean> {
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -98,4 +99,6 @@ export async function sendChat(input: { name: string; body: string; x: number; z
     const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     throw new Error(typeof data.error === 'string' ? data.error : '訊息未能送出。');
   }
+  const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  return data.held === true;
 }

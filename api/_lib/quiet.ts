@@ -35,7 +35,43 @@ export async function writeQuiet(config: SupabaseConfig, quiet: boolean): Promis
   cached = { quiet, at: Date.now() };
 }
 
+/**
+ * Whether a line said over a bird reaches other visitors at once (live) or is held until a
+ * moderator shares it. Held is the default: nothing a visitor types is shown to others unread.
+ * Stored the same way as the quiet switch, under its own sender.
+ */
+export const SPEECH_SENDER = 'moderator-speech-switch';
+export const SWITCH_SENDERS: readonly string[] = [SWITCH_SENDER, SPEECH_SENDER];
+let cachedSpeech: { live: boolean; at: number } | null = null;
+
+export async function readSpeechLive(config: SupabaseConfig, now = Date.now()): Promise<boolean> {
+  if (cachedSpeech && now - cachedSpeech.at < CACHE_MS) return cachedSpeech.live;
+  try {
+    const response = await rest(config, `memorial_chat?select=body&sender_hash=eq.${SPEECH_SENDER}&order=id.desc&limit=1`);
+    const rows = (await response.json()) as Array<{ body?: string }>;
+    const live = rows[0]?.body === 'speech:live';
+    cachedSpeech = { live, at: now };
+    return live;
+  } catch {
+    // Cannot tell: hold, the careful choice.
+    return cachedSpeech?.live ?? false;
+  }
+}
+
+export async function writeSpeechLive(config: SupabaseConfig, live: boolean): Promise<void> {
+  await rest(config, 'memorial_chat', {
+    method: 'POST',
+    headers: { Prefer: 'return=minimal' },
+    body: { name: '管理員', body: live ? 'speech:live' : 'speech:hold', hidden: true, sender_hash: SPEECH_SENDER },
+  });
+  cachedSpeech = { live, at: Date.now() };
+}
+
+/** A held line a moderator chose not to share keeps its record under this ending. */
+export const NOT_SHARED_SUFFIX = ':not-shared';
+
 /** For tests. */
 export function forgetQuiet(): void {
   cached = null;
+  cachedSpeech = null;
 }

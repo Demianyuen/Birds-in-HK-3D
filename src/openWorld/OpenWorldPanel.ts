@@ -44,6 +44,7 @@ export class OpenWorldPanel {
   public readonly labels = new WorldLabels();
   /** Words left at the memorial, drifting across the view. */
   public readonly danmaku = new Danmaku();
+  private heldNoticeShown = false;
   private danmakuTimer = 0;
   private readonly prompt = document.createElement('div');
   private readonly placeButton = document.createElement('button');
@@ -305,10 +306,14 @@ export class OpenWorldPanel {
     if (!openWorldConfig()) return;
     const bird = this.game.birdPosition;
     try {
-      await sendChat({
+      const held = await sendChat({
         name: this.visitor?.name ?? '', body: checked.text, x: bird.x, z: bird.z, speaker: this.visitor?.id ?? '',
         zone: this.liveWorld?.homeZone || undefined, room: this.liveWorld?.currentRoom,
       });
+      if (held && !this.heldNoticeShown) {
+        this.heldNoticeShown = true;
+        this.showNotice('這句話現在只有你看到；管理員看過後，才會讓其他人看到。', 6_000);
+      }
     } catch (error) {
       this.bubbles.forget('self');
       this.showNotice(error instanceof Error ? error.message : '訊息未能送出。', 5_000);
@@ -619,6 +624,11 @@ export class OpenWorldPanel {
     if (this.visitor && line.speaker === this.visitor.id) return; // already showing over our own bird
     const birds = this.game.remoteBirdLabels.map(remote => ({ id: remote.id, name: remote.name, position: remote.position }));
     const speaker = findSpeaker(line, birds);
+    if (line.speaker === 'shared') {
+      // Words a moderator has just shared: the bird that said them has flown on, so they drift past.
+      this.danmaku.push({ id: `said-${line.id}`, name: line.name, body: line.body });
+      return;
+    }
     if (speaker) this.bubbles.say(speaker, line.body, performance.now());
   }
 }

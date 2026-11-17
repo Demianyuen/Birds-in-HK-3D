@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http';
 import { checkChat, checkName, rejectReasonText } from '../src/openWorld/contentRules.js';
-import { readQuiet } from './_lib/quiet.js';
+import { readQuiet, readSpeechLive } from './_lib/quiet.js';
 import {
   ApiError,
   countRows,
@@ -20,8 +20,9 @@ const WINDOW_SECONDS = 600;
 const WINDOW_LIMIT = 20;
 
 /**
- * POST /api/chat { name, body, x, z } → filtered, rate-limited, then stored (refused while the quiet switch is on);
- * other players receive it live through Supabase Realtime. Lines are kept for
+ * POST /api/chat { name, body, x, z } → filtered, rate-limited, then stored (refused while the quiet switch is on).
+ * Held by default: others see it only after a moderator shares it. With live speech switched on,
+ * other players receive it at once through Supabase Realtime. Lines are kept for
  * one day so moderators can review and hide them.
  */
 export default async function handler(req: ApiRequest, res: ServerResponse): Promise<void> {
@@ -50,7 +51,9 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
     if (burst > 0) throw new ApiError(429, '請慢慢說，稍等一會再發送。');
     if (windowCount >= WINDOW_LIMIT) throw new ApiError(429, '你已經說了很多，請休息一下再發送。');
 
-    const row = { name: name.text || '訪客', body: line.text, x, z, sender_hash: sender };
+    // Held (the default): stored unseen until a moderator shares it; the speaker still sees it over their own bird.
+    const live = await readSpeechLive(config);
+    const row = { name: name.text || '訪客', body: line.text, x, z, sender_hash: sender, hidden: !live };
     try {
       await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: speaker ? { ...row, speaker } : row });
     } catch (error) {
@@ -58,8 +61,8 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
       if (!speaker) throw error;
       await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: row });
     }
-    await tellTheSky(body.zone, body.room, { speaker, name: name.text || '訪客', body: line.text, x, z });
-    sendJson(res, 201, { ok: true });
+    if (live) await tellTheSky(body.zone, body.room, { speaker, name: name.text || '訪客', body: line.text, x, z });
+    sendJson(res, 201, { ok: true, held: !live });
   } catch (error) {
     sendError(res, error);
   }
