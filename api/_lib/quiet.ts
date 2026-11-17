@@ -37,7 +37,8 @@ export async function writeQuiet(config: SupabaseConfig, quiet: boolean): Promis
 
 /**
  * Whether a line said over a bird reaches other visitors at once (live) or is held until a
- * moderator shares it. Held is the default: nothing a visitor types is shown to others unread.
+ * moderator shares it. Live is the default (lines appear over the bird at once, as before);
+ * the moderator can switch to holding them, and the quiet switch still silences everything.
  * Stored the same way as the quiet switch, under its own sender.
  */
 export const SPEECH_SENDER = 'moderator-speech-switch';
@@ -49,12 +50,12 @@ export async function readSpeechLive(config: SupabaseConfig, now = Date.now()): 
   try {
     const response = await rest(config, `memorial_chat?select=body&sender_hash=eq.${SPEECH_SENDER}&order=id.desc&limit=1`);
     const rows = (await response.json()) as Array<{ body?: string }>;
-    const live = rows[0]?.body === 'speech:live';
+    const live = rows[0]?.body !== 'speech:hold';
     cachedSpeech = { live, at: now };
     return live;
   } catch {
-    // Cannot tell: hold, the careful choice.
-    return cachedSpeech?.live ?? false;
+    // Cannot tell: keep the last known setting, else the default (live).
+    return cachedSpeech?.live ?? true;
   }
 }
 
