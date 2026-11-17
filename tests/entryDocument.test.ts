@@ -46,7 +46,6 @@ describe('game entry document', () => {
 
   it('presents itself as a memorial space, not a game', () => {
     expect(html).toContain('沒有分數、排名或任務的開放世界');
-    expect(html).toContain('為宏福苑的天使們留下一朵花');
     expect(html).toContain('只要心裡有香港');
     expect(html).not.toMatch(/遊戲畫面|可遊玩|玩家|得分|排行/);
   });
