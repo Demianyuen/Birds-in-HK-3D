@@ -375,6 +375,15 @@ export class BirdsInHkGame {
       modelsLoaded: this.city.modelCount,
     });
     await this.waitForVisibleWorld();
+    if (region.id === 'tai-po') {
+      // Compile what the estate will need now, behind the loading screen, not as the bird arrives.
+      this.court.warmUp();
+      try {
+        this.renderer.compile(this.scene, this.camera);
+      } catch {
+        // warming up is only a convenience
+      }
+    }
   }
 
   public startFlight(): void {
@@ -782,7 +791,8 @@ export class BirdsInHkGame {
     if (this.plaza.level !== null) {
       // Keep the grass bank matched to the land around as the photo mesh gains detail.
       const now = performance.now();
-      if (this.edgeFits < 20 && now - this.lastEdgeFit > 4_000) {
+      // A few times only: each fit casts a ring of rays at the photo mesh.
+      if (this.edgeFits < 4 && now - this.lastEdgeFit > 6_000) {
         this.lastEdgeFit = now;
         this.edgeFits += 1;
         this.plaza.fitEdge(nearCourt.on ? [this.photoMesh.group, this.aerialGround.group] : [this.photoMesh.group]);

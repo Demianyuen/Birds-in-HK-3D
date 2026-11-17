@@ -37,8 +37,9 @@ const MIN_HITS = 40;
 /** Quick tries per tower while the photo mesh is still sharpening; after these a tower is retried slowly, never given up. */
 const QUICK_ATTEMPTS = 8;
 const SLOW_RETRY_SECONDS = 3;
-/** After this many tries a tower measured on the live map (16 Nov 2026) is stood where it was measured then. */
-const KNOWN_AFTER_ATTEMPTS = 14;
+/** Towers measured on the live map (16 Nov 2026) are stood where they were measured then, with no rays cast. */
+/** Measuring rays cast per frame: a whole tower at once (72 rays against the photo mesh) made the flight stutter on arrival. */
+const RAYS_PER_FRAME = 6;
 const KNOWN_POSES: Readonly<Record<string, { x: number; z: number; yaw: number; baseY: number; height: number }>> = {
   H: { x: 81, z: -16, yaw: (134.1 * Math.PI) / 180, baseY: 6.8, height: 87.3 },
   G: { x: 82, z: 24, yaw: (47.3 * Math.PI) / 180, baseY: 6.8, height: 88 },
@@ -66,6 +67,8 @@ export class CourtPlacer {
   private groundOffset = 0;
   private totalAttempts = 0;
   private readonly retryAt = new Map<string, number>();
+  /** The tower being measured, a few rays each frame. */
+  private job: { marker: CourtMarker; tries: number; terrain: number; directions: Array<{ dx: number; dz: number }>; samples: ProfileSample[] } | null = null;
 
   public constructor(
     private readonly court: WangFukCourt,
@@ -92,7 +95,14 @@ export class CourtPlacer {
     if (this.treesStarted) {
       this.grove.update((x, z) => this.world.surface?.(x, z) ?? this.world.terrain(x, z) + this.groundOffset);
     }
-    if (!ready || this.markers.length === 0 || this.court.count >= this.markers.length) return;
+    if (!ready || this.markers.length === 0 || this.court.count >= this.markers.length) {
+      this.job = null;
+      return;
+    }
+    if (this.job) {
+      this.continueJob();
+      return;
+    }
     if (this.clock - this.lastAttempt < MEASURE_INTERVAL) return;
     const next = this.markers
       .filter(marker => !this.court.has(marker.block) && (this.retryAt.get(marker.block) ?? 0) <= this.clock)
@@ -106,7 +116,33 @@ export class CourtPlacer {
     this.attempts.set(next.marker.block, tries);
     if (tries >= QUICK_ATTEMPTS) this.retryAt.set(next.marker.block, this.clock + SLOW_RETRY_SECONDS);
     this.totalAttempts += 1;
-    this.tryBlock(next.marker, tries);
+    // A tower already measured on the live map needs no rays at all.
+    if (this.placeKnown(next.marker)) return;
+    this.job = { marker: next.marker, tries, terrain: this.world.terrain(next.marker.x, next.marker.z), directions: probeDirections(72), samples: [] };
+  }
+
+  /** A few more rays of the tower in hand; when all are in, fit it and stand the block. */
+  private continueJob(): void {
+    const job = this.job;
+    if (!job) return;
+    const roots = this.world.roots();
+    if (roots.length === 0 || this.court.has(job.marker.block)) {
+      this.job = null;
+      return;
+    }
+    const origin = new Vector3(job.marker.x, job.terrain + 45, job.marker.z);
+    for (let cast = 0; cast < RAYS_PER_FRAME && job.samples.length < job.directions.length; cast += 1) {
+      const { dx, dz } = job.directions[job.samples.length];
+      this.raycaster.set(origin, new Vector3(dx, 0, dz));
+      this.raycaster.near = 0.5;
+      this.raycaster.far = 24;
+      const hit = this.raycaster.intersectObjects(roots, true)[0];
+      job.samples.push({ dx, dz, distance: hit ? hit.distance : null });
+    }
+    if (job.samples.length < job.directions.length) return;
+    this.job = null;
+    this.lastAttempt = this.clock;
+    this.finishBlock(job.marker, job.tries, job.terrain, job.samples, roots);
   }
 
   /** A tower that could not be measured after many tries, stood where it was measured on the live map. */
@@ -120,23 +156,7 @@ export class CourtPlacer {
     return true;
   }
 
-  private tryBlock(marker: CourtMarker, tries = 1): void {
-    if (this.measureBlock(marker, tries)) return;
-    if (tries >= KNOWN_AFTER_ATTEMPTS) this.placeKnown(marker);
-  }
-
-  private measureBlock(marker: CourtMarker, tries: number): boolean {
-    const roots = this.world.roots();
-    if (roots.length === 0) return false;
-    const terrain = this.world.terrain(marker.x, marker.z);
-    const midY = terrain + 45;
-    const samples: ProfileSample[] = probeDirections(72).map(({ dx, dz }) => {
-      this.raycaster.set(new Vector3(marker.x, midY, marker.z), new Vector3(dx, 0, dz));
-      this.raycaster.near = 0.5;
-      this.raycaster.far = 24;
-      const hit = this.raycaster.intersectObjects(roots, true)[0];
-      return { dx, dz, distance: hit ? hit.distance : null };
-    });
+  private finishBlock(marker: CourtMarker, tries: number, terrain: number, samples: ProfileSample[], roots: Object3D[]): boolean {
     if (samples.filter(sample => sample.distance !== null).length < MIN_HITS) return false;
     const fit = fitBlock(marker.x, marker.z, samples);
     // The longer a tower resists, the looser the fit that is accepted (the photo mesh may never sharpen on a slow line).

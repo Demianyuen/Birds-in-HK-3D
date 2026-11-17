@@ -365,16 +365,21 @@ export class WangFukCourt {
   }
 
   /** Place (or move) a block. `height` is the walled body, excluding the roof machine room. */
+  private warm: Group | null = null;
+
   public place(block: string, pose: BlockPose, baseY: number, height: number): PlacedBlock {
     this.remove(block);
-    const key = Math.round(height * 10);
+    // Built to the nearest metre: towers of almost the same height share one set of geometry
+    // instead of each costing a fresh build as it appears.
+    const built = Math.round(height);
+    const key = built;
     let geometry = this.geometries.get(key);
     if (!geometry) {
-      geometry = { body: buildBlockGeometry(height), caps: buildRoofCaps(height), ledges: buildLedgeGeometry(height) };
+      geometry = { body: buildBlockGeometry(built), caps: buildRoofCaps(built), ledges: buildLedgeGeometry(built) };
       this.geometries.set(key, geometry);
     }
     const seed = [...block].reduce((sum, char) => sum + char.charCodeAt(0), 0) * 0.137;
-    const material = createFacadeMaterial({ seed, floorHeight: height / STOREYS, sunDirection: this.sunDirection });
+    const material = createFacadeMaterial({ seed, floorHeight: built / STOREYS, sunDirection: this.sunDirection });
     const mesh = new Mesh(geometry.body, material);
     const caps = new Mesh(geometry.caps, this.capMaterial);
     const ledges = new Mesh(geometry.ledges, this.ledgeMaterial);
@@ -391,6 +396,32 @@ export class WangFukCourt {
     const placed = { block, pose, baseY, height, mesh, caps, ledges };
     this.placed.set(block, placed);
     return placed;
+  }
+
+  /**
+   * Before the flight starts: build the geometry the towers will use and keep one block far out of
+   * sight, so its shader is compiled during loading instead of in a hitch when the first tower appears.
+   * It is not a placed block (not counted, not cut out of the map, not landed on: collision rays never reach it).
+   */
+  public warmUp(): void {
+    if (this.warm) return;
+    for (const height of [86, 87, 88]) {
+      if (!this.geometries.has(height)) {
+        this.geometries.set(height, { body: buildBlockGeometry(height), caps: buildRoofCaps(height), ledges: buildLedgeGeometry(height) });
+      }
+    }
+    const geometry = this.geometries.get(87)!;
+    const material = createFacadeMaterial({ seed: 0, floorHeight: 87 / STOREYS, sunDirection: this.sunDirection });
+    this.warm = new Group();
+    for (const [part, partMaterial] of [[geometry.body, material], [geometry.caps, this.capMaterial], [geometry.ledges, this.ledgeMaterial]] as const) {
+      const mesh = new Mesh(part, partMaterial);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.warm.add(mesh);
+    }
+    this.warm.position.set(0, -4_000, 0);
+    this.warm.updateMatrixWorld(true);
+    this.group.add(this.warm);
   }
 
   public remove(block: string): void {
