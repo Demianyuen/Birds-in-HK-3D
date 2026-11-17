@@ -119,7 +119,7 @@ function keep(value: string): void {
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
-  const password = tokenInput.value;
+  const password = tokenInput.value.trim();
   const code = codeInput.value.replace(/\s/g, '');
   status.textContent = '登入中…';
   try {

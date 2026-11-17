@@ -12,7 +12,7 @@
       <h1>留言管理</h1>
       <p class="moderation-intro">分享後，留言會在花旁邊顯示給所有人。不合適的留言可以不分享；花本身仍然保留，除非你選擇隱藏。</p>
       <form id="token-form" class="token-form">
-        <label>管理密碼 <input id="token" type="password" autocomplete="current-password" required /></label>
+        <label>管理密碼 <input id="token" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required /></label>
         <label id="code-row" hidden>驗證碼 <input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="6 位數字" /></label>
         <button type="submit">登入</button>
       </form>

@@ -120,9 +120,10 @@ function bearer(req: IncomingMessage): string {
 
 /** The password alone, compared in constant time (the first step of signing in). */
 export function checkModeratorPassword(req: IncomingMessage): string {
-  const expected = process.env.MODERATOR_TOKEN;
+  // Spaces or a line break picked up when the password was pasted (into Vercel or the page) do not count.
+  const expected = process.env.MODERATOR_TOKEN?.trim();
   if (!expected || expected.length < MODERATOR_MIN_LENGTH) throw new ApiError(503, '管理密碼未設定，或少於 16 個字元。');
-  const a = Buffer.from(bearer(req));
+  const a = Buffer.from(bearer(req).trim());
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) throw new ApiError(401, '密碼不正確。');
   return expected;
@@ -134,9 +135,9 @@ export function checkModeratorPassword(req: IncomingMessage): string {
  * authenticator code; the password alone is no longer enough.
  */
 export function requireModerator(req: IncomingMessage): void {
-  const expected = process.env.MODERATOR_TOKEN;
+  const expected = process.env.MODERATOR_TOKEN?.trim();
   if (!expected || expected.length < MODERATOR_MIN_LENGTH) throw new ApiError(503, '管理密碼未設定，或少於 16 個字元。');
-  const secret = process.env.MODERATOR_TOTP_SECRET;
+  const secret = process.env.MODERATOR_TOTP_SECRET?.trim();
   if (secret) {
     if (!checkSession(bearer(req), expected, secret)) throw new ApiError(401, '請重新登入。');
     return;

@@ -36,7 +36,7 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
     if (req.method === 'POST' && (req.url ?? '').includes('login=1')) {
       // Signing in: the password, plus a code from the authenticator app when two-step sign-in is on.
       const password = checkModeratorPassword(req);
-      const secret = process.env.MODERATOR_TOTP_SECRET;
+      const secret = process.env.MODERATOR_TOTP_SECRET?.trim();
       if (!secret) {
         sendJson(res, 200, { ok: true, twoStep: false });
         return;
