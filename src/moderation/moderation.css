@@ -30,3 +30,6 @@ button:hover { border-color: var(--accent); }
 .two-step-setup canvas { display: block; margin: 12px 0; background: #fff; border-radius: 4px; }
 .two-step-setup code { font-size: 15px; letter-spacing: 0.04em; word-break: break-all; }
 .two-step-setup input { margin-left: 6px; padding: 6px 8px; width: 9ch; }
+
+/* Panels and tabs stay out of sight until signed in. */
+.moderation [hidden] { display: none !important; }
