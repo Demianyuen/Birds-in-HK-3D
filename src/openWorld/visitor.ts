@@ -33,7 +33,6 @@ export function readVisitorForm(name: unknown, message: unknown, kind: unknown):
   const checkedMessage = checkMessage(message);
   if (!checkedMessage.ok) return { error: `留言：${rejectReasonText(checkedMessage.reason)}` };
   if (!isFlowerKind(kind)) return { error: '請選擇一種花。' };
-  remember(NAME_KEY, checkedName.text);
   return {
     visitor: {
       id: visitorId(),
@@ -45,8 +44,12 @@ export function readVisitorForm(name: unknown, message: unknown, kind: unknown):
   };
 }
 
-export function rememberedName(): string {
-  return recall(NAME_KEY) ?? '';
+/**
+ * Names are not kept between visits: every visit starts with an empty name box (a shared or
+ * family computer should not show the last person's name). Clears a name kept by earlier versions.
+ */
+export function forgetName(): void {
+  try { localStorage.removeItem(NAME_KEY); } catch { /* storage blocked */ }
 }
 
 function visitorId(): string {

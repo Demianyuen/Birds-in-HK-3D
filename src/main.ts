@@ -2,7 +2,7 @@ import './styles.css';
 import { WorldPanel } from './multiplayer/WorldPanel';
 import { OpenWorldPanel } from './openWorld/OpenWorldPanel';
 import { openWorldConfig } from './openWorld/config';
-import { readVisitorForm, rememberedName, type Visitor } from './openWorld/visitor';
+import { forgetName, readVisitorForm, type Visitor } from './openWorld/visitor';
 import { TouchFlightControls } from './game/TouchFlightControls';
 import { createHeritageDiagram } from './game/heritageDiagram';
 import { transitionFlow, type ScreenName } from './app/flow';
@@ -123,7 +123,12 @@ game.onPlaceArrival = arrival => {
   reportRuntimeEvent('place.arrival', { id: place.id, tone: place.tone, firstVisit: arrival.firstVisit });
 };
 let lastFrameTime = performance.now();
-visitorName.value = rememberedName();
+// Every visit starts with an empty name, also when the browser brings the page back from its cache.
+forgetName();
+visitorName.value = '';
+window.addEventListener('pageshow', () => {
+  if (currentScreen === 'boot') visitorName.value = '';
+});
 const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
 touchControls.attach(canvas);
