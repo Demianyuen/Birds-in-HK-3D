@@ -206,8 +206,8 @@ vec3 court(vec3 p, vec3 n) {
   vec2 cell = vec2(uf, vf);
   float near = 1.0 - smoothstep(40.0, 160.0, vDist);
 
-  // Mosaic-tiled wall: a muted warm beige, each bay and floor a shade apart, fine grout up close.
-  vec3 wall = vec3(0.76, 0.68, 0.57) * (0.95 + 0.06 * r1);
+  // Mosaic-tiled wall: a warm sandy terracotta, each bay and floor a shade apart, fine grout up close.
+  vec3 wall = vec3(0.80, 0.67, 0.53) * (0.95 + 0.06 * r1);
   vec2 tile = abs(fract(vec2(u, p.y) / 0.24) - 0.5);
   wall *= 1.0 - 0.07 * near * smoothstep(0.42, 0.5, max(tile.x, tile.y));
   // Grime: darker at the foot of the tower and towards the roof, where rain runs off.
@@ -290,7 +290,7 @@ vec3 court(vec3 p, vec3 n) {
   // From far away the detail settles into the facade tone.
   float far = smoothstep(220.0, 750.0, vDist);
   gGlass *= 1.0 - far;
-  return mix(colour, vec3(0.60, 0.54, 0.46), far * 0.75);
+  return mix(colour, vec3(0.66, 0.54, 0.42), far * 0.75);
 }`;
 
 const FRAGMENT_MAIN = `vec3 courtAlbedo = court(vObj, normalize(vNrm));
@@ -357,7 +357,7 @@ export class WangFukCourt {
   private readonly geometries = new Map<number, { body: BufferGeometry; caps: BufferGeometry; ledges: BufferGeometry }>();
   private readonly capMaterial = new MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
   /** Floor-slab ledges: plain painted concrete. */
-  private readonly ledgeMaterial = new MeshStandardMaterial({ color: '#d2c8b8', roughness: 0.9, metalness: 0, side: DoubleSide });
+  private readonly ledgeMaterial = new MeshStandardMaterial({ color: '#e2d0b8', roughness: 0.9, metalness: 0, side: DoubleSide });
 
   public constructor(private readonly sunDirection: Vector3) {
     this.group.name = 'wang-fuk-court';
