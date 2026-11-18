@@ -7,7 +7,14 @@ import { FLOWER_LABELS } from '../openWorld/visitor';
  * (sessionStorage), sent as a Bearer token to /api/moderate: the password itself, or, with
  * two-step sign-in, a session issued after the password and an authenticator code.
  */
-type View = 'pending' | 'shared' | 'chat';
+type View = 'pending' | 'shared' | 'chat' | 'feedback' | 'status';
+interface FeedbackItem { id: string; created_at: string; name: string; body: string; done: boolean }
+interface Check { ok: boolean; note: string }
+interface Status {
+  checkedAt: string; version: string; database: Check; relay: Check & { birds: number | null };
+  counts: { flowers: number; flowersToday: number; waiting: number; chatHour: number; feedbackNew: number };
+  problems: Array<{ kind: string; label: string; day: number; hour: number; latest: Array<{ at: string; detail: string }> }>;
+}
 
 interface PendingItem { id: string; created_at: string; name: string; message: string; kind: string }
 interface ChatItem { id: number; created_at: string; name: string; body: string; hidden: boolean; state?: 'waiting' | 'shown' | 'hidden' }
@@ -234,7 +241,10 @@ async function load(): Promise<void> {
     items.replaceChildren();
     if (view === 'pending') renderPending((data.pending as PendingItem[]) ?? []);
     else if (view === 'shared') renderShared((data.shared as PendingItem[]) ?? []);
+    else if (view === 'feedback') renderFeedback((data.feedback as FeedbackItem[]) ?? []);
+    else if (view === 'status') renderStatus(data.status as Status);
     else renderChat((data.chat as ChatItem[]) ?? []);
+    startWatching();
   } catch (error) {
     const message = (error as Error).message;
     // A wrong password or an expired two-step session: sign in again.
@@ -335,3 +345,131 @@ function actionButton(label: string, action: string, id: string | number, row: H
 }
 
 void load();
+
+function renderFeedback(list: FeedbackItem[]): void {
+  const fresh = list.filter(item => !item.done).length;
+  status.textContent = !list.length ? '還沒有收到意見。' : fresh ? `有 ${fresh} 則新意見。` : '所有意見都已處理。';
+  for (const item of [...list].sort((a, b) => Number(a.done) - Number(b.done))) {
+    const row = document.createElement('li');
+    if (item.done) row.classList.add('hidden-item');
+    const meta = document.createElement('p');
+    meta.className = 'meta';
+    meta.textContent = `${item.name || '（沒有名字）'} · ${new Date(item.created_at).toLocaleString('zh-HK')}${item.done ? ' · 已處理' : ''}`;
+    const text = document.createElement('p');
+    text.className = 'message';
+    text.textContent = item.body;
+    row.append(meta, text);
+    if (!item.done) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = '已處理';
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          await call('POST', '', { action: 'feedback-done', id: item.id });
+          row.classList.add('hidden-item');
+          meta.textContent += ' · 已處理';
+          button.remove();
+          void refreshBadge();
+        } catch (error) {
+          status.textContent = `未能更新：${(error as Error).message}`;
+          button.disabled = false;
+        }
+      });
+      row.append(button);
+    }
+    items.append(row);
+  }
+}
+
+function statusLine(label: string, value: string, ok?: boolean): HTMLLIElement {
+  const row = document.createElement('li');
+  row.className = 'status-row';
+  const name = document.createElement('span');
+  name.className = 'status-name';
+  name.textContent = label;
+  const text = document.createElement('span');
+  text.textContent = value;
+  if (ok !== undefined) {
+    const dot = document.createElement('span');
+    dot.className = `status-dot ${ok ? 'ok' : 'bad'}`;
+    dot.setAttribute('aria-label', ok ? '正常' : '有問題');
+    row.append(dot);
+  }
+  row.append(name, text);
+  return row;
+}
+
+function count(value: number): string {
+  return value < 0 ? '未能讀取' : String(value);
+}
+
+function renderStatus(data: Status | undefined): void {
+  if (!data) { status.textContent = '未能讀取運作狀況。'; return; }
+  status.textContent = `最後檢查：${new Date(data.checkedAt).toLocaleTimeString('zh-HK')}（每 30 秒自動更新）· 網站版本 ${data.version}`;
+  items.append(
+    statusLine('網站和資料庫', data.database.note, data.database.ok),
+    statusLine('中繼伺服器', data.relay.note, data.relay.ok),
+    statusLine('宏福苑一帶此刻', data.relay.birds === null ? '未能數算' : `${data.relay.birds} 隻鳥`),
+    statusLine('今天放下的花', count(data.counts.flowersToday)),
+    statusLine('所有花', count(data.counts.flowers)),
+    statusLine('等待分享的留言', count(data.counts.waiting), data.counts.waiting <= 20),
+    statusLine('過去一小時的對話', count(data.counts.chatHour)),
+    statusLine('未處理的意見', count(data.counts.feedbackNew), data.counts.feedbackNew === 0),
+  );
+  const heading = document.createElement('li');
+  heading.className = 'status-heading';
+  heading.textContent = '訪客遇到的問題（過去 24 小時）';
+  items.append(heading);
+  for (const problem of data.problems) {
+    const row = statusLine(problem.label, problem.day ? `${problem.day} 次（最近一小時 ${problem.hour} 次）` : '沒有', problem.hour < 5);
+    if (problem.latest.length) {
+      const detail = document.createElement('p');
+      detail.className = 'meta status-detail';
+      detail.textContent = problem.latest.map(item => `${new Date(item.at).toLocaleTimeString('zh-HK')} ${item.detail}`).join('；');
+      row.append(detail);
+    }
+    items.append(row);
+  }
+}
+
+// Watching while the page is open: new feedback and new problems show in the tab title and, if
+// allowed, as a notification, so the moderator can act at once.
+const badge = document.getElementById('feedback-badge') as HTMLElement;
+let watching = 0;
+let lastSeen: { feedback: number; problems: number } | null = null;
+const baseTitle = document.title;
+
+function startWatching(): void {
+  if (watching) return;
+  if ('Notification' in window && Notification.permission === 'default') void Notification.requestPermission().catch(() => undefined);
+  void refreshBadge();
+  watching = window.setInterval(() => {
+    void refreshBadge();
+    if (view === 'status' && document.visibilityState === 'visible') void load();
+  }, 30_000);
+}
+
+async function refreshBadge(): Promise<void> {
+  try {
+    const data = await call('GET', '?view=status');
+    const report = data.status as Status;
+    const feedback = report.counts.feedbackNew;
+    const problems = report.problems.reduce((sum, item) => sum + item.hour, 0);
+    badge.hidden = feedback <= 0;
+    badge.textContent = String(feedback);
+    const flags = [feedback > 0 ? `${feedback} 則意見` : '', !report.database.ok || !report.relay.ok ? '有故障' : ''].filter(Boolean);
+    document.title = flags.length ? `（${flags.join('，')}）${baseTitle}` : baseTitle;
+    if (lastSeen) {
+      const news: string[] = [];
+      if (feedback > lastSeen.feedback) news.push(`收到 ${feedback - lastSeen.feedback} 則新意見`);
+      if (problems >= lastSeen.problems + 5) news.push(`最近一小時有 ${problems} 個問題報告`);
+      if (news.length && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('Birds in HK 後台', { body: news.join('；') });
+      }
+    }
+    lastSeen = { feedback, problems };
+  } catch {
+    // signed out or offline: the next load shows why
+  }
+}

@@ -3,6 +3,7 @@
  *
  *   GET  /sky/<zone>/<room>   WebSocket: poses, who is here, lines said nearby
  *   POST /say/<zone>/<room>   from the website's API only (RELAY_SECRET): a filtered line to show
+ *   GET  /count/<zone>/<room> from the website's API only (RELAY_SECRET): how many birds are in the room
  *
  * Messages that arrive are billed at 20 per request and messages sent out are free,
  * so one bird flying at 4 poses a second costs about 0.2 requests a second.
@@ -24,7 +25,7 @@ const ZONE_PATTERN = /^(court|c-?\d{1,2}_-?\d{1,2})$/;
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const match = /^\/(sky|say)\/([^/]+)\/(\d{1,2})$/.exec(url.pathname);
+    const match = /^\/(sky|say|count)\/([^/]+)\/(\d{1,2})$/.exec(url.pathname);
     if (!match) return new Response('Birds in HK sky relay', { status: url.pathname === '/' ? 200 : 404 });
     const [, kind, zone, roomText] = match;
     const room = Number(roomText);
@@ -39,15 +40,24 @@ export default {
       return stub.fetch(request);
     }
 
-    if (request.method !== 'POST' || !env.RELAY_SECRET || request.headers.get('x-relay-secret') !== env.RELAY_SECRET) {
+    if (!env.RELAY_SECRET || request.headers.get('x-relay-secret') !== env.RELAY_SECRET) {
       return new Response('Not allowed', { status: 403 });
     }
+    if (kind === 'count') {
+      if (request.method !== 'GET') return new Response('Not allowed', { status: 405 });
+      return stub.fetch(new Request(request.url, { method: 'GET', headers: { 'x-count': '1' } }));
+    }
+    if (request.method !== 'POST') return new Response('Not allowed', { status: 405 });
     return stub.fetch(request);
   },
 };
 
 export class SkyRoom extends DurableObject<Env> {
   public async fetch(request: Request): Promise<Response> {
+    if (request.headers.get('x-count') === '1') {
+      const peers = this.peers();
+      return Response.json({ birds: peers.filter(peer => peer.state()).length, sockets: peers.length });
+    }
     if (request.method === 'POST') {
       const line = (await request.json().catch(() => null)) as Parameters<typeof say>[0] | null;
       const sent = line ? say(line, this.peers()) : false;

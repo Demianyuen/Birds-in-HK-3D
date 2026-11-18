@@ -52,6 +52,13 @@ const EN: Readonly<Record<string, string>> = {
   'error.message': 'The official 3D map could not load just now.',
   'error.retry': 'Reload',
   'error.back': 'Back to the area choice',
+  'feedback.open': 'Feedback or a problem? Tell us',
+  'feedback.button': 'Feedback',
+  'feedback.title': 'A note for the moderator',
+  'feedback.note': 'Only the moderator sees this; it does not appear on the map. If something went wrong, saying which phone or computer you use helps a lot.',
+  'feedback.placeholder': 'e.g. the view froze, could not find the square, it would be good to add…',
+  'feedback.cancel': 'Cancel',
+  'feedback.send': 'Send',
 };
 
 /** Messages from the landing form, by their Chinese text. */

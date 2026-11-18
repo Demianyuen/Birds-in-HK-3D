@@ -22,6 +22,20 @@
       <canvas id="game-canvas" aria-label="宏福苑紀念空間畫面" data-i18n-aria="canvas"></canvas>
 
       <button type="button" class="lang-toggle">EN</button>
+      <button type="button" class="danmaku-toggle feedback-toggle" data-open-feedback data-i18n="feedback.button">意見</button>
+
+      <dialog id="feedback-dialog" class="feedback-dialog" aria-labelledby="feedback-title">
+        <form id="feedback-form" method="dialog">
+          <h2 id="feedback-title" data-i18n="feedback.title">給管理員的意見</h2>
+          <p class="feedback-note" data-i18n="feedback.note">只有管理員會看到，不會出現在地圖上。遇到問題時，說說用甚麼手機或電腦會很有幫助。</p>
+          <textarea id="feedback-text" maxlength="480" rows="5" aria-labelledby="feedback-title" data-i18n-placeholder="feedback.placeholder" placeholder="例如：畫面卡住、找不到廣場、希望加入……"></textarea>
+          <p id="feedback-status" class="feedback-status" role="status"></p>
+          <div class="feedback-actions">
+            <button type="button" data-close-feedback data-i18n="feedback.cancel">取消</button>
+            <button type="submit" class="primary" data-i18n="feedback.send">送出</button>
+          </div>
+        </form>
+      </dialog>
 
       <section id="boot-screen" class="screen boot-screen" aria-labelledby="boot-title">
         <div class="brand-lockup">
@@ -51,6 +65,7 @@
             <button id="continue-button" class="primary-button" type="submit" data-i18n="boot.continue">帶著花出發</button>
           </div>
           <p class="visitor-privacy" data-i18n="boot.privacy">名字和花會即時讓其他人看到。降落在宏福苑放花時，可以再寫下想說的話。</p>
+          <button type="button" class="feedback-link" data-open-feedback data-i18n="feedback.open">有意見或遇到問題？告訴我們</button>
         </form>
         <p class="source-credit" data-i18n="boot.credit">3D：地政總署 CSDI · 地面：OpenStreetMap · 高程：AWS Terrarium</p>
       </section>

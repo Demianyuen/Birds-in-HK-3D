@@ -41,7 +41,8 @@ import { evaluateWorldReadiness } from './worldReadiness';
 import { stylizedGroundUniforms } from './StylizedGround';
 import { DynamicResolution } from './DynamicResolution';
 import { LIGHTER_KEY, deviceTier } from './deviceTier';
-import { QualityLadder } from './QualityLadder';
+import { QUALITY_LEVELS, QualityLadder } from './QualityLadder';
+import { reportProblem } from '../monitor';
 import { nearCourt } from './nearCourt';
 import { BuildingMask } from './BuildingMask';
 import { MEMORIAL_CENTRE } from '../openWorld/contentRules';
@@ -468,6 +469,7 @@ export class BirdsInHkGame {
    * that, say so plainly instead of reloading for ever.
    */
   private recoverFromLostGraphics(): void {
+    reportProblem('graphics-lost');
     let tries = 0;
     try {
       tries = Number(window.sessionStorage.getItem(LIGHTER_KEY) ?? '0') + 1;
@@ -869,6 +871,7 @@ export class BirdsInHkGame {
       // Still slow: step the costly parts down (judged on real time, so very slow machines are noticed too).
       const level = this.quality.update(performance.now());
       if (level !== null) this.applyQuality(level);
+      if (level === QUALITY_LEVELS) reportProblem('slow');
     }
     stylizedGroundUniforms.uSgTime.value = this.elapsed;
     this.clouds.update(this.elapsed);

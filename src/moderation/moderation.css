@@ -33,3 +33,12 @@ button:hover { border-color: var(--accent); }
 
 /* Panels and tabs stay out of sight until signed in. */
 .moderation [hidden] { display: none !important; }
+.badge { display: inline-block; min-width: 1.4em; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: #b4442f; color: #fff; font-size: 12px; line-height: 1.5; text-align: center; }
+.badge[hidden] { display: none; }
+.status-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.status-name { min-width: 11em; font-weight: 600; }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; align-self: center; }
+.status-dot.ok { background: #3e9a62; }
+.status-dot.bad { background: #c0492f; }
+.status-heading { margin-top: 12px; font-weight: 700; border: 0; background: none; }
+.status-detail { flex-basis: 100%; margin: 2px 0 0 22px; }

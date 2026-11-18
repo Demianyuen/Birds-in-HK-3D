@@ -871,3 +871,31 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
 .lang-toggle:hover { background: rgb(24 52 58 / 75%); }
 .lang-toggle:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 #app:not([data-screen="boot"]):not([data-screen="menu"]) .lang-toggle { display: none; }
+
+/* Feedback: a quiet link on the landing page, a small button while flying, one dialog. */
+.feedback-link {
+  margin-top: 10px; padding: 0; border: 0; background: none; color: #cfe3d8;
+  font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.feedback-link:hover { color: #fff; }
+.feedback-toggle { display: none; right: 196px; }
+#app[data-screen="game"] .feedback-toggle { display: block; }
+@media (max-width: 720px) { .feedback-toggle { right: 196px; } }
+.feedback-dialog {
+  width: min(440px, calc(100vw - 32px)); padding: 0; border: 1px solid rgb(255 255 255 / 18%); border-radius: 10px;
+  background: #0f1c21; color: #eef4f0; box-shadow: 0 20px 60px rgb(0 0 0 / 45%);
+}
+.feedback-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.feedback-dialog form { display: grid; gap: 10px; padding: 20px; }
+.feedback-dialog h2 { margin: 0; font-size: 18px; }
+.feedback-note { margin: 0; color: #c4d3cb; font-size: 14px; line-height: 1.6; }
+.feedback-dialog textarea {
+  width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid rgb(255 255 255 / 22%); border-radius: 6px;
+  background: #08130f; color: #eef4f0; font: inherit; font-size: 16px; resize: vertical;
+}
+.feedback-status { min-height: 1.4em; margin: 0; color: #cfe3d8; font-size: 14px; }
+.feedback-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.feedback-actions button {
+  padding: 8px 16px; border: 1px solid rgb(255 255 255 / 25%); border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.feedback-actions .primary { border-color: #7fcf9f; background: #2f6b4c; }

@@ -3,10 +3,13 @@ import { NOT_SHARED_SUFFIX, SWITCH_SENDERS, readQuiet, readSpeechLive, writeQuie
 import { flowersToGather, type FlowerSpot } from '../src/openWorld/gatherFlowers.js';
 import { MEMORIAL_CENTRE } from '../src/openWorld/contentRules.js';
 import { checkTotp, issueSession } from './_lib/totp.js';
+import { DONE_SUFFIX, FEEDBACK_PREFIX, joinFeedback, onlyChatFilter, REPORT_KINDS, REPORT_PREFIX, type StoredRow } from './_lib/monitor.js';
 import type { ServerResponse } from 'node:http';
 import {
   ApiError,
   checkModeratorPassword,
+  countRows,
+  isoSecondsAgo,
   readJson,
   requireModerator,
   rest,
@@ -16,8 +19,8 @@ import {
   type ApiRequest,
 } from './_lib/openWorld.js';
 
-type Action = 'approve' | 'reject' | 'hide-flower' | 'hide-chat' | 'share-chat' | 'speech' | 'quiet' | 'gather-flowers';
-const ACTIONS: readonly Action[] = ['approve', 'reject', 'hide-flower', 'hide-chat', 'share-chat', 'speech', 'quiet', 'gather-flowers'];
+type Action = 'approve' | 'reject' | 'hide-flower' | 'hide-chat' | 'share-chat' | 'speech' | 'quiet' | 'gather-flowers' | 'feedback-done';
+const ACTIONS: readonly Action[] = ['approve', 'reject', 'hide-flower', 'hide-chat', 'share-chat', 'speech', 'quiet', 'gather-flowers', 'feedback-done'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -57,8 +60,17 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
       const view = new URL(req.url ?? '/', 'http://vercel.local').searchParams.get('view');
       const quiet = await readQuiet(config);
       const speechLive = await readSpeechLive(config);
+      if (view === 'status') {
+        sendJson(res, 200, { status: await readStatus(config), quiet, speechLive });
+        return;
+      }
+      if (view === 'feedback') {
+        const response = await rest(config, `memorial_chat?select=id,created_at,name,body,sender_hash&sender_hash=like.${FEEDBACK_PREFIX}*&order=created_at.desc&limit=400`);
+        sendJson(res, 200, { feedback: joinFeedback((await response.json()) as StoredRow[]), quiet, speechLive });
+        return;
+      }
       if (view === 'chat') {
-        const response = await rest(config, `memorial_chat?select=id,created_at,name,body,hidden,sender_hash&sender_hash=not.in.(${SWITCH_SENDERS.join(',')})&order=created_at.desc&limit=200`);
+        const response = await rest(config, `memorial_chat?select=id,created_at,name,body,hidden,sender_hash&${onlyChatFilter(SWITCH_SENDERS)}&order=created_at.desc&limit=200`);
         const rows = (await response.json()) as Array<{ hidden: boolean; sender_hash: string } & Record<string, unknown>>;
         // waiting: held, not yet read · shown: others can see it · hidden: a moderator kept it back
         const chat = rows.map(({ sender_hash: hash, ...row }) => ({
@@ -111,6 +123,18 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
         }
       }
       sendJson(res, 200, { ok: true, count: moves.length, moved: body.move === true });
+      return;
+    }
+    if (action === 'feedback-done') {
+      // Mark every part of one message as dealt with.
+      if (typeof body.id !== 'string' || !/^[A-Za-z0-9-]{6,40}$/.test(body.id)) throw new ApiError(422, 'Invalid feedback id.');
+      const found = await rest(config, `memorial_chat?select=id,sender_hash&sender_hash=like.${FEEDBACK_PREFIX}${body.id}:*`);
+      const rows = (await found.json()) as Array<{ id: number; sender_hash: string }>;
+      for (const row of rows) {
+        if (row.sender_hash.endsWith(DONE_SUFFIX)) continue;
+        await rest(config, `memorial_chat?id=eq.${row.id}`, { method: 'PATCH', body: { sender_hash: `${row.sender_hash}${DONE_SUFFIX}` }, headers: { Prefer: 'return=minimal' } });
+      }
+      sendJson(res, 200, { ok: true });
       return;
     }
     if (action === 'speech') {
@@ -176,4 +200,73 @@ async function shareThroughRelay(line: { speaker: string; name: string; body: st
     body: JSON.stringify(line),
     signal: AbortSignal.timeout(2_000),
   }).catch(() => undefined)));
+}
+
+interface Check { ok: boolean; note: string }
+
+async function timed<T>(work: () => Promise<T>): Promise<{ value?: T; ms: number; error?: string }> {
+  const start = Date.now();
+  try {
+    return { value: await work(), ms: Date.now() - start };
+  } catch (error) {
+    return { ms: Date.now() - start, error: (error as Error).message };
+  }
+}
+
+/** Everything the moderator needs at a glance: is each part working, how busy, what went wrong lately. */
+async function readStatus(config: ReturnType<typeof supabaseConfig>) {
+  const day = isoSecondsAgo(86_400);
+  const hour = isoSecondsAgo(3_600);
+  const database = await timed(() => countRows(config, 'memorial_flowers', 'hidden=eq.false'));
+  const [flowersToday, waiting, chatHour, reportRows, feedbackRows] = await Promise.all([
+    countRows(config, 'memorial_flowers', `created_at=gte.${day}`).catch(() => -1),
+    countRows(config, 'memorial_flowers', 'message_status=eq.pending&hidden=eq.false').catch(() => -1),
+    countRows(config, 'memorial_chat', `${onlyChatFilter(SWITCH_SENDERS)}&created_at=gte.${hour}`).catch(() => -1),
+    rest(config, `memorial_chat?select=created_at,body,sender_hash&sender_hash=like.${REPORT_PREFIX}*&created_at=gte.${day}&order=created_at.desc&limit=1000`)
+      .then(response => response.json() as Promise<Array<{ created_at: string; body: string; sender_hash: string }>>).catch(() => []),
+    rest(config, `memorial_chat?select=id,created_at,name,body,sender_hash&sender_hash=like.${FEEDBACK_PREFIX}*&order=created_at.desc&limit=400`)
+      .then(response => response.json() as Promise<StoredRow[]>).catch(() => []),
+  ]);
+  const problems = Object.entries(REPORT_KINDS).map(([kind, label]) => {
+    const rows = reportRows.filter(row => row.sender_hash === `${REPORT_PREFIX}${kind}`);
+    return {
+      kind, label, day: rows.length,
+      hour: rows.filter(row => row.created_at >= hour).length,
+      latest: rows.slice(0, 3).map(row => ({ at: row.created_at, detail: row.body })),
+    };
+  });
+  const relay = await readRelay();
+  const databaseCheck: Check = database.error
+    ? { ok: false, note: `未能連上資料庫：${database.error}` }
+    : { ok: true, note: `正常（${database.ms} 毫秒）` };
+  return {
+    checkedAt: new Date().toISOString(),
+    version: (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7) || '本機',
+    database: databaseCheck,
+    relay,
+    counts: {
+      flowers: database.value ?? -1,
+      flowersToday,
+      waiting,
+      chatHour,
+      feedbackNew: joinFeedback(feedbackRows).filter(item => !item.done).length,
+    },
+    problems,
+  };
+}
+
+async function readRelay(): Promise<Check & { birds: number | null }> {
+  const base = process.env.SKY_RELAY_HTTP_URL?.replace(/\/+$/, '');
+  const secret = process.env.SKY_RELAY_SECRET;
+  if (!base || !base.startsWith('https://')) return { ok: true, birds: null, note: '未設定，使用 Supabase 連線（約五、六隻鳥同時可見）' };
+  const root = await timed(() => fetch(`${base}/`, { signal: AbortSignal.timeout(4_000) }).then(response => response.text()));
+  if (root.error || !root.value?.includes('sky relay')) return { ok: false, birds: null, note: `連不上中繼伺服器${root.error ? `：${root.error}` : ''}` };
+  if (!secret) return { ok: false, birds: null, note: '網站未設定 SKY_RELAY_SECRET' };
+  const counts = await Promise.all(Array.from({ length: 12 }, (_, index) => fetch(`${base}/count/court/${index + 1}`, {
+    headers: { 'x-relay-secret': secret }, signal: AbortSignal.timeout(4_000),
+  }).then(async response => ({ status: response.status, birds: response.ok ? Number(((await response.json()) as { birds?: number }).birds ?? 0) : 0 }))
+    .catch(() => ({ status: 0, birds: 0 }))));
+  if (counts.some(count => count.status === 403)) return { ok: false, birds: null, note: '密語不一致：Cloudflare 的 RELAY_SECRET 和 Vercel 的 SKY_RELAY_SECRET 要完全相同' };
+  if (counts.every(count => count.status === 404)) return { ok: true, birds: null, note: `正常（${root.ms} 毫秒）；中繼伺服器版本較舊，未能數鳥` };
+  return { ok: true, birds: counts.reduce((sum, count) => sum + count.birds, 0), note: `正常（${root.ms} 毫秒）` };
 }

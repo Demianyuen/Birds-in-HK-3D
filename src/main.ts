@@ -10,6 +10,7 @@ import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
 import { BirdsInHkGame, type GameTelemetry, type WorldPresentation } from './game/BirdsInHkGame';
 import type { FlightControl } from './game/BirdController';
 import { initLanguage, message } from './i18n';
+import { reportProblem, setUpFeedback, watchScriptErrors } from './monitor';
 import { BIRD_ORDER, BIRD_PROFILES, getBirdProfile, type BirdProfileId } from './game/birdProfiles';
 import { BirdPreview } from './game/BirdPreview';
 import type { MapLoadProgress } from './game/CsdiTiles';
@@ -71,7 +72,10 @@ let googleMapsOverlay: GoogleMapsCsdiOverlay | null = null;
 const googleMapsConfigured = configuredGoogleMaps() !== null;
 // No 3D in this browser (old device, graphics turned off, or the browser switched it off after a
 // crash): say so instead of leaving a dark page whose button does nothing.
+watchScriptErrors();
+setUpFeedback(() => visitorName.value.trim());
 if (!document.createElement('canvas').getContext('webgl2')) {
+  reportProblem('webgl-missing');
   const note = document.createElement('div');
   note.setAttribute('role', 'alert');
   note.style.cssText = 'position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:24px;background:#0b141b;color:#e8efe9;font:16px/1.8 system-ui,sans-serif;text-align:center';
@@ -368,6 +372,7 @@ async function beginFlight(): Promise<void> {
     reportRuntimeEvent('world.ready', { source: 'csdi', region: region.id, birdProfile });
     showScreen(transitionFlow(currentScreen, 'world-ready'));
   } catch (error) {
+    reportProblem('map-failed');
     reportRuntimeEvent('world.error', {
       message: error instanceof Error ? error.message : 'Unknown world-loading error.',
     });
