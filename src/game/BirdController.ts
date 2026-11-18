@@ -286,7 +286,7 @@ export class BirdController {
 
   public adjustSpeed(direction: number): void {
     if (!this.enabled) return;
-    this.speed = MathUtils.clamp(this.speed + direction * 3.5, this.flightProfile.minimumSpeed, this.flightProfile.maximumSpeed);
+    this.speed = MathUtils.clamp(this.speed + direction * this.flightProfile.cruiseSpeed * 0.15, this.flightProfile.minimumSpeed, this.flightProfile.maximumSpeed);
   }
 
   public setEasyFlight(easy: boolean): void {
@@ -353,7 +353,8 @@ export class BirdController {
       if (!this.perched) {
         this.pitch = MathUtils.clamp(this.pitch + pitchDirection * 0.72 * deltaSeconds, -0.65, 0.58);
         this.targetRoll = MathUtils.clamp(this.targetRoll + yawDirection * 0.85, -0.62, 0.62);
-        this.speed += speedDirection * 24 * deltaSeconds;
+        // Speeding up or slowing down takes a moment, in proportion to the bird's own pace.
+        this.speed += speedDirection * this.flightProfile.cruiseSpeed * 0.8 * deltaSeconds;
         if (speedDirection === 0 && this.flareTimer <= 0) {
           // Ease back towards cruise speed when the player is not throttling.
           this.speed += (this.flightProfile.cruiseSpeed - this.speed) * (1 - Math.exp(-0.3 * deltaSeconds));
@@ -373,13 +374,13 @@ export class BirdController {
 
     this.flapCooldown = Math.max(0, this.flapCooldown - deltaSeconds);
     if (this.perched && this.flapQueued) {
-      // Take-off: spring up and away with strong strokes, starting slow.
+      // Take-off: lift off lightly and slowly, a few soft strokes, then settle into flight.
       this.perched = false;
       this.walkSpeed = 0;
       this.object.position.addScaledVector(this.perchNormal, BIRD_CLEARANCE * this.sizeScale * 0.9);
-      this.verticalVelocity = Math.max(5, this.perchNormal.y * 5.5);
-      this.speed = this.flightProfile.minimumSpeed + 3;
-      this.takeoffTimer = 1.1;
+      this.verticalVelocity = Math.max(1.8, this.perchNormal.y * 2.2);
+      this.speed = this.flightProfile.minimumSpeed * 0.8;
+      this.takeoffTimer = 1.8;
       this.flareTimer = 0;
     }
 
@@ -416,7 +417,7 @@ export class BirdController {
     this.verticalVelocity += (sink - this.verticalVelocity) * (1 - Math.exp(-1.6 * deltaSeconds));
     if (this.flapQueued) {
       this.verticalVelocity = Math.min(MAX_CLIMB, this.verticalVelocity + this.flightProfile.flapLift * FLAP_SHARE);
-      this.speed = Math.min(this.flightProfile.maximumSpeed, this.speed + 1.2);
+      this.speed = Math.min(this.flightProfile.maximumSpeed, this.speed + this.flightProfile.cruiseSpeed * 0.06);
       this.flareTimer = 0;
     }
     this.flapQueued = false;
@@ -743,7 +744,7 @@ export class BirdController {
     const soaring = this.flightProfile.id === 'eagle';
     this.rhythmClock += deltaSeconds;
     let demand = 0;
-    if (this.takeoffTimer > 0) demand = 1;
+    if (this.takeoffTimer > 0) demand = 0.7;
     else if (forward.y < -0.12 || this.controls.decelerate) demand = 0;
     else {
       if (forward.y > 0.08) demand = Math.max(demand, 0.45 + forward.y);

@@ -16,31 +16,36 @@ export interface BirdProfile {
   flapLift: number;
 }
 
-/** Birds seen every day in Hong Kong. Ids are plain lowercase letters (they travel between visitors). */
+/**
+ * Birds seen every day in Hong Kong. Ids are plain lowercase letters (they travel between visitors).
+ * Speeds in metres a second, after real cruising flight: pigeons and doves about 15–20 m/s
+ * (woodpigeon about 61 km/h), sparrows 8–11 m/s (29–40 km/h), magpies about 11 m/s, kites
+ * gliding slowly at about 10–12 m/s; the maximum is a dive or a hurried flight.
+ */
 export const BIRD_PROFILES: Readonly<Record<BirdProfileId, BirdProfile>> = Object.freeze({
   spotted: {
     id: 'spotted', label: '珠頸斑鳩', note: '屋邨常見，性情溫馴', modelPath: '/models/pigeon.glb', loadingLabel: 'Spotted dove',
-    colour: '#b79a8c', cruiseSpeed: 25, minimumSpeed: 8, maximumSpeed: 64, turnRate: 1.2, flapLift: 9,
+    colour: '#b79a8c', cruiseSpeed: 13, minimumSpeed: 7, maximumSpeed: 21, turnRate: 1.2, flapLift: 9,
   },
   pigeon: {
     id: 'pigeon', label: '灰鴿', note: '街頭的原鴿，拍翼與滑翔交替', modelPath: '/models/pigeon.glb', loadingLabel: 'Pigeon',
-    colour: '#97a0ad', cruiseSpeed: 26, minimumSpeed: 9, maximumSpeed: 68, turnRate: 1.15, flapLift: 8.8,
+    colour: '#97a0ad', cruiseSpeed: 16, minimumSpeed: 8, maximumSpeed: 25, turnRate: 1.15, flapLift: 8.8,
   },
   dove: {
     id: 'dove', label: '白鴿', note: '和平白鴿，輕盈穩定', modelPath: '/models/dove.glb', loadingLabel: 'Dove',
-    colour: '#f4f4ef', cruiseSpeed: 24, minimumSpeed: 8, maximumSpeed: 62, turnRate: 1.2, flapLift: 9.2,
+    colour: '#f4f4ef', cruiseSpeed: 15, minimumSpeed: 8, maximumSpeed: 24, turnRate: 1.2, flapLift: 9.2,
   },
   sparrow: {
     id: 'sparrow', label: '麻雀', note: '細小靈活，成群出沒', modelPath: '/models/pigeon.glb', loadingLabel: 'Tree sparrow',
-    colour: '#a47a52', cruiseSpeed: 22, minimumSpeed: 7, maximumSpeed: 56, turnRate: 1.45, flapLift: 10,
+    colour: '#a47a52', cruiseSpeed: 9.5, minimumSpeed: 5, maximumSpeed: 14, turnRate: 1.45, flapLift: 10,
   },
   magpie: {
     id: 'magpie', label: '喜鵲', note: '黑白分明，長尾，報喜的鳥', modelPath: '/models/pigeon.glb', loadingLabel: 'Magpie',
-    colour: '#3a3f4a', cruiseSpeed: 27, minimumSpeed: 9, maximumSpeed: 68, turnRate: 1.1, flapLift: 8.6,
+    colour: '#3a3f4a', cruiseSpeed: 11, minimumSpeed: 6, maximumSpeed: 17, turnRate: 1.1, flapLift: 8.6,
   },
   eagle: {
     id: 'eagle', label: '麻鷹', note: '長翼，高空盤旋滑翔', modelPath: '/models/eagle.glb', loadingLabel: 'Black kite',
-    colour: '#6a4e35', cruiseSpeed: 34, minimumSpeed: 13, maximumSpeed: 84, turnRate: 0.82, flapLift: 7.6,
+    colour: '#6a4e35', cruiseSpeed: 11, minimumSpeed: 6, maximumSpeed: 20, turnRate: 0.82, flapLift: 7.6,
   },
 });
 

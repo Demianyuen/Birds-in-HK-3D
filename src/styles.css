@@ -429,7 +429,7 @@ h1 {
 @media (hover: none) and (pointer: coarse) {
   .touch-flight {
     display: grid; justify-items: end; gap: 10px;
-    position: absolute; right: max(16px, env(safe-area-inset-right)); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 8;
+    position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: calc(98px + env(safe-area-inset-bottom)); z-index: 8;
     pointer-events: none;
   }
   .touch-flight[hidden] { display: none; }
@@ -440,9 +440,9 @@ h1 {
   }
   .touch-flight button:active { background: rgb(66 109 86 / 90%); }
   .touch-flight button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-  .touch-flap { width: 84px; height: 84px; border-radius: 50%; font-size: 17px; letter-spacing: 0.08em; }
-  .touch-speed { display: flex; gap: 8px; }
-  .touch-speed button { width: 46px; height: 46px; border-radius: 50%; font-size: 15px; }
+  /* Small and see-through: tapping anywhere on the view also beats the wings. */
+  .touch-flap { width: 58px; height: 58px; border-radius: 50%; font-size: 14px; letter-spacing: 0.06em; opacity: 0.72; }
+  .touch-flap:active { opacity: 1; }
   .touch-hint {
     position: fixed; left: 50%; bottom: calc(190px + env(safe-area-inset-bottom)); transform: translateX(-50%);
     margin: 0; padding: 7px 14px; border-radius: 999px; white-space: nowrap;

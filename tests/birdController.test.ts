@@ -39,7 +39,8 @@ describe('bird collision and perching', () => {
     bird.setEnabled(true);
     for (let index = 0; index < 20; index += 1) bird.adjustSpeed(1);
 
-    bird.update(0.05, wall);
+    // Flying at its top speed (a real bird's dive pace) straight at the wall.
+    for (let step = 0; step < 20 && bird.getTelemetry().state === 'FLYING'; step += 1) bird.update(0.05, wall);
 
     expect(bird.getTelemetry().state).toBe('CLINGING');
     // On the near side of the wall, and not pushed back away from it.

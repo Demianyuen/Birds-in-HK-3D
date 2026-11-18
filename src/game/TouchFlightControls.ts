@@ -30,8 +30,8 @@ export function stickAxis(offsetPx: number): number {
  *  - drag anywhere on the view: the bird turns towards the drag (right/left) and
  *    climbs or dives (up/down); let go and it levels out. On the ground the same
  *    drag turns and walks.
- *  - tap the view, or hold the round wing button: beat the wings (take off, climb).
- *  - 快 / 慢: hold to speed up or slow down.
+ *  - tap the view, or hold the small wing button: beat the wings (take off, climb).
+ * The bird keeps its own natural pace; there are no speed buttons in the way of the view.
  */
 export class TouchFlightControls {
   readonly element = document.createElement('div');
@@ -60,10 +60,6 @@ export class TouchFlightControls {
     this.hint.className = 'touch-hint';
     this.hint.textContent = '拖曳畫面轉向 · 點一下拍翼';
 
-    const speed = document.createElement('div');
-    speed.className = 'touch-speed';
-    speed.append(this.holdButton('accelerate', '快', '加速'), this.holdButton('decelerate', '慢', '減速'));
-
     const flap = document.createElement('button');
     flap.type = 'button';
     flap.className = 'touch-flap';
@@ -85,7 +81,7 @@ export class TouchFlightControls {
       if (event.code === 'Space' || event.code === 'Enter') { event.preventDefault(); this.game.flap(); }
     });
 
-    this.element.append(this.hint, speed, flap);
+    this.element.append(this.hint, flap);
   }
 
   /** The drag-to-steer surface is the 3D view itself, so taps on flowers still reach it. */
@@ -157,29 +153,5 @@ export class TouchFlightControls {
     if (control) this.game.setControl(control, true);
   }
 
-  private holdButton(control: FlightControl, text: string, label: string): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = text;
-    button.setAttribute('aria-label', label);
-    button.addEventListener('pointerdown', event => {
-      event.preventDefault();
-      this.lastTouchAt = performance.now();
-      button.setPointerCapture(event.pointerId);
-      this.held.set(`pointer:${event.pointerId}`, control);
-      this.game.setControl(control, true);
-    });
-    const release = (event: PointerEvent) => this.release(`pointer:${event.pointerId}`);
-    button.addEventListener('pointerup', release);
-    button.addEventListener('pointercancel', release);
-    button.addEventListener('lostpointercapture', release);
-    return button;
-  }
 
-  private release(key: string): void {
-    const control = this.held.get(key);
-    if (!control) return;
-    this.held.delete(key);
-    this.game.setControl(control, [...this.held.values()].includes(control));
-  }
 }
