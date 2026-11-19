@@ -74,7 +74,8 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
  */
 async function tellTheSky(zone: unknown, room: unknown, line: { speaker: string; name: string; body: string; x: number; z: number }): Promise<void> {
   const base = process.env.SKY_RELAY_HTTP_URL;
-  const secret = process.env.SKY_RELAY_SECRET;
+  // A line break or space picked up when the secret was pasted must not make it differ.
+  const secret = process.env.SKY_RELAY_SECRET?.trim();
   if (!base || !secret || !line.speaker) return;
   if (typeof zone !== 'string' || !/^(court|c-?\d{1,2}_-?\d{1,2})$/.test(zone)) return;
   if (typeof room !== 'number' || !Number.isInteger(room) || room < 1 || room > 12) return;

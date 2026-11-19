@@ -40,7 +40,9 @@ export default {
       return stub.fetch(request);
     }
 
-    if (!env.RELAY_SECRET || request.headers.get('x-relay-secret') !== env.RELAY_SECRET) {
+    // A line break or space picked up when the secret was pasted (either side) must not make it differ.
+    const secret = env.RELAY_SECRET?.trim();
+    if (!secret || request.headers.get('x-relay-secret')?.trim() !== secret) {
       return new Response('Not allowed', { status: 403 });
     }
     if (kind === 'count') {

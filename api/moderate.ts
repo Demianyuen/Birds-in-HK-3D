@@ -191,7 +191,8 @@ function zoneAt(x: number, z: number): string {
 
 async function shareThroughRelay(line: { speaker: string; name: string; body: string; x: number; z: number }): Promise<void> {
   const base = process.env.SKY_RELAY_HTTP_URL;
-  const secret = process.env.SKY_RELAY_SECRET;
+  // A line break or space picked up when the secret was pasted must not make it differ.
+  const secret = process.env.SKY_RELAY_SECRET?.trim();
   if (!base || !secret) return;
   const zone = zoneAt(line.x, line.z);
   await Promise.all(Array.from({ length: MAX_ROOMS }, (_, index) => fetch(`${base.replace(/\/+$/, '')}/say/${zone}/${index + 1}`, {
@@ -257,7 +258,8 @@ async function readStatus(config: ReturnType<typeof supabaseConfig>) {
 
 async function readRelay(): Promise<Check & { birds: number | null }> {
   const base = process.env.SKY_RELAY_HTTP_URL?.replace(/\/+$/, '');
-  const secret = process.env.SKY_RELAY_SECRET;
+  // A line break or space picked up when the secret was pasted must not make it differ.
+  const secret = process.env.SKY_RELAY_SECRET?.trim();
   if (!base || !base.startsWith('https://')) return { ok: true, birds: null, note: '未設定，使用 Supabase 連線（約五、六隻鳥同時可見）' };
   const root = await timed(() => fetch(`${base}/`, { signal: AbortSignal.timeout(4_000) }).then(response => response.text()));
   if (root.error || !root.value?.includes('sky relay')) return { ok: false, birds: null, note: `連不上中繼伺服器${root.error ? `：${root.error}` : ''}` };
