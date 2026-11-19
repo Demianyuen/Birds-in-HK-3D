@@ -45,11 +45,11 @@ export const MEMORIAL_CLEARING = Object.freeze({ x: 20, z: -13, radius: 34 });
 export const MEMORIAL_OPEN_RADIUS = 46;
 
 /**
- * Where every visit begins: high above Tolo Harbour, about 1.7 km east-north-east
- * of the estate and facing it, so arriving is a flight of a minute or so with
- * the flower in the beak, not a drop onto the court.
+ * Where every visit begins: above Tolo Harbour, about 0.85 km east-north-east of the
+ * estate (half the first distance) and facing it, so arriving is a flight of about a
+ * minute at a real bird's pace with the flower in the beak, not a drop onto the court.
  */
-export const MEMORIAL_APPROACH = Object.freeze({ x: 1560, y: 260, z: -640 });
+export const MEMORIAL_APPROACH = Object.freeze({ x: 790, y: 190, z: -324 });
 
 /**
  * Words that are never shown. Kept short and specific: common Cantonese and
@@ -133,6 +133,9 @@ export function checkText(input: unknown, maxLength: number, { required }: { req
 }
 
 export const checkName = (input: unknown): TextCheck => checkText(input, NAME_MAX, { required: false });
+
+/** Shown for anyone who leaves no name: nobody has to say who they are to take part. */
+export const ANONYMOUS_NAME = '匿名';
 export const checkMessage = (input: unknown): TextCheck => checkText(input, MESSAGE_MAX, { required: false });
 export const checkChat = (input: unknown): TextCheck => checkText(input, CHAT_MAX, { required: true });
 

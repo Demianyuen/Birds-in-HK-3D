@@ -5,7 +5,7 @@ import { WORLD_PLAYER_LIMIT } from '../multiplayer/protocol';
 import { openWorldConfig, skyRelayUrl } from './config';
 import { playLayingChime } from './chime';
 import { Danmaku } from './Danmaku';
-import { checkChat, checkMessage, insideMemorialGround, MEMORIAL_PLAZA, MESSAGE_MAX, rejectReasonText } from './contentRules';
+import { ANONYMOUS_NAME, checkChat, checkMessage, insideMemorialGround, MEMORIAL_PLAZA, MESSAGE_MAX, rejectReasonText } from './contentRules';
 import { FlowerRefused, fetchFlowers, fetchQuiet, placeFlower, sendChat, type MemorialFlower } from './flowerApi';
 import type { ChatLine, LiveStatus, SkyLink } from './skyLink';
 import { FLOWER_LABELS, type Visitor } from './visitor';
@@ -573,7 +573,7 @@ export class OpenWorldPanel {
       const words = this.bubbles.textFor(remote.id, now);
       labels.push({
         id: `player-${remote.id}`,
-        title: remote.name || '訪客',
+        title: remote.name || ANONYMOUS_NAME,
         body: words ?? undefined,
         position: remote.position.clone().setY(remote.position.y + lift),
         tone: words ? 'speech' : 'player',

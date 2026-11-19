@@ -9,7 +9,8 @@ import { transitionFlow, type ScreenName } from './app/flow';
 import { captureRuntimeFrame, reportRuntimeEvent } from './app/runtimeEvidence';
 import { BirdsInHkGame, type GameTelemetry, type WorldPresentation } from './game/BirdsInHkGame';
 import type { FlightControl } from './game/BirdController';
-import { initLanguage, message } from './i18n';
+import { currentLang, initLanguage, message } from './i18n';
+import { fetchStats, type PublicStats } from './openWorld/flowerApi';
 import { reportProblem, setUpFeedback, watchScriptErrors } from './monitor';
 import { BIRD_ORDER, BIRD_PROFILES, getBirdProfile, type BirdProfileId } from './game/birdProfiles';
 import { BirdPreview } from './game/BirdPreview';
@@ -25,6 +26,13 @@ const app = requireElement<HTMLElement>('app');
 const canvas = requireElement<HTMLCanvasElement>('game-canvas');
 const visitorForm = requireElement<HTMLFormElement>('visitor-form');
 const visitorName = requireElement<HTMLInputElement>('visitor-name');
+const visitorAnonymous = requireElement<HTMLInputElement>('visitor-anonymous');
+const visitorCount = requireElement<HTMLElement>('visitor-count');
+// Anonymous: no name at all (others see 匿名); the name box steps aside.
+visitorAnonymous.addEventListener('change', () => {
+  visitorName.disabled = visitorAnonymous.checked;
+  if (visitorAnonymous.checked) visitorName.value = '';
+});
 const visitorError = requireElement<HTMLElement>('visitor-error');
 let lastVisitorError = '';
 const startButton = requireElement<HTMLButtonElement>('start-button');
@@ -133,6 +141,18 @@ visitorName.value = '';
 window.addEventListener('pageshow', () => {
   if (currentScreen === 'boot') visitorName.value = '';
 });
+
+// How many have come so far, on the landing page.
+let lastStats: PublicStats | null = null;
+function showVisitorCount(): void {
+  const stats = lastStats;
+  if (!stats || stats.flowers < 1) { visitorCount.hidden = true; return; }
+  visitorCount.textContent = currentLang() === 'en'
+    ? `${stats.people} people have come so far, leaving ${stats.flowers} flowers and ${stats.words} messages.`
+    : `已有 ${stats.people} 人來過，留下 ${stats.flowers} 朵花、${stats.words} 段說話。`;
+  visitorCount.hidden = false;
+}
+void fetchStats().then(stats => { lastStats = stats; showVisitorCount(); }).catch(() => undefined);
 const touchControls = new TouchFlightControls(game);
 app.append(touchControls.element);
 touchControls.attach(canvas);
@@ -165,6 +185,7 @@ for (const id of BIRD_ORDER) {
   birdPicker.append(label);
 }
 initLanguage(() => {
+  showVisitorCount();
   if (!visitorError.hidden && lastVisitorError) visitorError.textContent = message(lastVisitorError);
 });
 const refreshPreview = (): void => birdPreview.set(selectedBirdProfileId(), 'natural');
@@ -214,7 +235,7 @@ buildingPresentation.addEventListener('change', () => {
 visitorForm.addEventListener('submit', event => {
   event.preventDefault();
   const kind = new FormData(visitorForm).get('flower-kind');
-  const result = readVisitorForm(visitorName.value, '', kind);
+  const result = readVisitorForm(visitorAnonymous.checked ? '' : visitorName.value, '', kind);
   visitorError.hidden = !result.error;
   lastVisitorError = result.error ?? '';
   visitorError.textContent = message(lastVisitorError);

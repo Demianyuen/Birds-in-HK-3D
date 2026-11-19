@@ -1,4 +1,4 @@
-import { checkName, CHAT_MAX } from './contentRules';
+import { ANONYMOUS_NAME, checkName, CHAT_MAX } from './contentRules';
 import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 import { PoseBuffer } from './PoseBuffer';
 import type { LiveStatus, SkyEvents, SkyLink } from './skyLink';
@@ -181,7 +181,7 @@ export class SkyRelay implements SkyLink {
   private sayHello(entry: ZoneSocket): void {
     if (entry.member) return;
     entry.member = true;
-    send(entry.socket, { t: 'hello', id: this.self.id, name: this.self.name || '訪客', plumage: this.self.plumage ?? 'natural' });
+    send(entry.socket, { t: 'hello', id: this.self.id, name: this.self.name || ANONYMOUS_NAME, plumage: this.self.plumage ?? 'natural' });
     this.setStatus('online');
   }
 
@@ -224,7 +224,7 @@ export class SkyRelay implements SkyLink {
     if (typeof data.id !== 'string' || data.id === this.self.id) return;
     const name = checkName(data.name);
     entry.members.set(data.id, {
-      name: name.ok && name.text ? name.text : '訪客',
+      name: name.ok && name.text ? name.text : ANONYMOUS_NAME,
       plumage: typeof data.plumage === 'string' && /^[a-z]{1,16}$/.test(data.plumage) ? data.plumage : 'natural',
     });
   }
@@ -244,7 +244,7 @@ export class SkyRelay implements SkyLink {
     if (typeof data.body !== 'string' || !data.body || data.body.length > CHAT_MAX || typeof data.id !== 'string') return;
     this.events.onChat({
       id: 0,
-      name: typeof data.name === 'string' && data.name ? data.name : '訪客',
+      name: typeof data.name === 'string' && data.name ? data.name : ANONYMOUS_NAME,
       body: data.body,
       x: Number(data.x) || 0,
       z: Number(data.z) || 0,

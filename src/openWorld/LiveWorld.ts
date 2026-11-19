@@ -1,6 +1,6 @@
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
 import type { OpenWorldConfig } from './config';
-import { checkName, CHAT_MAX } from './contentRules';
+import { ANONYMOUS_NAME, checkName, CHAT_MAX } from './contentRules';
 import type { Position, Rotation, WorldPlayer } from '../multiplayer/protocol';
 import { PoseBuffer } from './PoseBuffer';
 import { channelName, MAX_ROOMS, pickRoom, poseIntervalMs, ROOM_CAP, ZoneWatch, zoneLabel } from './zones';
@@ -252,7 +252,7 @@ export class LiveWorld implements SkyLink {
   private async track(entry: ZoneChannel): Promise<void> {
     if (entry.tracked) return;
     entry.tracked = true;
-    await entry.channel.track({ name: this.self.name || '訪客', plumage: this.self.plumage ?? 'natural' });
+    await entry.channel.track({ name: this.self.name || ANONYMOUS_NAME, plumage: this.self.plumage ?? 'natural' });
   }
 
   private openChannel(zone: string, room: number): Promise<ZoneChannel | null> {
@@ -273,7 +273,7 @@ export class LiveWorld implements SkyLink {
         entry.plumages.clear();
         for (const [id, metas] of Object.entries(channel.presenceState<{ name?: string; plumage?: string }>())) {
           const checked = checkName(metas[0]?.name);
-          entry.names.set(id, checked.ok && checked.text ? checked.text : '訪客');
+          entry.names.set(id, checked.ok && checked.text ? checked.text : ANONYMOUS_NAME);
           const plumage = metas[0]?.plumage;
           if (typeof plumage === 'string' && /^[a-z]{1,16}$/.test(plumage)) entry.plumages.set(id, plumage);
         }
@@ -320,7 +320,7 @@ export class LiveWorld implements SkyLink {
       const name = entry.names.get(id);
       if (name) return name;
     }
-    return '訪客';
+    return ANONYMOUS_NAME;
   }
 
   private plumageOf(id: string): string | undefined {
@@ -363,7 +363,7 @@ function parseChat(row: unknown): ChatLine | null {
   if (typeof data.body !== 'string' || !data.body || data.body.length > CHAT_MAX) return null;
   return {
     id: Number(data.id) || 0,
-    name: typeof data.name === 'string' && data.name ? data.name : '訪客',
+    name: typeof data.name === 'string' && data.name ? data.name : ANONYMOUS_NAME,
     body: data.body,
     x: Number(data.x) || 0,
     z: Number(data.z) || 0,

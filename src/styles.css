@@ -899,3 +899,9 @@ body:not([data-tools]) .game-hud dl > div:last-child { display: none; }
   padding: 8px 16px; border: 1px solid rgb(255 255 255 / 25%); border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer;
 }
 .feedback-actions .primary { border-color: #7fcf9f; background: #2f6b4c; }
+
+/* Anonymous choice and the count of those who have come, on the landing page. */
+.anonymous-choice { display: flex; align-items: center; gap: 8px; margin-top: -4px; color: #dfe9e3; font-size: 14px; cursor: pointer; }
+.anonymous-choice input { width: 18px; height: 18px; accent-color: #6fbf8f; }
+.visitor-name:disabled, #visitor-name:disabled { opacity: 0.45; }
+.visitor-count { margin: 8px 0 0; color: #f1f6f2; font-size: 14px; letter-spacing: 0.02em; }

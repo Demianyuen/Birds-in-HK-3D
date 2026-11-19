@@ -53,6 +53,18 @@ export async function fetchFlowers(signal?: AbortSignal): Promise<MemorialFlower
   return (data.flowers ?? []).map(parseFlower).filter((flower): flower is MemorialFlower => flower !== null);
 }
 
+export interface PublicStats { people: number; flowers: number; words: number }
+
+/** How many have come so far (cached on the server for a minute); null when it cannot be told. */
+export async function fetchStats(signal?: AbortSignal): Promise<PublicStats | null> {
+  const response = await fetch('/api/settings', { signal });
+  if (!response.ok) return null;
+  const data = (await response.json().catch(() => ({}))) as { stats?: Partial<PublicStats> | null };
+  const stats = data.stats;
+  if (!stats || ![stats.people, stats.flowers, stats.words].every(value => Number.isFinite(value))) return null;
+  return { people: Number(stats.people), flowers: Number(stats.flowers), words: Number(stats.words) };
+}
+
 /** Whether visitors' words are being held back for now (the moderator's quiet switch). */
 export async function fetchQuiet(signal?: AbortSignal): Promise<boolean> {
   const response = await fetch('/api/settings', { signal });

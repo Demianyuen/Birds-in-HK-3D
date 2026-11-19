@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import { checkChat, checkName, rejectReasonText } from '../src/openWorld/contentRules.js';
+import { ANONYMOUS_NAME, checkChat, checkName, rejectReasonText } from '../src/openWorld/contentRules.js';
 import { readQuiet, readSpeechLive } from './_lib/quiet.js';
 import {
   ApiError,
@@ -53,7 +53,7 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
 
     // Held (the default): stored unseen until a moderator shares it; the speaker still sees it over their own bird.
     const live = await readSpeechLive(config);
-    const row = { name: name.text || '訪客', body: line.text, x, z, sender_hash: sender, hidden: !live };
+    const row = { name: name.text || ANONYMOUS_NAME, body: line.text, x, z, sender_hash: sender, hidden: !live };
     try {
       await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: speaker ? { ...row, speaker } : row });
     } catch (error) {
@@ -61,7 +61,7 @@ export default async function handler(req: ApiRequest, res: ServerResponse): Pro
       if (!speaker) throw error;
       await rest(config, 'memorial_chat', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: row });
     }
-    if (live) await tellTheSky(body.zone, body.room, { speaker, name: name.text || '訪客', body: line.text, x, z });
+    if (live) await tellTheSky(body.zone, body.room, { speaker, name: name.text || ANONYMOUS_NAME, body: line.text, x, z });
     sendJson(res, 201, { ok: true, held: !live });
   } catch (error) {
     sendError(res, error);

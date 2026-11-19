@@ -271,7 +271,7 @@ describe('the quiet switch', () => {
     expect(insert).toMatchObject({ body: 'quiet:on', hidden: true, sender_hash: 'moderator-quiet-switch' });
     const read = response();
     await settings(request('GET', '/api/settings'), read.res);
-    expect((await read.done).body).toEqual({ quiet: true });
+    expect((await read.done).body).toMatchObject({ quiet: true });
     const refused = response();
     await moderate(request('POST', '/api/moderate', { action: 'quiet', on: 'yes' }, moderator), refused.res);
     expect((await refused.done).status).toBe(422);

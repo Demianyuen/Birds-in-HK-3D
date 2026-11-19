@@ -177,8 +177,8 @@ describe('memorial approach start', () => {
     const position = bird.object.position;
     expect(position.toArray()).toEqual([MEMORIAL_APPROACH.x, MEMORIAL_APPROACH.y, MEMORIAL_APPROACH.z]);
     const away = Math.hypot(position.x - MEMORIAL_CENTRE.x, position.z - MEMORIAL_CENTRE.z);
-    expect(away).toBeGreaterThan(1_500);
-    expect(away).toBeLessThan(2_500); // inside the 3.2 km flight region, a minute or two at cruise speed
+    expect(away).toBeGreaterThan(700);
+    expect(away).toBeLessThan(1_000); // about a minute at a real bird's cruising pace
     const forward = new Vector3(0, 0, -1).applyQuaternion(bird.object.quaternion);
     const toCourt = new Vector3(MEMORIAL_CENTRE.x - position.x, 0, MEMORIAL_CENTRE.z - position.z).normalize();
     expect(forward.dot(toCourt)).toBeGreaterThan(0.99);
