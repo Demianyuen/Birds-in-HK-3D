@@ -26,13 +26,8 @@ const app = requireElement<HTMLElement>('app');
 const canvas = requireElement<HTMLCanvasElement>('game-canvas');
 const visitorForm = requireElement<HTMLFormElement>('visitor-form');
 const visitorName = requireElement<HTMLInputElement>('visitor-name');
-const visitorAnonymous = requireElement<HTMLInputElement>('visitor-anonymous');
 const visitorCount = requireElement<HTMLElement>('visitor-count');
-// Anonymous: no name at all (others see 匿名); the name box steps aside.
-visitorAnonymous.addEventListener('change', () => {
-  visitorName.disabled = visitorAnonymous.checked;
-  if (visitorAnonymous.checked) visitorName.value = '';
-});
+
 const visitorError = requireElement<HTMLElement>('visitor-error');
 let lastVisitorError = '';
 const startButton = requireElement<HTMLButtonElement>('start-button');
@@ -235,7 +230,7 @@ buildingPresentation.addEventListener('change', () => {
 visitorForm.addEventListener('submit', event => {
   event.preventDefault();
   const kind = new FormData(visitorForm).get('flower-kind');
-  const result = readVisitorForm(visitorAnonymous.checked ? '' : visitorName.value, '', kind);
+  const result = readVisitorForm(visitorName.value, '', kind);
   visitorError.hidden = !result.error;
   lastVisitorError = result.error ?? '';
   visitorError.textContent = message(lastVisitorError);

@@ -12,8 +12,7 @@ const EN: Readonly<Record<string, string>> = {
   'canvas': 'Birds in HK view',
   'boot.place': 'Tai Po · Wang Fuk Court',
   'boot.tagline': 'Become a dove, carry a flower over Tai Po, and lay it gently at Wang Fuk Court.',
-  'boot.name': 'Your name (optional)',
-  'boot.anonymous': 'Leave the flower and words anonymously',
+  'boot.name': 'Your name',
   'boot.namePlaceholder': 'e.g. Mrs Chan, a Tai Po neighbour',
   'boot.flower': 'Bring a flower',
   'flower.white-chrysanthemum': 'White chrysanthemum',
@@ -26,8 +25,9 @@ const EN: Readonly<Record<string, string>> = {
   'flower.yellow-chrysanthemum': 'Yellow chrysanthemum',
   'flower.lantern': 'Paper lantern',
   'boot.continue': 'Set off with the flower',
-  'boot.privacy': 'No sign-up, and no name needed: others will only see "Anonymous". Your flower is seen straight away; when you land at Wang Fuk Court to lay it, you can also write a few words.',
+  'boot.privacy': 'Others can see your name and flower straight away. When you land at Wang Fuk Court to lay it, you can also write a few words.',
   'boot.credit': '3D: Lands Department CSDI · Ground: OpenStreetMap · Elevation: AWS Terrarium',
+  'boot.about': 'About this place',
   'menu.title': 'Your bird',
   'menu.birds': 'Choose a bird',
   'menu.region': 'Flight area',
@@ -92,6 +92,9 @@ export function message(chinese: string): string {
 }
 
 function initialLang(): Lang {
+  // A link can choose the language (?lang=en), as the search results' English address does.
+  const asked = new URLSearchParams(location.search).get('lang');
+  if (asked === 'en' || asked === 'zh') return asked;
   try {
     const saved = localStorage.getItem(KEY);
     if (saved === 'zh' || saved === 'en') return saved;

@@ -411,6 +411,7 @@ export default defineConfig(({ mode }) => {
           studio: resolve(process.cwd(), 'studio.html'),
           cityStyle: resolve(process.cwd(), 'city-style.html'),
           moderate: resolve(process.cwd(), 'moderate.html'),
+          about: resolve(process.cwd(), 'about.html'),
           landsdPreview: resolve(process.cwd(), 'landsd-preview.html'),
         },
       },

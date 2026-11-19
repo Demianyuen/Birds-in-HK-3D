@@ -13,6 +13,7 @@
     "postinstall": "node scripts/copy-basis.mjs",
     "asset:pigeon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-pigeon.ps1",
     "dev": "vite",
+    "seo:indexnow": "node scripts/indexnow.mjs",
     "qa:csdi": "node scripts/verify-csdi.mjs",
     "qa:assets": "node scripts/verify-runtime-assets.mjs",
     "qa:report": "node scripts/runtime-report.mjs",

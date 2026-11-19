@@ -6,7 +6,14 @@
     <meta name="theme-color" content="#08151b" />
     <link rel="icon" href="data:," />
     <title>Birds in HK</title>
-    <meta name="description" content="一個沒有分數、排名或任務的開放世界。化身小鳥，帶一朵花飛到宏福苑。" />
+    <meta name="description" content="Birds in HK 是為大埔宏福苑而設的網上紀念空間：化身一隻小鳥，帶一朵花飛過大埔，放在宏福苑，也可以留下想說的話。不用下載，手機和電腦都可以。" />
+    <link rel="canonical" href="https://birds-in-hk.org/" />
+    <link rel="alternate" hreflang="zh-Hant" href="https://birds-in-hk.org/" />
+    <link rel="alternate" hreflang="en" href="https://birds-in-hk.org/?lang=en" />
+    <link rel="alternate" hreflang="x-default" href="https://birds-in-hk.org/" />
+    <meta property="og:site_name" content="Birds in HK" />
+    <meta property="og:locale" content="zh_HK" />
+    <meta property="og:locale:alternate" content="en_GB" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="宏福苑 · 為天使們留下一朵花" />
     <meta property="og:description" content="一個沒有分數、排名或任務的開放世界。無論相隔多遠，只要心裡有香港，我們都是彼此的連結。" />
@@ -15,6 +22,21 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:url" content="https://birds-in-hk.org/" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="宏福苑 · 為天使們留下一朵花" />
+    <meta name="twitter:image" content="https://birds-in-hk.org/og-image.png" />
+    <meta property="og:image:alt" content="宏福苑的大廈和中間的紀念廣場，地上放著直立的白花" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Birds in HK",
+        "alternateName": ["宏福苑紀念空間", "為天使們留下一朵花"],
+        "url": "https://birds-in-hk.org/",
+        "inLanguage": ["zh-Hant-HK", "en"],
+        "description": "為大埔宏福苑而設的網上紀念空間：化身一隻小鳥，帶一朵花飛到宏福苑放下。",
+        "about": { "@type": "Place", "name": "宏福苑 Wang Fuk Court", "address": { "@type": "PostalAddress", "addressLocality": "大埔 Tai Po", "addressRegion": "香港 Hong Kong", "addressCountry": "HK" } }
+      }
+    </script>
     <meta name="theme-color" content="#0b2a3a" />
   </head>
   <body>
@@ -45,12 +67,8 @@
         </div>
         <form id="visitor-form" class="visitor-form" novalidate>
           <label class="visitor-field">
-            <span data-i18n="boot.name">你的名字（可以不填）</span>
+            <span data-i18n="boot.name">你的名字</span>
             <input id="visitor-name" name="visitor-display-name" maxlength="24" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例如：陳太、大埔街坊" data-i18n-placeholder="boot.namePlaceholder" />
-          </label>
-          <label class="anonymous-choice">
-            <input id="visitor-anonymous" type="checkbox" />
-            <span data-i18n="boot.anonymous">以匿名留下花和說話</span>
           </label>
           <fieldset class="flower-picker">
             <legend data-i18n="boot.flower">帶一朵花</legend>
@@ -68,11 +86,12 @@
           <div class="visitor-actions">
             <button id="continue-button" class="primary-button" type="submit" data-i18n="boot.continue">帶著花出發</button>
           </div>
-          <p class="visitor-privacy" data-i18n="boot.privacy">不用登記，也可以不留名字：其他人只會看到「匿名」。花會即時讓其他人看到；降落在宏福苑放花時，可以再寫下想說的話。</p>
+          <p class="visitor-privacy" data-i18n="boot.privacy">名字和花會即時讓其他人看到。降落在宏福苑放花時，可以再寫下想說的話。</p>
           <p id="visitor-count" class="visitor-count" hidden></p>
           <button type="button" class="feedback-link" data-open-feedback data-i18n="feedback.open">有意見或遇到問題？告訴我們</button>
         </form>
         <p class="source-credit" data-i18n="boot.credit">3D：地政總署 CSDI · 地面：OpenStreetMap · 高程：AWS Terrarium</p>
+        <p class="source-credit"><a class="about-link" href="/about.html" data-i18n="boot.about">關於這個空間</a></p>
       </section>
 
       <section id="menu-screen" class="screen menu-screen" aria-labelledby="menu-title" hidden>

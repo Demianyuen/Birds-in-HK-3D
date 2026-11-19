@@ -134,8 +134,8 @@ export function checkText(input: unknown, maxLength: number, { required }: { req
 
 export const checkName = (input: unknown): TextCheck => checkText(input, NAME_MAX, { required: false });
 
-/** Shown for anyone who leaves no name: nobody has to say who they are to take part. */
-export const ANONYMOUS_NAME = '匿名';
+/** Shown for anyone who leaves no name. */
+export const ANONYMOUS_NAME = '訪客';
 export const checkMessage = (input: unknown): TextCheck => checkText(input, MESSAGE_MAX, { required: false });
 export const checkChat = (input: unknown): TextCheck => checkText(input, CHAT_MAX, { required: true });
 

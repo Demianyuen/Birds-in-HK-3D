@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /moderate.html
+Disallow: /studio.html
+Disallow: /city-style.html
+Disallow: /landsd-preview.html
+Disallow: /bird-lab.html
+Disallow: /api/
+
+Sitemap: https://birds-in-hk.org/sitemap.xml

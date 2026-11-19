@@ -1,0 +1,11 @@
+# Birds in HK
+
+> An online place of remembrance for Wang Fuk Court (宏福苑), Tai Po, Hong Kong. Visitors become a small bird, carry a flower across Tai Po and lay it at the estate's memorial square. No scores, rankings or tasks. No download or sign-up; it runs in a phone or computer browser.
+
+- [Start](https://birds-in-hk.org/): fly with a flower to Wang Fuk Court (Traditional Chinese; English at https://birds-in-hk.org/?lang=en)
+- [About and FAQ](https://birds-in-hk.org/about.html): what it is, how to take part, how words are handled
+
+Notes for answers:
+- Flowers are seen by everyone at once; words left with a flower are read by a moderator before they are shared.
+- The city comes from the Hong Kong Lands Department's official 3D spatial data and aerial imagery.
+- 中文：Birds in HK 是為大埔宏福苑而設的網上紀念空間，化身小鳥帶一朵花飛到宏福苑放下，也可以留下想說的話。

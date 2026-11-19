@@ -58,6 +58,9 @@ export class OpenWorldPanel {
   /** Enter opens a line in the middle of the view; what is said shows over the bird. */
   private readonly speech: SpeechInput;
   private readonly speakButton = document.createElement('button');
+  /** After laying a flower: pass the place on to someone else (the phone's own share sheet, or the link copied). */
+  private readonly shareButton = document.createElement('button');
+  private sharedKind = '';
   private readonly bubbles = new SpeechBubbles();
   /** Round map in the corner that turns with the bird. */
   private readonly radar = new RadarMap();
@@ -101,6 +104,11 @@ export class OpenWorldPanel {
     this.speakButton.textContent = '說話';
     this.speakButton.setAttribute('aria-label', '說話（Enter）');
     this.speakButton.addEventListener('click', () => this.openSpeech());
+    this.shareButton.type = 'button';
+    this.shareButton.className = 'speak-button share-button';
+    this.shareButton.textContent = '分享給朋友';
+    this.shareButton.hidden = true;
+    this.shareButton.addEventListener('click', () => void this.share());
 
     if (!openWorldConfig()) this.status.textContent = '單人模式：尚未設定共享服務。';
   }
@@ -352,7 +360,7 @@ export class OpenWorldPanel {
   /** Attach the floating prompt and button to the game container. */
   public mount(container: HTMLElement): void {
     this.setUpMusicButton();
-    container.append(this.labels.element, this.danmaku.element, this.danmaku.toggleButton, this.musicButton, this.prompt, this.placeButton, this.card, this.element, this.speakButton, this.speech.element, this.radar.element);
+    container.append(this.labels.element, this.danmaku.element, this.danmaku.toggleButton, this.musicButton, this.prompt, this.placeButton, this.card, this.element, this.speakButton, this.shareButton, this.speech.element, this.radar.element);
   }
 
   private buildCard(): void {
@@ -515,6 +523,7 @@ export class OpenWorldPanel {
       this.game.flowers.replace(localId, { ...placed.flower, y: ground.y });
       if (visitor.message && placed.messageStatus === 'pending') rememberOwnWords(placed.flower.id, visitor.message);
       visitor.placed = true;
+      this.offerShare(label);
       this.showNotice(placed.messageStatus === 'pending'
         ? `你在宏福苑放下了${label}，所有人都看得到。你的話會在稍後和大家分享，過些時候回來看看。`
         : placed.messageStatus === 'approved'
@@ -536,6 +545,26 @@ export class OpenWorldPanel {
       }
     } finally {
       this.placing = false;
+    }
+  }
+
+  private offerShare(label: string): void {
+    this.sharedKind = label;
+    this.shareButton.hidden = false;
+  }
+
+  private async share(): Promise<void> {
+    const url = 'https://birds-in-hk.org/';
+    const text = `我在宏福苑放下了${this.sharedKind || '一朵花'}。你也可以化身一隻小鳥，帶一朵花去。`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Birds in HK', text, url });
+        return;
+      }
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      this.showNotice('連結已複製，可以貼給朋友。', 4_000);
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') this.showNotice(`可以把這個連結傳給朋友：${url}`, 8_000);
     }
   }
 
